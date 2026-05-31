@@ -1,6 +1,23 @@
 import adapter from '@sveltejs/adapter-static';
+import { execSync } from 'node:child_process';
 
 const dev = process.env.NODE_ENV === 'development';
+
+// A stable per-build version string. SvelteKit embeds this in the build and
+// polls for it at runtime; on mismatch the next navigation does a full reload
+// instead of trying to load now-missing hashed assets. Prefer the GitHub
+// Actions commit SHA, then a local git SHA, then a build timestamp.
+function buildVersion() {
+	const sha = process.env.GITHUB_SHA;
+	if (sha) return sha.slice(0, 12);
+	try {
+		return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+			.toString()
+			.trim();
+	} catch {
+		return Date.now().toString();
+	}
+}
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -26,6 +43,14 @@ const config = {
 			// present after hydration, so we downgrade the build error to a warning
 			// instead of failing prerender.
 			handleMissingId: 'warn'
+		},
+		version: {
+			// Embedded in the build. SvelteKit checks `_app/version.json` at the
+			// configured interval; when the deployed version no longer matches the
+			// loaded one, the next client-side navigation falls back to a full
+			// page reload — so a fresh deploy lands without a manual cache clear.
+			name: buildVersion(),
+			pollInterval: 60_000
 		}
 	}
 };
