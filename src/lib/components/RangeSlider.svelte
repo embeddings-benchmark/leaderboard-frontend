@@ -53,6 +53,72 @@
 		if (localMax < localMin) localMax = localMin;
 		onMaxChange(localMax);
 	}
+
+	// Click-and-drag on the track itself: move whichever thumb is closer to the
+	// pointer. Without this, clicks on the track area do nothing because the
+	// inputs sit on top of it with pointer-events:none.
+	function valueAt(clientX: number, rect: DOMRect): number {
+		const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+		let v = min + ratio * (max - min);
+		if (step > 0) v = Math.round(v / step) * step;
+		return Math.max(min, Math.min(max, v));
+	}
+
+	function trackPointerDown(e: PointerEvent) {
+		// Inputs have pointer-events:none so the native input drag is disabled. We
+		// handle every pointerdown that bubbles up to the track ourselves and pick
+		// the closer thumb — clicking on a thumb resolves to that same thumb, so
+		// thumb-drag and track-click both work through one code path.
+		if (e.button !== 0 && e.pointerType === 'mouse') return;
+		e.preventDefault();
+		const trackEl = e.currentTarget as HTMLElement;
+		const rect = trackEl.getBoundingClientRect();
+
+		// Pick the closer thumb at the click location and lock onto it for the drag.
+		const initial = valueAt(e.clientX, rect);
+		const dragMin = Math.abs(initial - localMin) <= Math.abs(initial - localMax);
+
+		function apply(clientX: number) {
+			const v = valueAt(clientX, rect);
+			if (dragMin) {
+				const clamped = Math.min(v, localMax);
+				if (clamped !== localMin) {
+					localMin = clamped;
+					onMinChange(clamped);
+				}
+			} else {
+				const clamped = Math.max(v, localMin);
+				if (clamped !== localMax) {
+					localMax = clamped;
+					onMaxChange(clamped);
+				}
+			}
+		}
+
+		apply(e.clientX);
+		try {
+			trackEl.setPointerCapture(e.pointerId);
+		} catch {
+			/* No active pointer (synthetic event or unusual input); drag still works via document listeners below. */
+		}
+
+		function onMove(ev: PointerEvent) {
+			apply(ev.clientX);
+		}
+		function onUp(ev: PointerEvent) {
+			try {
+				trackEl.releasePointerCapture(ev.pointerId);
+			} catch {
+				/* ignore */
+			}
+			trackEl.removeEventListener('pointermove', onMove);
+			trackEl.removeEventListener('pointerup', onUp);
+			trackEl.removeEventListener('pointercancel', onUp);
+		}
+		trackEl.addEventListener('pointermove', onMove);
+		trackEl.addEventListener('pointerup', onUp);
+		trackEl.addEventListener('pointercancel', onUp);
+	}
 </script>
 
 <div class="rs">
@@ -60,7 +126,11 @@
 		<span class="val">{format(localMin)}</span>
 		<span class="val">{format(localMax)}</span>
 	</div>
-	<div class="track-wrap">
+	<div
+		class="track-wrap"
+		role="presentation"
+		onpointerdown={trackPointerDown}
+	>
 		<div class="track"></div>
 		<div class="fill" style:left="{leftPct}%" style:right="{100 - rightPct}%"></div>
 		<input
