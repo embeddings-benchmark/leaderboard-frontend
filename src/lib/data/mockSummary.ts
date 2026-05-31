@@ -3,6 +3,8 @@ import { BENCHMARK_INDEX } from './mockBenchmarks';
 
 interface MockModel {
 	name: string;
+	displayName: string;
+	org: string;
 	url: string;
 	zeroShotPct: number;
 	activeParamsB: number;
@@ -20,6 +22,8 @@ interface MockModel {
 const MOCK_MODELS: MockModel[] = [
 	{
 		name: 'gemini-embedding-001',
+		displayName: 'gemini-embedding-001',
+		org: 'Google',
 		url: 'https://ai.google.dev/gemini-api/docs/embeddings',
 		zeroShotPct: -1,
 		activeParamsB: 0,
@@ -35,6 +39,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'qwen3-embedding-8b',
+		displayName: 'Qwen3-Embedding-8B',
+		org: 'Qwen',
 		url: 'https://huggingface.co/Qwen/Qwen3-Embedding-8B',
 		zeroShotPct: 95,
 		activeParamsB: 7.6,
@@ -50,6 +56,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'qwen3-embedding-4b',
+		displayName: 'Qwen3-Embedding-4B',
+		org: 'Qwen',
 		url: 'https://huggingface.co/Qwen/Qwen3-Embedding-4B',
 		zeroShotPct: 95,
 		activeParamsB: 4.0,
@@ -65,6 +73,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'Linq-Embed-Mistral',
+		displayName: 'Linq-Embed-Mistral',
+		org: 'Linq-AI-Research',
 		url: 'https://huggingface.co/Linq-AI-Research/Linq-Embed-Mistral',
 		zeroShotPct: 88,
 		activeParamsB: 7.1,
@@ -80,6 +90,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'voyage-3-large',
+		displayName: 'voyage-3-large',
+		org: 'Voyage AI',
 		url: 'https://docs.voyageai.com/docs/embeddings',
 		zeroShotPct: -1,
 		activeParamsB: 0,
@@ -95,6 +107,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'qwen3-embedding-0.6b',
+		displayName: 'Qwen3-Embedding-0.6B',
+		org: 'Qwen',
 		url: 'https://huggingface.co/Qwen/Qwen3-Embedding-0.6B',
 		zeroShotPct: 95,
 		activeParamsB: 0.6,
@@ -110,6 +124,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'NV-Embed-v2',
+		displayName: 'NV-Embed-v2',
+		org: 'NVIDIA',
 		url: 'https://huggingface.co/nvidia/NV-Embed-v2',
 		zeroShotPct: 82,
 		activeParamsB: 7.85,
@@ -125,6 +141,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'bge-multilingual-gemma2',
+		displayName: 'bge-multilingual-gemma2',
+		org: 'BAAI',
 		url: 'https://huggingface.co/BAAI/bge-multilingual-gemma2',
 		zeroShotPct: 90,
 		activeParamsB: 9.24,
@@ -140,6 +158,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'text-embedding-3-large',
+		displayName: 'text-embedding-3-large',
+		org: 'OpenAI',
 		url: 'https://platform.openai.com/docs/guides/embeddings',
 		zeroShotPct: -1,
 		activeParamsB: 0,
@@ -155,6 +175,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'multilingual-e5-large-instruct',
+		displayName: 'multilingual-e5-large-instruct',
+		org: 'intfloat',
 		url: 'https://huggingface.co/intfloat/multilingual-e5-large-instruct',
 		zeroShotPct: 100,
 		activeParamsB: 0.56,
@@ -170,6 +192,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'jina-colbert-v2',
+		displayName: 'jina-colbert-v2',
+		org: 'jinaai',
 		url: 'https://huggingface.co/jinaai/jina-colbert-v2',
 		zeroShotPct: 100,
 		activeParamsB: 0.56,
@@ -185,6 +209,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'mxbai-rerank-large-v2',
+		displayName: 'mxbai-rerank-large-v2',
+		org: 'mixedbread-ai',
 		url: 'https://huggingface.co/mixedbread-ai/mxbai-rerank-large-v2',
 		zeroShotPct: 100,
 		activeParamsB: 1.5,
@@ -200,6 +226,8 @@ const MOCK_MODELS: MockModel[] = [
 	},
 	{
 		name: 'splade-v3',
+		displayName: 'splade-v3',
+		org: 'naver',
 		url: 'https://huggingface.co/naver/splade-v3',
 		zeroShotPct: 100,
 		activeParamsB: 0.11,
@@ -242,7 +270,8 @@ function buildRow(
 ): SummaryRow {
 	const meta: ModelMeta = {
 		name: model.name,
-		displayName: model.name,
+		displayName: model.displayName,
+		org: model.org,
 		url: model.url,
 		zeroShotPct: model.zeroShotPct,
 		activeParamsB: model.activeParamsB,

@@ -249,7 +249,12 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	const rows = summary.rows
 		.filter((row) => {
 			const m = row.model;
-			if (q && !m.name.toLowerCase().includes(q) && !m.displayName.toLowerCase().includes(q)) {
+			if (
+				q &&
+				!m.name.toLowerCase().includes(q) &&
+				!m.displayName.toLowerCase().includes(q) &&
+				!m.org.toLowerCase().includes(q)
+			) {
 				return false;
 			}
 			if (filters.availability === 'open' && !m.openWeights) return false;

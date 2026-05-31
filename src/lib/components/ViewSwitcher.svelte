@@ -5,7 +5,11 @@
 	const VIEWS = [
 		{ label: 'Classic', path: '/' },
 		{ label: 'Dashboard', path: '/dashboard' },
-		{ label: 'Explorer', path: '/explorer' }
+		{ label: 'Explorer', path: '/explorer' },
+		{ label: 'Compare', path: '/compare' },
+		{ label: 'Bento', path: '/bento' },
+		{ label: 'Sheet', path: '/spreadsheet' },
+		{ label: 'Story', path: '/story' }
 	];
 
 	let currentPath = $derived.by(() => {

@@ -41,6 +41,7 @@ export type ModelType =
 export interface ModelMeta {
 	name: string;
 	displayName: string;
+	org: string;
 	url?: string;
 	zeroShotPct: number;
 	activeParamsB: number;

@@ -379,7 +379,8 @@
 						{#each MODEL_TYPES as t (t)}
 							<button
 								type="button"
-								class="pill"
+								class="pill model-type-pill"
+								data-type={t}
 								class:on={filters.modelTypes.has(t)}
 								onclick={() => filters.toggleInSet('modelTypes', t)}
 								aria-pressed={filters.modelTypes.has(t)}
@@ -861,6 +862,36 @@
 	}
 	.pill.on:hover {
 		background: color-mix(in srgb, var(--primary) 18%, white);
+	}
+	/* Model-type pills carry the type's signature color when active. */
+	.model-type-pill.on[data-type='dense'] {
+		background: #e8edff;
+		border-color: #c4cef9;
+		color: #2740b8;
+	}
+	.model-type-pill.on[data-type='cross-encoder'] {
+		background: #ffe6dc;
+		border-color: #f7c4b2;
+		color: #c0432e;
+	}
+	.model-type-pill.on[data-type='late-interaction'] {
+		background: #def7e9;
+		border-color: #aedeb9;
+		color: #1c7a4c;
+	}
+	.model-type-pill.on[data-type='sparse'] {
+		background: #fff1d4;
+		border-color: #f4d595;
+		color: #a36100;
+	}
+	.model-type-pill.on[data-type='router'] {
+		background: #f2e7ff;
+		border-color: #d5bff0;
+		color: #6a32b1;
+	}
+	.model-type-pill.on:hover {
+		filter: brightness(0.97);
+		background: inherit;
 	}
 	.ellipsis {
 		overflow: hidden;
