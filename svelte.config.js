@@ -18,6 +18,14 @@ const config = {
 		}),
 		paths: {
 			base: dev ? '' : process.env.BASE_PATH || ''
+		},
+		prerender: {
+			// The story page's TOC links to section anchors (#lede, #leader, …).
+			// Those sections only render after the leaderboard store loads on the
+			// client, so they're absent from the prerendered HTML. They WILL be
+			// present after hydration, so we downgrade the build error to a warning
+			// instead of failing prerender.
+			handleMissingId: 'warn'
 		}
 	}
 };
