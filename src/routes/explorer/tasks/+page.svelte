@@ -9,7 +9,7 @@
 		languages: string[];
 		domains: string[];
 		modality: string;
-		benchmarks: string[]; // benchmark names this task appears in
+		benchmarks: string[];
 	}
 
 	// Aggregate tasks across all benchmarks. Tasks with the same name across
@@ -43,9 +43,17 @@
 	const TASK_TYPES = Array.from(new Set(ALL_TASKS.map((t) => t.type))).sort();
 	const MODALITIES = Array.from(new Set(ALL_TASKS.map((t) => t.modality))).sort();
 
+	const SORTS = [
+		{ id: 'name', label: 'Name' },
+		{ id: 'benchmarks', label: 'Benchmark count' },
+		{ id: 'languages', label: 'Language count' }
+	] as const;
+	type SortId = (typeof SORTS)[number]['id'];
+
 	let query = $state('');
 	let typeFilter = $state<Set<string>>(new Set(TASK_TYPES));
 	let modalityFilter = $state<Set<string>>(new Set(MODALITIES));
+	let sort = $state<SortId>('name');
 
 	function toggleType(t: string) {
 		const next = new Set(typeFilter);
@@ -62,18 +70,20 @@
 
 	let filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		return ALL_TASKS.filter((t) => {
+		const list = ALL_TASKS.filter((t) => {
 			if (q && !t.name.toLowerCase().includes(q)) return false;
 			if (typeFilter.size > 0 && !typeFilter.has(t.type)) return false;
 			if (modalityFilter.size > 0 && !modalityFilter.has(t.modality)) return false;
 			return true;
 		});
+		list.sort((a, b) => {
+			if (sort === 'name') return a.name.localeCompare(b.name);
+			if (sort === 'benchmarks') return b.benchmarks.length - a.benchmarks.length;
+			if (sort === 'languages') return b.languages.length - a.languages.length;
+			return 0;
+		});
+		return list;
 	});
-
-	function fmtList(items: string[], max = 3): string {
-		if (items.length <= max) return items.join(', ');
-		return items.slice(0, max).join(', ') + `, +${items.length - max}`;
-	}
 
 	function slug(name: string): string {
 		return encodeURIComponent(name);
@@ -84,8 +94,8 @@
 	<header class="hero">
 		<h1>Tasks</h1>
 		<p class="lead">
-			Every task across every benchmark in the leaderboard, deduped by name. Filter by task type,
-			modality, or search by name — click a benchmark chip to jump into its detail page.
+			Every task across every benchmark, deduped by name. Filter by task type, modality, or search
+			by name — open any benchmark chip to jump into its detail page.
 		</p>
 	</header>
 
@@ -133,48 +143,69 @@
 			{/each}
 		</div>
 
+		<div class="sort">
+			<label for="sort-select">Sort by</label>
+			<select id="sort-select" bind:value={sort}>
+				{#each SORTS as s (s.id)}
+					<option value={s.id}>{s.label}</option>
+				{/each}
+			</select>
+		</div>
+
 		<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
 	</div>
 
 	{#if filtered.length === 0}
 		<p class="empty">No tasks match those filters.</p>
 	{:else}
-		<div class="card">
-			<div class="scroll">
-				<table>
-					<thead>
-						<tr>
-							<th>Task</th>
-							<th>Type</th>
-							<th>Modality</th>
-							<th>Languages</th>
-							<th>Domains</th>
-							<th>In benchmarks</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each filtered as t (t.name)}
-							<tr>
-								<td class="task-name">{t.name}</td>
-								<td><span class="chip type">{t.type}</span></td>
-								<td><span class="chip">{t.modality}</span></td>
-								<td class="dim">{fmtList(t.languages)}</td>
-								<td class="dim">{fmtList(t.domains)}</td>
-								<td>
-									<div class="bench-chips">
-										{#each t.benchmarks.slice(0, 4) as b (b)}
-											<a class="bench-chip" href="{base}/explorer/{slug(b)}">{b}</a>
-										{/each}
-										{#if t.benchmarks.length > 4}
-											<span class="bench-chip more">+{t.benchmarks.length - 4}</span>
-										{/if}
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
+		<div class="grid">
+			{#each filtered as t (t.name)}
+				<article class="card">
+					<div class="card-head">
+						<span class="title" title={t.name}>{t.name}</span>
+						<span class="type-chip" data-type={t.type}>{t.type}</span>
+					</div>
+					<dl class="stats">
+						<div>
+							<dt>Benchmarks</dt>
+							<dd>{t.benchmarks.length}</dd>
+						</div>
+						<div>
+							<dt>Languages</dt>
+							<dd>{t.languages.length}</dd>
+						</div>
+						<div>
+							<dt>Domains</dt>
+							<dd>{t.domains.length}</dd>
+						</div>
+						<div>
+							<dt>Modality</dt>
+							<dd class="modality">{t.modality}</dd>
+						</div>
+					</dl>
+					{#if t.domains.length > 0}
+						<div class="badges">
+							{#each t.domains.slice(0, 3) as d (d)}
+								<span class="badge soft">{d}</span>
+							{/each}
+							{#if t.domains.length > 3}
+								<span class="badge soft muted">+{t.domains.length - 3}</span>
+							{/if}
+						</div>
+					{/if}
+					<div class="bench-section">
+						<div class="bench-label">In benchmarks</div>
+						<div class="bench-chips">
+							{#each t.benchmarks.slice(0, 3) as b (b)}
+								<a class="bench-chip" href="{base}/explorer/{slug(b)}" title={b}>{b}</a>
+							{/each}
+							{#if t.benchmarks.length > 3}
+								<span class="bench-chip more">+{t.benchmarks.length - 3}</span>
+							{/if}
+						</div>
+					</div>
+				</article>
+			{/each}
 		</div>
 	{/if}
 </div>
@@ -281,6 +312,23 @@
 		font-weight: 500;
 	}
 
+	.sort {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.sort select {
+		padding: 5px 8px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		font-size: 12px;
+		background: var(--surface);
+		font-family: inherit;
+		color: var(--text);
+	}
+
 	.count {
 		margin-left: auto;
 		font-size: 12px;
@@ -288,66 +336,156 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 12px;
+	}
 	.card {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		box-shadow: var(--shadow-sm);
-		overflow: hidden;
+		padding: 14px 16px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		transition:
+			border-color 0.12s,
+			box-shadow 0.12s;
 	}
-	.scroll {
-		overflow-x: auto;
-		max-height: 70vh;
-		overflow-y: auto;
+	.card:hover {
+		border-color: var(--border-strong);
+		box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
 	}
-	table {
-		width: 100%;
-		border-collapse: separate;
-		border-spacing: 0;
-		font-size: 13px;
+	.card-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 10px;
 	}
-	thead th {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		font-weight: 600;
-		text-align: left;
-		padding: 10px 12px;
-		border-bottom: 1px solid var(--border);
-		position: sticky;
-		top: 0;
-		z-index: 1;
-		white-space: nowrap;
+	.title {
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--text);
+		word-break: break-word;
+		flex: 1;
 	}
-	tbody td {
-		padding: 9px 12px;
-		border-bottom: 1px solid var(--border);
-		vertical-align: middle;
-	}
-	tbody tr:nth-child(even) td {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td {
-		background: var(--row-hover);
-	}
-	.task-name {
-		font-weight: 600;
-	}
-	.chip {
-		display: inline-block;
-		padding: 2px 8px;
-		font-size: 11px;
-		font-weight: 600;
+	.type-chip {
+		font-size: 10px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		font-weight: 700;
+		padding: 3px 8px;
 		border-radius: 999px;
 		background: var(--surface-muted);
 		color: var(--text-muted);
 		white-space: nowrap;
+		flex-shrink: 0;
 	}
-	.chip.type {
-		background: var(--primary-soft);
-		color: var(--primary-strong);
+	.type-chip[data-type='Classification'] {
+		background: #e8edff;
+		color: #2740b8;
 	}
-	.dim {
+	.type-chip[data-type='Clustering'] {
+		background: #ffe6dc;
+		color: #c0432e;
+	}
+	.type-chip[data-type='PairClassification'] {
+		background: #def7e9;
+		color: #1c7a4c;
+	}
+	.type-chip[data-type='Reranking'] {
+		background: #fff1d4;
+		color: #a36100;
+	}
+	.type-chip[data-type='Retrieval'] {
+		background: #f2e7ff;
+		color: #6a32b1;
+	}
+	.type-chip[data-type='STS'] {
+		background: #ffdee9;
+		color: #b41868;
+	}
+	.type-chip[data-type='BitextMining'] {
+		background: #dceefc;
+		color: #1e6cc3;
+	}
+	.type-chip[data-type='InstructionReranking'] {
+		background: #fce4d6;
+		color: #a04500;
+	}
+	.type-chip[data-type='MultilabelClassification'] {
+		background: #e0f5e9;
+		color: #2a7d4d;
+	}
+	.type-chip[data-type='Summarization'] {
+		background: #d8f3fe;
+		color: #1c5d7a;
+	}
+
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 8px 14px;
+		margin: 0;
+	}
+	.stats > div {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+	.stats dt {
+		font-size: 10px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+		font-weight: 600;
+	}
+	.stats dd {
+		margin: 0;
+		font-size: 14px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.stats dd.modality {
+		font-size: 12px;
+		text-transform: capitalize;
+	}
+
+	.badges {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+	.badge {
+		font-size: 10px;
+		padding: 3px 8px;
+		border-radius: 999px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+	.badge.soft {
+		background: var(--surface-muted);
 		color: var(--text-muted);
+		border: 1px solid var(--border);
+	}
+	.badge.muted {
+		color: var(--text-subtle);
+	}
+
+	.bench-section {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding-top: 6px;
+		border-top: 1px solid var(--border);
+	}
+	.bench-label {
+		font-size: 10px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+		font-weight: 600;
 	}
 	.bench-chips {
 		display: flex;
@@ -364,7 +502,7 @@
 		color: var(--text);
 		border: 1px solid var(--border);
 		text-decoration: none;
-		max-width: 220px;
+		max-width: 100%;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
