@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { BENCHMARK_INDEX } from '$lib/data/mockBenchmarks';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
-	import BenchmarkOverview from '$lib/components/BenchmarkOverview.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import Tabs from '$lib/components/Tabs.svelte';
 	import SummaryTable from '$lib/components/SummaryTable.svelte';
@@ -20,10 +18,11 @@
 	import FAQ from '$lib/components/FAQ.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.benchmark ?? ''));
-	let benchmark = $derived(BENCHMARK_INDEX[benchmarkName] ?? null);
+	let benchmark = $derived(
+		leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null
+	);
 
 	type TabId =
-		| 'overview'
 		| 'summary'
 		| 'perf_size'
 		| 'perf_time'
@@ -31,7 +30,6 @@
 		| 'perf_language'
 		| 'task_info';
 	const TABS: { id: TabId; label: string }[] = [
-		{ id: 'overview', label: 'Overview' },
 		{ id: 'summary', label: 'Summary' },
 		{ id: 'perf_size', label: 'Performance per Model Size' },
 		{ id: 'perf_time', label: 'Performance over Time' },
@@ -42,14 +40,14 @@
 	let activeTab = $state<TabId>('summary');
 
 	$effect(() => {
-		if (!benchmark) return;
+		if (!benchmarkName) return;
 		// Trigger load both when the URL benchmark differs from the store's
 		// current selection AND when it matches but the summary hasn't loaded yet
 		// (cold visit where selected already defaulted to this benchmark name).
-		const needsSwitch = leaderboard.selected !== benchmark.name;
+		const needsSwitch = leaderboard.selected !== benchmarkName;
 		const needsInitialLoad = !leaderboard.summary && !leaderboard.loading;
 		if (needsSwitch || needsInitialLoad) {
-			leaderboard.select(benchmark.name);
+			leaderboard.select(benchmarkName);
 		}
 	});
 	$effect(() => {
@@ -71,10 +69,18 @@
 			<span class="current">{benchmark?.displayName ?? benchmarkName}</span>
 		</nav>
 
-		{#if !benchmark}
+		{#if leaderboard.loading && !benchmark}
+			<p class="muted">Loading benchmark…</p>
+		{:else if leaderboard.error}
+			<section class="empty card">
+				<h1>Couldn't load benchmark</h1>
+				<p>{leaderboard.error}</p>
+				<a class="back" href="{base}/explorer">← Back to Explorer</a>
+			</section>
+		{:else if !benchmark}
 			<section class="empty card">
 				<h1>Unknown benchmark</h1>
-				<p>No benchmark named “{benchmarkName}” exists in the mock data.</p>
+				<p>No benchmark named “{benchmarkName}”.</p>
 				<a class="back" href="{base}/explorer">← Back to Explorer</a>
 			</section>
 		{:else}
@@ -130,8 +136,6 @@
 					<p class="muted">Loading…</p>
 				{:else if filteredSummary.rows.length === 0}
 					<p class="muted">No models match the current filters.</p>
-				{:else if activeTab === 'overview'}
-					<BenchmarkOverview summary={filteredSummary} />
 				{:else if activeTab === 'summary'}
 					<SummaryTable summary={filteredSummary} />
 					<FAQ />
