@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { BENCHMARK_INDEX } from '$lib/data/mockBenchmarks';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
-	import BenchmarkOverview from '$lib/components/BenchmarkOverview.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import Tabs from '$lib/components/Tabs.svelte';
 	import SummaryTable from '$lib/components/SummaryTable.svelte';
@@ -20,17 +18,11 @@
 	import FAQ from '$lib/components/FAQ.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.benchmark ?? ''));
-	// Resolve the benchmark from the mock index first (fast offline path), then
-	// fall back to whatever the leaderboard store loaded for this URL — the
-	// store goes through the service layer, so this branch picks up real-API
-	// benchmarks that aren't in the mock data.
 	let benchmark = $derived(
-		BENCHMARK_INDEX[benchmarkName] ??
-			(leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null)
+		leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null
 	);
 
 	type TabId =
-		| 'overview'
 		| 'summary'
 		| 'perf_size'
 		| 'perf_time'
@@ -38,7 +30,6 @@
 		| 'perf_language'
 		| 'task_info';
 	const TABS: { id: TabId; label: string }[] = [
-		{ id: 'overview', label: 'Overview' },
 		{ id: 'summary', label: 'Summary' },
 		{ id: 'perf_size', label: 'Performance per Model Size' },
 		{ id: 'perf_time', label: 'Performance over Time' },
@@ -80,7 +71,7 @@
 
 		{#if leaderboard.loading && !benchmark}
 			<p class="muted">Loading benchmark…</p>
-		{:else if leaderboard.error && !benchmark}
+		{:else if leaderboard.error}
 			<section class="empty card">
 				<h1>Couldn't load benchmark</h1>
 				<p>{leaderboard.error}</p>
@@ -145,8 +136,6 @@
 					<p class="muted">Loading…</p>
 				{:else if filteredSummary.rows.length === 0}
 					<p class="muted">No models match the current filters.</p>
-				{:else if activeTab === 'overview'}
-					<BenchmarkOverview summary={filteredSummary} />
 				{:else if activeTab === 'summary'}
 					<SummaryTable summary={filteredSummary} />
 					<FAQ />
