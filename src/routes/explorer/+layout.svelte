@@ -10,10 +10,22 @@
 		return base && p.startsWith(base) ? p.slice(base.length) || '/' : p;
 	});
 
+	// "Benchmarks" matches /explorer plus /explorer/<benchmark-name> detail pages,
+	// but NOT the sibling routes /models, /tasks, /compare — those have their own
+	// nav entries.
+	const RESERVED = ['/explorer/models', '/explorer/tasks', '/explorer/compare'];
+	function isBenchmarkRoute(p: string) {
+		const trimmed = p.replace(/\/$/, '');
+		if (trimmed === '/explorer') return true;
+		if (!trimmed.startsWith('/explorer/')) return false;
+		if (RESERVED.some((r) => trimmed === r || trimmed.startsWith(r + '/'))) return false;
+		return /^\/explorer\/[^/]+$/.test(trimmed);
+	}
 	const NAV = [
-		{ label: 'Benchmarks', href: '/explorer', match: (p: string) => p === '/explorer' || /^\/explorer\/[^/]+\/?$/.test(p) },
+		{ label: 'Benchmarks', href: '/explorer', match: isBenchmarkRoute },
 		{ label: 'Models', href: '/explorer/models', match: (p: string) => p.startsWith('/explorer/models') },
-		{ label: 'Tasks', href: '/explorer/tasks', match: (p: string) => p.startsWith('/explorer/tasks') }
+		{ label: 'Tasks', href: '/explorer/tasks', match: (p: string) => p.startsWith('/explorer/tasks') },
+		{ label: 'Compare', href: '/explorer/compare', match: (p: string) => p.startsWith('/explorer/compare') }
 	];
 </script>
 

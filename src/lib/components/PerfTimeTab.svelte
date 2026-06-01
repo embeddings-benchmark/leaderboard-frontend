@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { BenchmarkSummary } from '$lib/types';
 	import { performanceOverTimePlot } from '$lib/charts/figures';
+	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import PlotlyChart from './PlotlyChart.svelte';
 
 	interface Props {
 		summary: BenchmarkSummary;
 	}
 	let { summary }: Props = $props();
-	let spec = $derived(performanceOverTimePlot(summary));
+	let spec = $derived(performanceOverTimePlot(summary, pinnedModels.value));
 </script>
 
 <div class="wrap">

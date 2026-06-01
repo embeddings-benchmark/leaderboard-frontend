@@ -1,46 +1,58 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import { buildMockSummary } from '$lib/data/mockSummary';
 	import { DEFAULT_BENCHMARK_NAME } from '$lib/data/mockBenchmarks';
-	import type { ModelMeta, ModelType } from '$lib/types';
+	import { filters } from '$lib/stores/filters.svelte';
+	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
+	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
+	import type { ModelMeta } from '$lib/types';
 
-	// All mock models live in a single MOCK_MODELS list inside mockSummary. We pull
-	// metadata via a default-benchmark summary to keep that module the source of truth.
+	function slug(name: string): string {
+		return encodeURIComponent(name);
+	}
+
 	const ALL_MODELS: ModelMeta[] = buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.map((r) => r.model);
 
-	const MODEL_TYPES: ModelType[] = ['dense', 'cross-encoder', 'late-interaction', 'sparse', 'router'];
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
 		{ id: 'params', label: 'Params' },
 		{ id: 'released', label: 'Release date' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];
-
-	let query = $state('');
-	let typeFilter = $state<Set<ModelType>>(new Set(MODEL_TYPES));
-	let availability = $state<'all' | 'open' | 'proprietary'>('all');
 	let sort = $state<SortId>('params');
 
-	function toggleType(t: ModelType) {
-		const next = new Set(typeFilter);
-		if (next.has(t)) next.delete(t);
-		else next.add(t);
-		typeFilter = next;
+	// Apply the shared leaderboard filter store's predicates to a flat model
+	// list. Same logic as applyFilters() in filters.svelte.ts, just minus the
+	// benchmark-scope / sort / re-rank parts that only make sense for a
+	// summary's rows.
+	function passes(m: ModelMeta): boolean {
+		const q = filters.nameQuery.trim().toLowerCase();
+		if (
+			q &&
+			!m.name.toLowerCase().includes(q) &&
+			!m.displayName.toLowerCase().includes(q) &&
+			!m.org.toLowerCase().includes(q)
+		)
+			return false;
+		if (filters.availability === 'open' && !m.openWeights) return false;
+		if (filters.availability === 'proprietary' && m.openWeights) return false;
+		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
+		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
+		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
+		if (filters.modelTypes.size > 0 && !filters.modelTypes.has(m.modelType)) return false;
+		if (m.totalParamsB > 0) {
+			const paramsM = m.totalParamsB * 1000;
+			if (paramsM < filters.minModelSizeM) return false;
+			if (paramsM > filters.maxModelSizeM) return false;
+		}
+		return true;
 	}
 
 	let filtered = $derived.by(() => {
-		const q = query.trim().toLowerCase();
-		const list = ALL_MODELS.filter((m) => {
-			if (q && !m.name.toLowerCase().includes(q) && !m.displayName.toLowerCase().includes(q))
-				return false;
-			if (typeFilter.size > 0 && !typeFilter.has(m.modelType)) return false;
-			if (availability === 'open' && !m.openWeights) return false;
-			if (availability === 'proprietary' && m.openWeights) return false;
-			return true;
-		});
+		const list = ALL_MODELS.filter(passes);
 		list.sort((a, b) => {
 			if (sort === 'name') return a.name.localeCompare(b.name);
 			if (sort === 'params') {
-				// Push 0-param (unknown / proprietary) to the bottom of params sort.
 				const aP = a.totalParamsB || -1;
 				const bP = b.totalParamsB || -1;
 				return bP - aP;
@@ -62,128 +74,94 @@
 	}
 </script>
 
-<div class="page">
-	<header class="hero">
-		<h1>Models</h1>
-		<p class="lead">
-			Every model in the leaderboard with its architecture type, parameter count, embedding
-			dimension, max context, and release date.
-		</p>
-	</header>
+<div class="app">
+	<main class="main">
+		<header class="hero">
+			<h1>Models</h1>
+			<p class="lead">
+				Every model in the leaderboard with its architecture type, parameter count, embedding
+				dimension, max context, and release date. Filters here share state with the leaderboard
+				on every benchmark detail page.
+			</p>
+		</header>
 
-	<div class="toolbar">
-		<div class="search">
-			<svg
-				viewBox="0 0 24 24"
-				width="14"
-				height="14"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<circle cx="11" cy="11" r="7" />
-				<path d="m20 20-3.5-3.5" />
-			</svg>
-			<input type="search" placeholder="Search models by name…" bind:value={query} />
-			{#if query}
-				<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear">×</button>
-			{/if}
+		<div class="toolbar">
+			<ModelSearchBar matchCount={filtered.length} totalCount={ALL_MODELS.length} />
+			<div class="sort">
+				<label for="sort-select">Sort by</label>
+				<select id="sort-select" bind:value={sort}>
+					{#each SORTS as s (s.id)}
+						<option value={s.id}>{s.label}</option>
+					{/each}
+				</select>
+			</div>
 		</div>
 
-		<div class="pills" role="group" aria-label="Type">
-			{#each MODEL_TYPES as t (t)}
-				<label class="pill">
-					<input
-						type="checkbox"
-						checked={typeFilter.has(t)}
-						onchange={() => toggleType(t)}
-					/>
-					<span>{t}</span>
-				</label>
-			{/each}
-		</div>
-
-		<div class="pills" role="group" aria-label="Availability">
-			<label class="pill">
-				<input type="radio" name="avail" checked={availability === 'all'} onchange={() => (availability = 'all')} />
-				<span>All</span>
-			</label>
-			<label class="pill">
-				<input type="radio" name="avail" checked={availability === 'open'} onchange={() => (availability = 'open')} />
-				<span>Open</span>
-			</label>
-			<label class="pill">
-				<input type="radio" name="avail" checked={availability === 'proprietary'} onchange={() => (availability = 'proprietary')} />
-				<span>Proprietary</span>
-			</label>
-		</div>
-
-		<div class="sort">
-			<label for="sort-select">Sort by</label>
-			<select id="sort-select" bind:value={sort}>
-				{#each SORTS as s (s.id)}
-					<option value={s.id}>{s.label}</option>
+		{#if filtered.length === 0}
+			<p class="empty">No models match those filters.</p>
+		{:else}
+			<div class="grid">
+				{#each filtered as m (m.name)}
+					<a
+						class="card"
+						href="{base}/explorer/models/{slug(m.name)}"
+						data-type={m.modelType}
+						title={m.modelType}
+					>
+						<div class="card-head">
+							<div class="title-wrap">
+								<span class="title">
+									<span class="org">{m.org}</span><span class="sep">/</span>{m.displayName}
+								</span>
+							</div>
+							<span class="type-chip" data-type={m.modelType}>{m.modelType}</span>
+						</div>
+						<dl class="stats">
+							<div>
+								<dt>Params</dt>
+								<dd>{fmtParams(m.totalParamsB)}</dd>
+							</div>
+							<div>
+								<dt>Embed dim</dt>
+								<dd>{fmtInt(m.embeddingDim)}</dd>
+							</div>
+							<div>
+								<dt>Max tokens</dt>
+								<dd>{fmtInt(m.maxTokens)}</dd>
+							</div>
+							<div>
+								<dt>Released</dt>
+								<dd>{m.releaseDate ?? '—'}</dd>
+							</div>
+						</dl>
+						<div class="badges">
+							<span class="badge" class:open={m.openWeights} class:closed={!m.openWeights}>
+								{m.openWeights ? 'Open weights' : 'Proprietary'}
+							</span>
+							{#if m.instructionTuned}
+								<span class="badge soft">Instruction-tuned</span>
+							{/if}
+							{#if m.sentenceTransformersCompatible}
+								<span class="badge soft">ST compatible</span>
+							{/if}
+						</div>
+					</a>
 				{/each}
-			</select>
-		</div>
+			</div>
+		{/if}
+	</main>
 
-		<span class="count">{filtered.length} / {ALL_MODELS.length}</span>
-	</div>
-
-	{#if filtered.length === 0}
-		<p class="empty">No models match those filters.</p>
-	{:else}
-		<div class="grid">
-			{#each filtered as m (m.name)}
-				<article class="card">
-					<div class="card-head">
-						{#if m.url}
-							<a class="title" href={m.url} target="_blank" rel="noreferrer">{m.displayName}</a>
-						{:else}
-							<span class="title">{m.displayName}</span>
-						{/if}
-						<span class="type-chip" data-type={m.modelType}>{m.modelType}</span>
-					</div>
-					<dl class="stats">
-						<div>
-							<dt>Params</dt>
-							<dd>{fmtParams(m.totalParamsB)}</dd>
-						</div>
-						<div>
-							<dt>Embed dim</dt>
-							<dd>{fmtInt(m.embeddingDim)}</dd>
-						</div>
-						<div>
-							<dt>Max tokens</dt>
-							<dd>{fmtInt(m.maxTokens)}</dd>
-						</div>
-						<div>
-							<dt>Released</dt>
-							<dd>{m.releaseDate ?? '—'}</dd>
-						</div>
-					</dl>
-					<div class="badges">
-						<span class="badge" class:open={m.openWeights} class:closed={!m.openWeights}>
-							{m.openWeights ? 'Open weights' : 'Proprietary'}
-						</span>
-						{#if m.instructionTuned}
-							<span class="badge soft">Instruction-tuned</span>
-						{/if}
-						{#if m.sentenceTransformersCompatible}
-							<span class="badge soft">ST compatible</span>
-						{/if}
-					</div>
-				</article>
-			{/each}
-		</div>
-	{/if}
+	<FilterSidebar hideScope />
 </div>
 
 <style>
-	.page {
+	.app {
+		display: flex;
+		min-height: 100vh;
+	}
+	.main {
+		flex: 1;
+		min-width: 0;
 		max-width: 1280px;
 		margin: 0 auto;
 		padding: 28px 28px 64px;
@@ -207,97 +185,18 @@
 		flex-wrap: wrap;
 		gap: 12px;
 		align-items: center;
-		margin: 16px 0 18px;
-		padding: 14px 16px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		box-shadow: var(--shadow-sm);
+		margin: 8px 0 18px;
 	}
-	.search {
-		position: relative;
-		flex: 1;
-		min-width: 220px;
-		max-width: 360px;
-	}
-	.search svg {
-		position: absolute;
-		left: 10px;
-		top: 50%;
-		transform: translateY(-50%);
-		color: var(--text-subtle);
-	}
-	.search input {
-		width: 100%;
-		padding: 7px 28px 7px 30px;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		font-size: 13px;
-		font-family: inherit;
-		background: var(--surface);
-	}
-	.search input:focus {
-		outline: none;
-		border-color: var(--primary);
-		box-shadow: 0 0 0 3px var(--primary-soft);
-	}
-	.clear {
-		position: absolute;
-		right: 6px;
-		top: 50%;
-		transform: translateY(-50%);
-		width: 20px;
-		height: 20px;
-		border: none;
-		background: none;
-		color: var(--text-subtle);
-		font-size: 16px;
-		cursor: pointer;
-		border-radius: 4px;
-		padding: 0;
-	}
-	.clear:hover {
-		color: var(--text);
-		background: var(--surface-muted);
-	}
-
-	.pills {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 4px 10px;
-		font-size: 12px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		cursor: pointer;
-		user-select: none;
-	}
-	.pill input {
-		margin: 0;
-		accent-color: var(--primary);
-	}
-	.pill:has(input:checked) {
-		background: var(--primary-soft);
-		border-color: var(--primary);
-		color: var(--primary-strong);
-		font-weight: 500;
-	}
-
 	.sort {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
 		font-size: 12px;
 		color: var(--text-muted);
+		margin-left: auto;
 	}
 	.sort select {
-		padding: 5px 8px;
+		padding: 6px 10px;
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		font-size: 12px;
@@ -306,13 +205,7 @@
 		color: var(--text);
 	}
 
-	.count {
-		margin-left: auto;
-		font-size: 12px;
-		color: var(--text-subtle);
-		font-variant-numeric: tabular-nums;
-	}
-
+	/* Cards ---------------------------------------------------------------- */
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -326,55 +219,85 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
+		position: relative;
+		overflow: hidden;
+		text-decoration: none;
+		color: inherit;
+		transition:
+			transform 0.12s ease,
+			border-color 0.12s ease,
+			box-shadow 0.12s ease;
 	}
+	.card:focus-visible {
+		outline: 2px solid var(--card-accent, var(--primary));
+		outline-offset: 2px;
+	}
+	.card:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+	}
+	.card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--card-accent, var(--border));
+	}
+	.card[data-type='dense'] {
+		--card-accent: #2740b8;
+		background: linear-gradient(180deg, color-mix(in srgb, #e8edff 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='cross-encoder'] {
+		--card-accent: #c0432e;
+		background: linear-gradient(180deg, color-mix(in srgb, #ffe6dc 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='late-interaction'] {
+		--card-accent: #1c7a4c;
+		background: linear-gradient(180deg, color-mix(in srgb, #def7e9 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='sparse'] {
+		--card-accent: #a36100;
+		background: linear-gradient(180deg, color-mix(in srgb, #fff1d4 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='router'] {
+		--card-accent: #6a32b1;
+		background: linear-gradient(180deg, color-mix(in srgb, #f2e7ff 40%, white) 0%, var(--surface) 80px);
+	}
+	.card:hover {
+		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
+	}
+
 	.card-head {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 10px;
 	}
+	.title-wrap {
+		flex: 1;
+		min-width: 0;
+	}
 	.title {
+		display: block;
 		font-size: 14px;
 		font-weight: 700;
 		color: var(--text);
-		text-decoration: none;
 		word-break: break-word;
 	}
-	a.title:hover {
-		color: var(--primary-strong);
+	.card:hover .title {
+		color: var(--card-accent, var(--primary-strong));
 	}
-	.type-chip {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		font-weight: 700;
-		padding: 3px 8px;
-		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		white-space: nowrap;
+	.title .org {
+		color: var(--text-subtle);
+		font-weight: 400;
 	}
-	.type-chip[data-type='dense'] {
-		background: #e8edff;
-		color: #2740b8;
+	.title .sep {
+		color: var(--border-strong);
+		margin: 0 1px;
+		font-weight: 400;
 	}
-	.type-chip[data-type='cross-encoder'] {
-		background: #ffe6dc;
-		color: #c0432e;
-	}
-	.type-chip[data-type='late-interaction'] {
-		background: #def7e9;
-		color: #1c7a4c;
-	}
-	.type-chip[data-type='sparse'] {
-		background: #fff1d4;
-		color: #a36100;
-	}
-	.type-chip[data-type='router'] {
-		background: #f2e7ff;
-		color: #6a32b1;
-	}
-
 	.stats {
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
@@ -398,6 +321,20 @@
 		font-size: 14px;
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
+	}
+
+	.type-chip {
+		flex: 0 0 auto;
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		padding: 3px 8px;
+		border-radius: 999px;
+		white-space: nowrap;
+		text-transform: lowercase;
+		background: color-mix(in srgb, var(--card-accent, var(--border)) 14%, white);
+		color: var(--card-accent, var(--text-muted));
+		border: 1px solid color-mix(in srgb, var(--card-accent, var(--border)) 35%, transparent);
 	}
 
 	.badges {

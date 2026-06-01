@@ -41,8 +41,15 @@
 	interface Props {
 		defaultModelOpen?: boolean;
 		defaultScopeOpen?: boolean;
+		// On pages without a benchmark context (e.g. the Models directory) the
+		// Customize / Benchmark scope section is irrelevant — hide it entirely.
+		hideScope?: boolean;
 	}
-	let { defaultModelOpen = true, defaultScopeOpen = false }: Props = $props();
+	let {
+		defaultModelOpen = true,
+		defaultScopeOpen = false,
+		hideScope = false
+	}: Props = $props();
 
 	let modelOpen = $state(untrack(() => defaultModelOpen));
 	let scopeOpen = $state(untrack(() => defaultScopeOpen));
@@ -394,6 +401,7 @@
 		{/if}
 	</section>
 
+	{#if !hideScope}
 	<section class="block">
 		<button
 			type="button"
@@ -612,6 +620,7 @@
 			</div>
 		{/if}
 	</section>
+	{/if}
 </div>
 
 <style>

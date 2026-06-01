@@ -14,7 +14,10 @@ function paramSizeForBubble(embeddingDim: number): number {
 	return Math.sqrt(clipped);
 }
 
-export function performanceSizePlot(summary: BenchmarkSummary): PlotSpec {
+export function performanceSizePlot(
+	summary: BenchmarkSummary,
+	pinned: ReadonlySet<string> = new Set()
+): PlotSpec {
 	const rows = summary.rows.filter((r) => r.activeParamsB > 0);
 
 	const x = rows.map((r) => r.activeParamsB * 1e9);
@@ -22,6 +25,7 @@ export function performanceSizePlot(summary: BenchmarkSummary): PlotSpec {
 	const sizes = rows.map((r) => paramSizeForBubble(r.embeddingDim));
 	const colors = rows.map((r) => Math.log10(Math.max(r.maxTokens, 1)));
 	const text = rows.map((r) => r.model.displayName);
+	const isPinned = rows.map((r) => pinned.has(r.model.name));
 	const customdata = rows.map((r) => [
 		r.maxTokens.toLocaleString(),
 		r.embeddingDim.toLocaleString(),
@@ -30,6 +34,7 @@ export function performanceSizePlot(summary: BenchmarkSummary): PlotSpec {
 	]);
 
 	const maxSizeRef = Math.sqrt(4096) / 40; // matches original: desired max diameter = 40px
+	const PIN = '#ff6f3c';
 
 	const trace: Data = {
 		x,
@@ -38,7 +43,10 @@ export function performanceSizePlot(summary: BenchmarkSummary): PlotSpec {
 		mode: 'text+markers',
 		type: 'scatter',
 		textposition: 'top center',
-		textfont: { size: 11, color: '#1f2329' },
+		textfont: {
+			size: isPinned.map((p) => (p ? 13 : 11)),
+			color: isPinned.map((p) => (p ? PIN : '#1f2329'))
+		},
 		hovertemplate:
 			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active params: %{customdata[2]}<br>' +
 			'Max tokens: %{customdata[0]}<br>Embedding dim: %{customdata[1]}<br>' +
@@ -58,6 +66,10 @@ export function performanceSizePlot(summary: BenchmarkSummary): PlotSpec {
 				title: { text: 'Max Tokens' },
 				tickvals: [2, 3, 4, 5],
 				ticktext: ['100', '1K', '10K', '100K']
+			},
+			line: {
+				width: isPinned.map((p) => (p ? 3 : 0.5)),
+				color: isPinned.map((p) => (p ? PIN : 'rgba(31,35,41,0.35)'))
 			}
 		}
 	};
@@ -71,7 +83,10 @@ export function performanceSizePlot(summary: BenchmarkSummary): PlotSpec {
 	return { data: [trace], layout };
 }
 
-export function performanceOverTimePlot(summary: BenchmarkSummary): PlotSpec {
+export function performanceOverTimePlot(
+	summary: BenchmarkSummary,
+	pinned: ReadonlySet<string> = new Set()
+): PlotSpec {
 	const points = summary.rows
 		.filter((r) => r.model.releaseDate)
 		.sort(
@@ -82,6 +97,7 @@ export function performanceOverTimePlot(summary: BenchmarkSummary): PlotSpec {
 	const dates = points.map((r) => r.model.releaseDate!);
 	const scores = points.map((r) => r.meanTask * 100);
 	const names = points.map((r) => r.model.displayName);
+	const isPinned = points.map((r) => pinned.has(r.model.name));
 
 	// Pareto frontier (cumulative max), step-after style.
 	const frontier: number[] = [];
@@ -91,14 +107,29 @@ export function performanceOverTimePlot(summary: BenchmarkSummary): PlotSpec {
 		frontier.push(running);
 	}
 
+	const PIN_FILL = '#1f2329';
+	const PIN_RING = '#ff6f3c';
+
 	const scatter: Data = {
 		x: dates,
 		y: scores,
 		text: names,
-		mode: 'markers',
+		// Pinned points get a persistent label; others stay name-on-hover.
+		customdata: names,
+		mode: 'markers+text',
 		type: 'scatter',
-		hovertemplate: '<b>%{text}</b><br>%{x|%Y-%m-%d}<br>Mean(Task): %{y:.2f}<extra></extra>',
-		marker: { size: 10, color: '#ff6f3c', line: { color: '#e85a2a', width: 1 } },
+		hovertemplate: '<b>%{customdata}</b><br>%{x|%Y-%m-%d}<br>Mean(Task): %{y:.2f}<extra></extra>',
+		texttemplate: isPinned.map((p, i) => (p ? names[i] : '')),
+		textposition: 'top center',
+		textfont: { size: 12, color: PIN_RING },
+		marker: {
+			size: isPinned.map((p) => (p ? 14 : 9)),
+			color: isPinned.map((p) => (p ? PIN_FILL : '#ff6f3c')),
+			line: {
+				color: isPinned.map((p) => (p ? PIN_RING : '#e85a2a')),
+				width: isPinned.map((p) => (p ? 2.5 : 1))
+			}
+		},
 		name: 'Models'
 	};
 	const frontierLine: Data = {

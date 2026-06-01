@@ -4,7 +4,6 @@
 	import { beforeNavigate } from '$app/navigation';
 	import { updated } from '$app/state';
 	import { base } from '$app/paths';
-	import ViewSwitcher from '$lib/components/ViewSwitcher.svelte';
 
 	let { children } = $props();
 
@@ -37,5 +36,4 @@
 	<title>MTEB Leaderboard</title>
 </svelte:head>
 
-<ViewSwitcher />
 {@render children()}

@@ -9,12 +9,10 @@
 		languages: string[];
 		domains: string[];
 		modality: string;
+		description: string;
 		benchmarks: string[];
 	}
 
-	// Aggregate tasks across all benchmarks. Tasks with the same name across
-	// benchmarks merge their benchmark lists; their type/lang/domain comes from
-	// the first occurrence (mock data is deterministic so this is stable).
 	const ALL_TASKS: TaskEntry[] = (() => {
 		const map = new Map<string, TaskEntry>();
 		for (const bench of Object.values(BENCHMARK_INDEX)) {
@@ -32,6 +30,7 @@
 						languages: meta.languages,
 						domains: meta.domains,
 						modality: meta.modality,
+						description: meta.description,
 						benchmarks: [bench.name]
 					});
 				}
@@ -45,6 +44,7 @@
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
+		{ id: 'type', label: 'Task type' },
 		{ id: 'benchmarks', label: 'Benchmark count' },
 		{ id: 'languages', label: 'Language count' }
 	] as const;
@@ -67,6 +67,10 @@
 		else next.add(m);
 		modalityFilter = next;
 	}
+	function toggleAllTypes() {
+		typeFilter = typeFilter.size === TASK_TYPES.length ? new Set() : new Set(TASK_TYPES);
+	}
+	let allTypes = $derived(typeFilter.size === TASK_TYPES.length);
 
 	let filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
@@ -78,6 +82,10 @@
 		});
 		list.sort((a, b) => {
 			if (sort === 'name') return a.name.localeCompare(b.name);
+			if (sort === 'type') {
+				const t = a.type.localeCompare(b.type);
+				return t !== 0 ? t : a.name.localeCompare(b.name);
+			}
 			if (sort === 'benchmarks') return b.benchmarks.length - a.benchmarks.length;
 			if (sort === 'languages') return b.languages.length - a.languages.length;
 			return 0;
@@ -85,6 +93,10 @@
 		return list;
 	});
 
+	function fmtList(items: string[], max = 3): string {
+		if (items.length <= max) return items.join(', ');
+		return items.slice(0, max).join(', ') + `, +${items.length - max}`;
+	}
 	function slug(name: string): string {
 		return encodeURIComponent(name);
 	}
@@ -94,65 +106,84 @@
 	<header class="hero">
 		<h1>Tasks</h1>
 		<p class="lead">
-			Every task across every benchmark, deduped by name. Filter by task type, modality, or search
-			by name — open any benchmark chip to jump into its detail page.
+			Every task across every benchmark, deduped by name. Click a card to see how each model
+			performs on that task.
 		</p>
 	</header>
 
 	<div class="toolbar">
-		<div class="search">
-			<svg
-				viewBox="0 0 24 24"
-				width="14"
-				height="14"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				<circle cx="11" cy="11" r="7" />
-				<path d="m20 20-3.5-3.5" />
-			</svg>
-			<input type="search" placeholder="Search tasks by name…" bind:value={query} />
-			{#if query}
-				<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear">×</button>
-			{/if}
+		<div class="row search-row">
+			<div class="search">
+				<svg
+					viewBox="0 0 24 24"
+					width="14"
+					height="14"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<circle cx="11" cy="11" r="7" />
+					<path d="m20 20-3.5-3.5" />
+				</svg>
+				<input type="search" placeholder="Search tasks by name…" bind:value={query} />
+				{#if query}
+					<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear">×</button>
+				{/if}
+			</div>
+			<div class="sort">
+				<label for="sort-select">Sort by</label>
+				<select id="sort-select" bind:value={sort}>
+					{#each SORTS as s (s.id)}
+						<option value={s.id}>{s.label}</option>
+					{/each}
+				</select>
+			</div>
+			<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
 		</div>
 
-		<div class="pills" role="group" aria-label="Task type">
-			{#each TASK_TYPES as t (t)}
-				<label class="pill">
-					<input type="checkbox" checked={typeFilter.has(t)} onchange={() => toggleType(t)} />
-					<span>{t}</span>
-				</label>
-			{/each}
-		</div>
+		<div class="row filter-row">
+			<div class="group">
+				<div class="group-head">
+					<span class="group-label">Type</span>
+					<button type="button" class="link-btn" onclick={toggleAllTypes}>
+						{allTypes ? 'Clear' : 'All'}
+					</button>
+				</div>
+				<div class="pills">
+					{#each TASK_TYPES as t (t)}
+						<label class="pill type-pill" data-type={t}>
+							<input
+								type="checkbox"
+								checked={typeFilter.has(t)}
+								onchange={() => toggleType(t)}
+							/>
+							<span>{t}</span>
+						</label>
+					{/each}
+				</div>
+			</div>
 
-		<div class="pills" role="group" aria-label="Modality">
-			{#each MODALITIES as m (m)}
-				<label class="pill">
-					<input
-						type="checkbox"
-						checked={modalityFilter.has(m)}
-						onchange={() => toggleModality(m)}
-					/>
-					<span>{m}</span>
-				</label>
-			{/each}
+			<div class="group">
+				<div class="group-head">
+					<span class="group-label">Modality</span>
+				</div>
+				<div class="pills">
+					{#each MODALITIES as m (m)}
+						<label class="pill modality-pill">
+							<input
+								type="checkbox"
+								checked={modalityFilter.has(m)}
+								onchange={() => toggleModality(m)}
+							/>
+							<span>{m}</span>
+						</label>
+					{/each}
+				</div>
+			</div>
 		</div>
-
-		<div class="sort">
-			<label for="sort-select">Sort by</label>
-			<select id="sort-select" bind:value={sort}>
-				{#each SORTS as s (s.id)}
-					<option value={s.id}>{s.label}</option>
-				{/each}
-			</select>
-		</div>
-
-		<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
 	</div>
 
 	{#if filtered.length === 0}
@@ -160,11 +191,12 @@
 	{:else}
 		<div class="grid">
 			{#each filtered as t (t.name)}
-				<article class="card">
+				<a class="card" href="{base}/explorer/tasks/{slug(t.name)}" data-type={t.type}>
 					<div class="card-head">
 						<span class="title" title={t.name}>{t.name}</span>
 						<span class="type-chip" data-type={t.type}>{t.type}</span>
 					</div>
+					<p class="desc">{t.description}</p>
 					<dl class="stats">
 						<div>
 							<dt>Benchmarks</dt>
@@ -193,18 +225,7 @@
 							{/if}
 						</div>
 					{/if}
-					<div class="bench-section">
-						<div class="bench-label">In benchmarks</div>
-						<div class="bench-chips">
-							{#each t.benchmarks.slice(0, 3) as b (b)}
-								<a class="bench-chip" href="{base}/explorer/{slug(b)}" title={b}>{b}</a>
-							{/each}
-							{#if t.benchmarks.length > 3}
-								<span class="bench-chip more">+{t.benchmarks.length - 3}</span>
-							{/if}
-						</div>
-					</div>
-				</article>
+				</a>
 			{/each}
 		</div>
 	{/if}
@@ -230,11 +251,11 @@
 		max-width: 60ch;
 	}
 
+	/* Toolbar -------------------------------------------------------------- */
 	.toolbar {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 12px;
-		align-items: center;
+		flex-direction: column;
+		gap: 14px;
 		margin: 16px 0 18px;
 		padding: 14px 16px;
 		background: var(--surface);
@@ -242,11 +263,56 @@
 		border-radius: 12px;
 		box-shadow: var(--shadow-sm);
 	}
+	.row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 16px 20px;
+		align-items: center;
+	}
+	.row.filter-row {
+		border-top: 1px solid var(--border);
+		padding-top: 14px;
+		gap: 8px 28px;
+		align-items: flex-start;
+	}
+	.group {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		min-width: 0;
+		flex: 1;
+	}
+	.group-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.group-label {
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+	}
+	.link-btn {
+		background: none;
+		border: none;
+		color: var(--link);
+		font-size: 11px;
+		font-weight: 600;
+		cursor: pointer;
+		padding: 0 2px;
+	}
+	.link-btn:hover {
+		text-decoration: underline;
+	}
+
 	.search {
 		position: relative;
 		flex: 1;
-		min-width: 220px;
-		max-width: 360px;
+		min-width: 240px;
+		max-width: 420px;
 	}
 	.search svg {
 		position: absolute;
@@ -257,7 +323,7 @@
 	}
 	.search input {
 		width: 100%;
-		padding: 7px 28px 7px 30px;
+		padding: 8px 28px 8px 30px;
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		font-size: 13px;
@@ -281,9 +347,32 @@
 		color: var(--text-subtle);
 		font-size: 16px;
 		cursor: pointer;
-		border-radius: 4px;
 	}
 
+	.sort {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 12px;
+		color: var(--text-muted);
+		margin-left: auto;
+	}
+	.sort select {
+		padding: 6px 10px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		font-size: 12px;
+		background: var(--surface);
+		font-family: inherit;
+		color: var(--text);
+	}
+	.count {
+		font-size: 12px;
+		color: var(--text-subtle);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Pills ---------------------------------------------------------------- */
 	.pills {
 		display: flex;
 		flex-wrap: wrap;
@@ -293,7 +382,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		padding: 4px 10px;
+		padding: 5px 11px;
 		font-size: 12px;
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -306,36 +395,66 @@
 		accent-color: var(--primary);
 	}
 	.pill:has(input:checked) {
+		font-weight: 600;
+	}
+	.modality-pill:has(input:checked) {
 		background: var(--primary-soft);
 		border-color: var(--primary);
 		color: var(--primary-strong);
-		font-weight: 500;
+	}
+	/* Per-task-type colors when a type pill is selected. */
+	.type-pill[data-type='Classification']:has(input:checked) {
+		background: #e8edff;
+		border-color: #c4cef9;
+		color: #2740b8;
+	}
+	.type-pill[data-type='Clustering']:has(input:checked) {
+		background: #ffe6dc;
+		border-color: #f7c4b2;
+		color: #c0432e;
+	}
+	.type-pill[data-type='PairClassification']:has(input:checked) {
+		background: #def7e9;
+		border-color: #aedeb9;
+		color: #1c7a4c;
+	}
+	.type-pill[data-type='Reranking']:has(input:checked) {
+		background: #fff1d4;
+		border-color: #f4d595;
+		color: #a36100;
+	}
+	.type-pill[data-type='Retrieval']:has(input:checked) {
+		background: #f2e7ff;
+		border-color: #d5bff0;
+		color: #6a32b1;
+	}
+	.type-pill[data-type='STS']:has(input:checked) {
+		background: #ffdee9;
+		border-color: #f4b5cd;
+		color: #b41868;
+	}
+	.type-pill[data-type='BitextMining']:has(input:checked) {
+		background: #dceefc;
+		border-color: #b5d2ee;
+		color: #1e6cc3;
+	}
+	.type-pill[data-type='InstructionReranking']:has(input:checked) {
+		background: #fce4d6;
+		border-color: #f4c5a8;
+		color: #a04500;
+	}
+	.type-pill[data-type='MultilabelClassification']:has(input:checked) {
+		background: #e0f5e9;
+		border-color: #b4dec1;
+		color: #2a7d4d;
+	}
+	.type-pill[data-type='Summarization']:has(input:checked) {
+		background: #d8f3fe;
+		border-color: #a5d8ea;
+		color: #1c5d7a;
 	}
 
-	.sort {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-	}
-	.sort select {
-		padding: 5px 8px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		font-size: 12px;
-		background: var(--surface);
-		font-family: inherit;
-		color: var(--text);
-	}
-
-	.count {
-		margin-left: auto;
-		font-size: 12px;
-		color: var(--text-subtle);
-		font-variant-numeric: tabular-nums;
-	}
-
+	/* Cards ---------------------------------------------------------------- */
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -348,20 +467,96 @@
 		padding: 14px 16px;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 10px;
+		position: relative;
+		overflow: hidden;
+		text-decoration: none;
+		color: inherit;
 		transition:
-			border-color 0.12s,
-			box-shadow 0.12s;
+			transform 0.12s ease,
+			border-color 0.12s ease,
+			box-shadow 0.12s ease;
 	}
 	.card:hover {
-		border-color: var(--border-strong);
-		box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+		transform: translateY(-1px);
+		box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
 	}
+	.card:focus-visible {
+		outline: 2px solid var(--card-accent, var(--primary));
+		outline-offset: 2px;
+	}
+	.card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--card-accent, var(--border));
+	}
+	.card[data-type='Classification'] {
+		--card-accent: #2740b8;
+		background: linear-gradient(180deg, color-mix(in srgb, #e8edff 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='Clustering'] {
+		--card-accent: #c0432e;
+		background: linear-gradient(180deg, color-mix(in srgb, #ffe6dc 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='PairClassification'] {
+		--card-accent: #1c7a4c;
+		background: linear-gradient(180deg, color-mix(in srgb, #def7e9 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='Reranking'] {
+		--card-accent: #a36100;
+		background: linear-gradient(180deg, color-mix(in srgb, #fff1d4 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='Retrieval'] {
+		--card-accent: #6a32b1;
+		background: linear-gradient(180deg, color-mix(in srgb, #f2e7ff 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='STS'] {
+		--card-accent: #b41868;
+		background: linear-gradient(180deg, color-mix(in srgb, #ffdee9 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='BitextMining'] {
+		--card-accent: #1e6cc3;
+		background: linear-gradient(180deg, color-mix(in srgb, #dceefc 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='InstructionReranking'] {
+		--card-accent: #a04500;
+		background: linear-gradient(180deg, color-mix(in srgb, #fce4d6 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='MultilabelClassification'] {
+		--card-accent: #2a7d4d;
+		background: linear-gradient(180deg, color-mix(in srgb, #e0f5e9 40%, white) 0%, var(--surface) 80px);
+	}
+	.card[data-type='Summarization'] {
+		--card-accent: #1c5d7a;
+		background: linear-gradient(180deg, color-mix(in srgb, #d8f3fe 40%, white) 0%, var(--surface) 80px);
+	}
+	.card:hover {
+		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
+	}
+	.card:hover .title {
+		color: var(--card-accent, var(--primary-strong));
+	}
+
 	.card-head {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 10px;
+	}
+	.desc {
+		margin: 0;
+		font-size: 12.5px;
+		line-height: 1.45;
+		color: var(--text-muted);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 	.title {
 		font-size: 14px;
@@ -451,7 +646,6 @@
 		font-size: 12px;
 		text-transform: capitalize;
 	}
-
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
@@ -471,49 +665,6 @@
 	}
 	.badge.muted {
 		color: var(--text-subtle);
-	}
-
-	.bench-section {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		padding-top: 6px;
-		border-top: 1px solid var(--border);
-	}
-	.bench-label {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.bench-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.bench-chip {
-		display: inline-block;
-		padding: 3px 8px;
-		font-size: 11px;
-		font-weight: 500;
-		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text);
-		border: 1px solid var(--border);
-		text-decoration: none;
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.bench-chip:hover {
-		border-color: var(--primary);
-		color: var(--primary-strong);
-	}
-	.bench-chip.more {
-		color: var(--text-subtle);
-		cursor: default;
 	}
 
 	.empty {

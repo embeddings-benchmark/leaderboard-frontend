@@ -1,6 +1,11 @@
 <script lang="ts">
 	import FilterContent from './FilterContent.svelte';
 
+	interface Props {
+		hideScope?: boolean;
+	}
+	let { hideScope = false }: Props = $props();
+
 	let collapsed = $state(false);
 </script>
 
@@ -19,7 +24,7 @@
 	</button>
 
 	{#if !collapsed}
-		<FilterContent />
+		<FilterContent {hideScope} />
 	{/if}
 </aside>
 

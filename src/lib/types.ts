@@ -18,6 +18,7 @@ export interface TaskMeta {
 	languages: string[];
 	domains: string[];
 	modality: string;
+	description: string;
 }
 
 export interface MenuEntry {

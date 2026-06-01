@@ -11,10 +11,6 @@
 			title: 'Zero-shot %',
 			text: "What portion of the benchmark a model has not been trained on. 100% means fully out-of-distribution; 50% means it was fine-tuned on half the tasks. '⚠️ NA' means we don't know."
 		},
-		activeParams: {
-			title: 'Active parameters',
-			text: 'Parameters actively used during inference. For dense models this equals total minus embedding params; for MoE models it can be much lower.'
-		},
 		totalParams: {
 			title: 'Total parameters',
 			text: 'Total parameter count including embedding weights, in billions. Higher means more CPU/GPU memory required.'
@@ -45,7 +41,6 @@
 	type SortKey =
 		| 'rank'
 		| 'model'
-		| 'activeParams'
 		| 'totalParams'
 		| 'meanTask'
 		| 'meanTaskType'
@@ -80,8 +75,6 @@
 				return { v: row.rank, missing: false };
 			case 'model':
 				return { v: row.model.displayName.toLowerCase(), missing: false };
-			case 'activeParams':
-				return { v: row.activeParamsB, missing: row.activeParamsB === 0 };
 			case 'totalParams':
 				return { v: row.totalParamsB, missing: row.totalParamsB === 0 };
 			case 'meanTask':
@@ -230,7 +223,12 @@
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
 		const cell = e.currentTarget as HTMLElement;
 		const r = cell.getBoundingClientRect();
+		const activeParamsLabel = row.activeParamsB
+			? `${fmtParamsValue(row.activeParamsB)}${fmtParamsUnit(row.activeParamsB)}`
+			: '—';
 		const rows: TipRow[] = [
+			{ k: 'Type', v: row.model.modelType },
+			{ k: 'Active params', v: activeParamsLabel },
 			{ k: 'Zero-shot', v: fmtZeroShot(row.zeroShotPct) },
 			{
 				k: 'Embedding dim',
@@ -240,7 +238,6 @@
 				k: 'Max tokens',
 				v: row.maxTokens ? `${row.maxTokens.toLocaleString()} tok` : '—'
 			},
-			{ k: 'Type', v: row.model.modelType },
 			{ k: 'Released', v: row.model.releaseDate ?? '—' }
 		];
 		tipState = {
@@ -283,23 +280,6 @@
 					<button class="sort-btn" onclick={() => clickSort('model')}>
 						<span>Model</span>
 						<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model') || '↕'}</span>
-					</button>
-				</th>
-				<th
-					class="num"
-					data-tip-title={INFO.activeParams.title}
-					data-tip={INFO.activeParams.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('activeParams')}
-				>
-					<button class="sort-btn num" onclick={() => clickSort('activeParams')}>
-						<span>Active Params</span>
-						<span class="ind" class:on={sortKey === 'activeParams'}
-							>{sortIcon('activeParams') || '↕'}</span
-						>
 					</button>
 				</th>
 				<th
@@ -416,11 +396,6 @@
 								>
 							</span>
 						{/if}
-					</td>
-					<td class="num param-cell" data-model-type={row.model.modelType}>
-						{fmtParamsValue(row.activeParamsB)}{#if fmtParamsUnit(row.activeParamsB)}<span
-								class="unit">{fmtParamsUnit(row.activeParamsB)}</span
-							>{/if}
 					</td>
 					<td class="num param-cell" data-model-type={row.model.modelType}>
 						{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span

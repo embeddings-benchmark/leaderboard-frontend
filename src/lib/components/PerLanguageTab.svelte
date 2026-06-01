@@ -1,6 +1,20 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import ModelHoverPortal from './ModelHoverPortal.svelte';
+
+	type Tip = {
+		showFor: (t: HTMLElement, row: SummaryRow) => void;
+		hide: () => void;
+	};
+	let tipPortal = $state<Tip | undefined>(undefined);
+
+	function onCellEnter(e: PointerEvent | FocusEvent, row: SummaryRow) {
+		tipPortal?.showFor(e.currentTarget as HTMLElement, row);
+	}
+	function onCellLeave() {
+		tipPortal?.hide();
+	}
 
 	interface Props {
 		summary: BenchmarkSummary;
@@ -147,7 +161,13 @@
 								</svg>
 							</button>
 						</td>
-						<td class="sticky">
+						<td
+							class="sticky"
+							onpointerenter={(e) => onCellEnter(e, row)}
+							onpointerleave={onCellLeave}
+							onfocusin={(e) => onCellEnter(e, row)}
+							onfocusout={onCellLeave}
+						>
 							{#if row.model.url}
 								<a href={row.model.url} target="_blank" rel="noreferrer">{row.model.displayName}</a>
 							{:else}
@@ -165,6 +185,8 @@
 			</tbody>
 		</table>
 	</div>
+
+	<ModelHoverPortal bind:this={tipPortal} />
 </div>
 
 <style>

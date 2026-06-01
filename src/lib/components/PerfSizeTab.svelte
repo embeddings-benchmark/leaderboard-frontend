@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { BenchmarkSummary } from '$lib/types';
 	import { performanceSizePlot } from '$lib/charts/figures';
+	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import PlotlyChart from './PlotlyChart.svelte';
 
 	interface Props {
 		summary: BenchmarkSummary;
 	}
 	let { summary }: Props = $props();
-	let spec = $derived(performanceSizePlot(summary));
+	let spec = $derived(performanceSizePlot(summary, pinnedModels.value));
 </script>
 
 <div class="wrap">

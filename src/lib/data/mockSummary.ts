@@ -321,6 +321,130 @@ function buildRow(
 	};
 }
 
+// Per-task descriptions are produced by mixing a type-specific template with a
+// deterministic corpus + size, hashed off the task name so each task reads
+// differently while still feeling reasonable for its type.
+const TYPE_TEMPLATES: Record<string, string[]> = {
+	Classification: [
+		'Classify {domain} {modality} samples drawn from {source} into discrete categories.',
+		'Multi-class classification of {domain} excerpts collected from {source} ({n} examples).',
+		'Predict the topic label for {domain} content sourced from {source}.',
+		'Coarse-grained {domain} classification over {n} samples taken from {source}.'
+	],
+	MultilabelClassification: [
+		'Assign one or more labels to each {domain} sample from {source} ({n} entries).',
+		'Multi-label tagging of {domain} {modality} content drawn from {source}.',
+		'Predict the full label set for each {domain} excerpt sourced from {source}.',
+		'Multi-label evaluation over {n} {domain} samples from {source}.'
+	],
+	Clustering: [
+		'Group {n} {domain} documents from {source} into coherent topic clusters.',
+		'Discover latent clusters in a corpus of {domain} {modality} drawn from {source}.',
+		'Unsupervised clustering of {domain} excerpts collected from {source}.',
+		'Cluster {n} {domain} entries by topic using a corpus from {source}.'
+	],
+	PairClassification: [
+		'Decide whether pairs of {domain} sentences from {source} convey the same meaning.',
+		'Binary classification of {domain} {modality} pairs sourced from {source}.',
+		'Detect paraphrases among {n} {domain} sentence pairs drawn from {source}.',
+		'Predict semantic equivalence between {domain} sentence pairs in {source}.'
+	],
+	Reranking: [
+		'Re-rank {n} candidate {domain} documents per query against a corpus from {source}.',
+		'Pointwise reranking of {domain} retrieval candidates collected from {source}.',
+		'Listwise reranking over top-{n} {domain} candidates drawn from {source}.',
+		'Re-order {domain} {modality} candidates for each query taken from {source}.'
+	],
+	InstructionReranking: [
+		'Re-rank {domain} candidates by following a natural-language instruction over content from {source}.',
+		'Instruction-conditioned reranking on {n} {domain} candidates drawn from {source}.',
+		'Score {domain} candidates against a free-text instruction grounded in {source}.',
+		'Instruction-aware reranking of {domain} {modality} candidates from {source}.'
+	],
+	Retrieval: [
+		'Retrieve relevant {domain} documents from {source} given a natural-language query.',
+		'Open-domain retrieval over {n} {domain} {modality} passages drawn from {source}.',
+		'Dense retrieval evaluation on {domain} content sourced from {source}.',
+		'Find the relevant {domain} document for each query against a {source}-based corpus.'
+	],
+	STS: [
+		'Predict the semantic similarity score for {domain} sentence pairs from {source}.',
+		'Rate semantic similarity (0-5) on {domain} sentence pairs collected from {source}.',
+		'Continuous similarity prediction over {n} {domain} sentence pairs from {source}.',
+		'Sentence-similarity benchmark on {domain} content drawn from {source}.'
+	],
+	BitextMining: [
+		'Mine parallel sentence pairs between {lang1} and {lang2} from {source}.',
+		'Identify bitext pairs across languages within {domain} content from {source}.',
+		'Cross-lingual sentence alignment on {domain} {modality} drawn from {source}.',
+		'Recover parallel {domain} sentences from {source} between {lang1} and {lang2}.'
+	],
+	Summarization: [
+		'Produce concise summaries of {domain} documents drawn from {source}.',
+		'Abstractive summarization of {n} {domain} {modality} excerpts from {source}.',
+		'Generate short summaries for {domain} content collected from {source}.',
+		'Compress {domain} documents from {source} into 2-3 sentence summaries.'
+	]
+};
+
+const SOURCES = [
+	'Wikipedia',
+	'Reddit',
+	'arXiv',
+	'Reuters',
+	'StackExchange',
+	'Common Crawl',
+	'GitHub',
+	'PubMed',
+	'EuroParl',
+	'OpenSubtitles',
+	'WMT news',
+	'TweetEval',
+	'Yelp reviews',
+	'IMDB reviews',
+	'Project Gutenberg',
+	'BookCorpus',
+	'Quora question pairs',
+	'CNN / DailyMail',
+	'NewsCrawl',
+	'CC-News'
+];
+const SIZES = ['1K', '5K', '10K', '25K', '50K', '100K', '250K', '1M'];
+
+function taskDescription(
+	name: string,
+	type: string,
+	domain: string,
+	modality: string,
+	languages: string[]
+): string {
+	const raw = hashSeed(name);
+	// Bit-mix to decorrelate low bits across sequential task names (FNV-1a
+	// on "Task_1", "Task_2", ... keeps the bottom bits very predictable).
+	let s = raw;
+	s ^= s >>> 16;
+	s = Math.imul(s, 0x7feb352d) >>> 0;
+	s ^= s >>> 15;
+	s = Math.imul(s, 0x846ca68b) >>> 0;
+	s ^= s >>> 16;
+	const seed = s >>> 0;
+	const templates = TYPE_TEMPLATES[type] ?? [
+		'Evaluate embedding quality on {domain} {modality} drawn from {source} ({n} samples).'
+	];
+	const tmpl = templates[seed % templates.length];
+	const source = SOURCES[(seed >>> 7) % SOURCES.length];
+	const size = SIZES[(seed >>> 13) % SIZES.length];
+	const lang1 = languages[0] ?? 'English';
+	const lang2 = languages[1] ?? languages[0] ?? 'French';
+	return tmpl
+		.replaceAll('{domain}', domain.toLowerCase())
+		.replaceAll('{modality}', modality)
+		.replaceAll('{source}', source)
+		.replaceAll('{n}', size)
+		.replaceAll('{lang1}', lang1)
+		.replaceAll('{lang2}', lang2);
+}
+
 function buildTasksMeta(
 	tasks: string[],
 	taskTypes: string[],
@@ -336,12 +460,16 @@ function buildTasksMeta(
 			taskLangs.push(languages[(i * 7 + j * 13) % languages.length]);
 		}
 		const domain = domains.length > 0 ? domains[i % domains.length] : 'Web';
+		const type = taskTypes[i % Math.max(taskTypes.length, 1)] ?? 'Retrieval';
+		const modality = modalities[i % Math.max(modalities.length, 1)] ?? 'text';
+		const uniqueLangs = Array.from(new Set(taskLangs));
 		return {
 			name,
-			type: taskTypes[i % Math.max(taskTypes.length, 1)] ?? 'Retrieval',
-			languages: Array.from(new Set(taskLangs)),
+			type,
+			languages: uniqueLangs,
 			domains: [domain],
-			modality: modalities[i % Math.max(modalities.length, 1)] ?? 'text'
+			modality,
+			description: taskDescription(name, type, domain, modality, uniqueLangs)
 		};
 	});
 }

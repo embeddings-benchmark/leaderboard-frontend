@@ -62,21 +62,51 @@
 	}
 </script>
 
-<button type="button" class="dl" onclick={download}>Download Table</button>
+<button type="button" class="dl" onclick={download} title="Download summary as CSV">
+	<svg
+		viewBox="0 0 24 24"
+		width="14"
+		height="14"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<path d="M12 3v12" />
+		<path d="m7 10 5 5 5-5" />
+		<path d="M5 21h14" />
+	</svg>
+	<span>Download CSV</span>
+</button>
 
 <style>
 	.dl {
-		display: block;
-		margin: 14px auto;
-		padding: 10px 20px;
-		background: var(--primary);
-		color: #fff;
-		border: 1px solid var(--primary-strong);
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 7px 12px;
+		background: var(--surface);
+		color: var(--text);
+		border: 1px solid var(--border);
 		border-radius: 8px;
+		font-size: 12px;
 		font-weight: 600;
+		font-family: inherit;
 		cursor: pointer;
+		transition:
+			color 0.12s,
+			border-color 0.12s,
+			background 0.12s;
 	}
 	.dl:hover {
-		background: var(--primary-strong);
+		color: var(--primary-strong);
+		border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+		background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface));
+	}
+	.dl:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
 	}
 </style>
