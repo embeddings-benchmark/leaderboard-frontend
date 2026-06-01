@@ -1,4 +1,4 @@
-import type { Data, Layout } from 'plotly.js';
+import type { Data, Font, Layout } from 'plotly.js';
 import type { BenchmarkSummary } from '$lib/types';
 
 const RADAR_LINE_COLORS = ['#EE4266', '#00a6ed', '#ECA72C', '#B42318', '#3CBBB1'];
@@ -43,10 +43,12 @@ export function performanceSizePlot(
 		mode: 'text+markers',
 		type: 'scatter',
 		textposition: 'top center',
+		// Plotly accepts per-point arrays for textfont.size / .color at
+		// runtime; @types/plotly.js only types the single-value form.
 		textfont: {
 			size: isPinned.map((p) => (p ? 13 : 11)),
 			color: isPinned.map((p) => (p ? PIN : '#1f2329'))
-		},
+		} as unknown as Partial<Font>,
 		hovertemplate:
 			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active params: %{customdata[2]}<br>' +
 			'Max tokens: %{customdata[0]}<br>Embedding dim: %{customdata[1]}<br>' +
@@ -124,7 +126,7 @@ export function performanceOverTimePlot(
 		text: names,
 		// Pinned points get a persistent label; others stay name-on-hover.
 		customdata: names,
-		mode: 'markers+text',
+		mode: 'text+markers',
 		type: 'scatter',
 		hovertemplate: '<b>%{customdata}</b><br>%{x|%Y-%m-%d}<br>Mean(Task): %{y:.2f}<extra></extra>',
 		texttemplate: isPinned.map((p, i) => (p ? names[i] : '')),
