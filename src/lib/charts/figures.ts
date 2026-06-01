@@ -63,9 +63,17 @@ export function performanceSizePlot(
 			cmax: 5,
 			showscale: true,
 			colorbar: {
-				title: { text: 'Max Tokens' },
+				title: { text: 'Max Tokens', font: { size: 11, color: '#5a6470' } },
 				tickvals: [2, 3, 4, 5],
-				ticktext: ['100', '1K', '10K', '100K']
+				ticktext: ['100', '1K', '10K', '100K'],
+				tickfont: { size: 11, color: '#5a6470' },
+				outlinewidth: 0,
+				bordercolor: 'rgba(0,0,0,0)',
+				borderwidth: 0,
+				thickness: 12,
+				ticks: 'outside',
+				ticklen: 3,
+				tickcolor: 'rgba(0,0,0,0)'
 			},
 			line: {
 				width: isPinned.map((p) => (p ? 3 : 0.5)),

@@ -15,7 +15,7 @@
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
-		{ id: 'params', label: 'Params' },
+		{ id: 'params', label: 'Parameters' },
 		{ id: 'released', label: 'Release date' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];

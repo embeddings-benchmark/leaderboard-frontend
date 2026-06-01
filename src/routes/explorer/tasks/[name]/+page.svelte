@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import { BENCHMARK_INDEX } from '$lib/data/mockBenchmarks';
 	import { buildMockSummary } from '$lib/data/mockSummary';
+	import { languageLabel } from '$lib/data/languages';
 	import type { TaskMeta, ModelMeta } from '$lib/types';
 
 	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
@@ -40,6 +41,41 @@
 		score: number;
 		rank: number;
 		benchmarkName: string;
+		subsetScores: number[];
+	}
+
+	// Deterministic per-task subsets. For multilingual tasks we use the task's
+	// own language list (mapped to friendly names); otherwise we use a small
+	// generic split set so the table always shows at least 2 splits.
+	let subsets = $derived.by<string[]>(() => {
+		if (!task) return [];
+		const langs = task.meta.languages;
+		if (langs.length >= 2) {
+			return langs.slice(0, Math.min(4, langs.length)).map(languageLabel);
+		}
+		// Pick 2-3 generic splits based on the task name hash.
+		const POOL = ['test', 'dev', 'validation', 'subset_a', 'subset_b'];
+		const seed = hashStr(taskName);
+		const count = 2 + (seed % 2); // 2 or 3
+		return POOL.slice(0, count);
+	});
+
+	function hashStr(s: string): number {
+		let h = 2166136261;
+		for (let i = 0; i < s.length; i++) {
+			h ^= s.charCodeAt(i);
+			h = (h * 16777619) >>> 0;
+		}
+		return h;
+	}
+
+	// Deterministic per-(model, subset) score that hovers around the model's
+	// reported task score. Mean of subsets is intentionally close to the
+	// reported score (not exactly equal — splits in real data drift).
+	function subsetScore(modelName: string, subset: string, base: number): number {
+		const seed = hashStr(modelName + '|' + subset + '|' + taskName);
+		const noise = ((seed % 1000) / 1000 - 0.5) * 0.08; // ±0.04
+		return Math.max(0, Math.min(1, base + noise));
 	}
 
 	// Every (model × benchmark) pair where this task exists, with the model's
@@ -50,14 +86,15 @@
 			const summary = buildMockSummary(b.name);
 			for (const r of summary.rows) {
 				const v = r.scoresByTask[taskName];
-				if (v !== undefined) {
-					rows.push({
-						model: r.model,
-						score: v,
-						rank: 0,
-						benchmarkName: b.name
-					});
-				}
+				if (v === undefined) continue;
+				const subsetScores = subsets.map((s) => subsetScore(r.model.name, s, v));
+				rows.push({
+					model: r.model,
+					score: v,
+					rank: 0,
+					benchmarkName: b.name,
+					subsetScores
+				});
 			}
 		}
 		rows.sort((a, b) => b.score - a.score);
@@ -119,7 +156,7 @@
 					<div class="langs">
 						<span class="dim">Languages:</span>
 						{#each task.meta.languages as l (l)}
-							<span class="lang-chip">{l}</span>
+							<span class="lang-chip" title={l}>{languageLabel(l)}</span>
 						{/each}
 					</div>
 				{/if}
@@ -167,7 +204,10 @@
 								{#if multipleBenchmarks}
 									<th>Benchmark</th>
 								{/if}
-								<th class="num">Score</th>
+								<th class="num mean-head">Mean</th>
+								{#each subsets as sub (sub)}
+									<th class="num sub" title={sub}>{sub}</th>
+								{/each}
 							</tr>
 						</thead>
 						<tbody>
@@ -188,7 +228,10 @@
 											</a>
 										</td>
 									{/if}
-									<td class="num" style={heat(s.score)}>{fmtPct(s.score)}</td>
+									<td class="num mean-cell" style={heat(s.score)}>{fmtPct(s.score)}</td>
+									{#each s.subsetScores as v, i (subsets[i])}
+										<td class="num sub" style={heat(v)}>{fmtPct(v)}</td>
+									{/each}
 								</tr>
 							{/each}
 						</tbody>
@@ -581,6 +624,24 @@
 	.rank-pill.top {
 		background: var(--primary-soft);
 		color: var(--primary-strong);
+	}
+	thead th.sub {
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--text-subtle);
+	}
+	tbody td.sub {
+		color: var(--text-muted);
+	}
+	thead th.mean-head {
+		color: var(--text);
+		font-weight: 700;
+		border-right: 1px solid var(--border);
+	}
+	tbody td.mean-cell {
+		font-weight: 700;
+		color: var(--text);
+		border-right: 1px solid var(--border);
 	}
 
 	.empty {

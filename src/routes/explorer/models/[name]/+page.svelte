@@ -18,6 +18,7 @@
 		rank: number;
 		meanTask: number;
 		meanTaskType: number;
+		zeroShotPct: number;
 		totalModels: number;
 		taskTypeScores: Record<string, number>;
 		taskTypes: string[];
@@ -35,6 +36,7 @@
 				rank: row.rank,
 				meanTask: row.meanTask,
 				meanTaskType: row.meanTaskType,
+				zeroShotPct: row.zeroShotPct,
 				totalModels: summary.rows.length,
 				taskTypeScores: row.scoresByTaskType,
 				taskTypes: summary.taskTypes
@@ -143,10 +145,6 @@
 					<span class="kpi-value">{fmtInt(model.maxTokens)}</span>
 				</div>
 				<div class="kpi">
-					<span class="kpi-label">Zero-shot</span>
-					<span class="kpi-value">{fmtZeroShot(model.zeroShotPct)}</span>
-				</div>
-				<div class="kpi">
 					<span class="kpi-label">Released</span>
 					<span class="kpi-value date">{model.releaseDate ?? '—'}</span>
 				</div>
@@ -177,6 +175,7 @@
 								<th class="num">Rank</th>
 								<th class="num">Mean (Task)</th>
 								<th class="num">Mean (TaskType)</th>
+								<th class="num">Zero-shot</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -195,6 +194,7 @@
 									</td>
 									<td class="num" style={heat(s.meanTask)}>{fmtPct(s.meanTask)}</td>
 									<td class="num" style={heat(s.meanTaskType)}>{fmtPct(s.meanTaskType)}</td>
+									<td class="num">{fmtZeroShot(s.zeroShotPct)}</td>
 								</tr>
 							{/each}
 						</tbody>
