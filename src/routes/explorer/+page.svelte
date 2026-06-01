@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { BENCHMARK_INDEX, BENCHMARK_MENU } from '$lib/data/mockBenchmarks';
-	import { buildMockSummary } from '$lib/data/mockSummary';
+	import { loadBenchmarkMenu } from '$lib/data/service';
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 
 	interface FlatEntry {
@@ -22,15 +21,28 @@
 		return result;
 	}
 
-	const categories = BENCHMARK_MENU.map((cat) => ({
-		name: cat.name,
-		entries: flatten(cat).filter((e) => e.benchmark.name in BENCHMARK_INDEX)
-	}));
+	let menu = $state<MenuEntry[]>([]);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
 
-	function topModel(name: string): string {
-		const s = buildMockSummary(name);
-		return s.rows[0]?.model.displayName ?? '—';
-	}
+	$effect(() => {
+		loadBenchmarkMenu()
+			.then((m) => {
+				menu = m;
+				loading = false;
+			})
+			.catch((e) => {
+				error = e instanceof Error ? e.message : String(e);
+				loading = false;
+			});
+	});
+
+	let categories = $derived(
+		menu.map((cat) => ({
+			name: cat.name,
+			entries: flatten(cat)
+		}))
+	);
 
 	function slug(name: string): string {
 		return encodeURIComponent(name);
@@ -46,48 +58,50 @@
 		</p>
 	</header>
 
-	{#each categories as cat (cat.name)}
-		<section class="category">
-			<div class="cat-head">
-				<h2>{cat.name}</h2>
-				<span class="count">{cat.entries.length} benchmark{cat.entries.length === 1 ? '' : 's'}</span>
-			</div>
-			<div class="grid">
-				{#each cat.entries as { categoryPath, benchmark } (benchmark.name)}
-					<a class="card" href="{base}/explorer/{slug(benchmark.name)}">
-						<div class="card-top">
-							<span class="crumbs">
-								{#each categoryPath.slice(1) as c, i (i)}
-									<span>{c}</span>
-								{/each}
-							</span>
-							<span class="card-name">{benchmark.displayName}</span>
-						</div>
-						<p class="card-desc">{benchmark.description}</p>
-						<dl class="stats">
-							<div>
-								<dt>Languages</dt>
-								<dd>{benchmark.languages.length}</dd>
+	{#if loading}
+		<p class="muted">Loading benchmarks…</p>
+	{:else if error}
+		<p class="muted">Failed to load benchmarks: {error}</p>
+	{:else}
+		{#each categories as cat (cat.name)}
+			<section class="category">
+				<div class="cat-head">
+					<h2>{cat.name}</h2>
+					<span class="count">{cat.entries.length} benchmark{cat.entries.length === 1 ? '' : 's'}</span>
+				</div>
+				<div class="grid">
+					{#each cat.entries as { categoryPath, benchmark } (benchmark.name)}
+						<a class="card" href="{base}/explorer/{slug(benchmark.name)}">
+							<div class="card-top">
+								<span class="crumbs">
+									{#each categoryPath.slice(1) as c, i (i)}
+										<span>{c}</span>
+									{/each}
+								</span>
+								<span class="card-name">{benchmark.displayName}</span>
 							</div>
-							<div>
-								<dt>Tasks</dt>
-								<dd>{benchmark.tasks.length}</dd>
-							</div>
-							<div>
-								<dt>Task types</dt>
-								<dd>{benchmark.taskTypes.length}</dd>
-							</div>
-						</dl>
-						<div class="leader">
-							<span class="leader-label">Leader</span>
-							<span class="leader-name">{topModel(benchmark.name)}</span>
-						</div>
-						<span class="cta">Open leaderboard →</span>
-					</a>
-				{/each}
-			</div>
-		</section>
-	{/each}
+							<p class="card-desc">{benchmark.description}</p>
+							<dl class="stats">
+								<div>
+									<dt>Languages</dt>
+									<dd>{benchmark.languages.length}</dd>
+								</div>
+								<div>
+									<dt>Tasks</dt>
+									<dd>{benchmark.tasks.length}</dd>
+								</div>
+								<div>
+									<dt>Task types</dt>
+									<dd>{benchmark.taskTypes.length}</dd>
+								</div>
+							</dl>
+							<span class="cta">Open leaderboard →</span>
+						</a>
+					{/each}
+				</div>
+			</section>
+		{/each}
+	{/if}
 </div>
 
 <style>
@@ -218,29 +232,9 @@
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
-	.leader {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 8px 10px;
-		background: var(--surface-muted);
-		border-radius: 8px;
-		font-size: 12px;
-	}
-	.leader-label {
-		color: var(--text-subtle);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		font-weight: 600;
-		font-size: 10px;
-	}
-	.leader-name {
-		color: var(--primary-strong);
-		font-weight: 600;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		max-width: 60%;
+	.muted {
+		color: var(--text-muted);
+		padding: 20px 0;
 	}
 	.cta {
 		font-size: 12px;

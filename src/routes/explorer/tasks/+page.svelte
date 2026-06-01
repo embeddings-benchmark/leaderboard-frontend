@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { BENCHMARK_INDEX } from '$lib/data/mockBenchmarks';
-	import { buildMockSummary } from '$lib/data/mockSummary';
+	import { DEFAULT_BENCHMARK_NAME, loadBenchmarkMenu, loadSummary } from '$lib/data/service';
+	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 
 	interface TaskEntry {
 		name: string;
@@ -13,34 +13,62 @@
 		benchmarks: string[];
 	}
 
-	const ALL_TASKS: TaskEntry[] = (() => {
-		const map = new Map<string, TaskEntry>();
-		for (const bench of Object.values(BENCHMARK_INDEX)) {
-			const summary = buildMockSummary(bench.name);
-			for (const meta of summary.tasksMeta) {
-				const existing = map.get(meta.name);
-				if (existing) {
-					if (!existing.benchmarks.includes(bench.name)) {
-						existing.benchmarks.push(bench.name);
-					}
-				} else {
-					map.set(meta.name, {
-						name: meta.name,
-						type: meta.type,
-						languages: meta.languages,
-						domains: meta.domains,
-						modality: meta.modality,
-						description: meta.description,
-						benchmarks: [bench.name]
-					});
-				}
+	function collectBenchmarks(entries: MenuEntry[]): Benchmark[] {
+		const out: Benchmark[] = [];
+		const walk = (m: MenuEntry) => {
+			for (const c of m.children) {
+				if (isBenchmark(c)) out.push(c);
+				else walk(c);
 			}
-		}
-		return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-	})();
+		};
+		entries.forEach(walk);
+		return out;
+	}
 
-	const TASK_TYPES = Array.from(new Set(ALL_TASKS.map((t) => t.type))).sort();
-	const MODALITIES = Array.from(new Set(ALL_TASKS.map((t) => t.modality))).sort();
+	let ALL_TASKS = $state<TaskEntry[]>([]);
+	let TASK_TYPES = $state<string[]>([]);
+	let MODALITIES = $state<string[]>([]);
+	let loadingData = $state(true);
+	let loadError = $state<string | null>(null);
+
+	$effect(() => {
+		(async () => {
+			try {
+				const [menu, summary] = await Promise.all([
+					loadBenchmarkMenu(),
+					loadSummary(DEFAULT_BENCHMARK_NAME)
+				]);
+				const allBenches = collectBenchmarks(menu);
+				const occurrences = new Map<string, string[]>();
+				for (const b of allBenches) {
+					for (const t of b.tasks) {
+						const list = occurrences.get(t) ?? [];
+						list.push(b.name);
+						occurrences.set(t, list);
+					}
+				}
+				const tasks = summary.tasksMeta.map<TaskEntry>((m) => ({
+					name: m.name,
+					type: m.type,
+					languages: m.languages,
+					domains: m.domains,
+					modality: m.modality,
+					description: m.description,
+					benchmarks: occurrences.get(m.name) ?? [DEFAULT_BENCHMARK_NAME]
+				}));
+				tasks.sort((a, b) => a.name.localeCompare(b.name));
+				ALL_TASKS = tasks;
+				TASK_TYPES = Array.from(new Set(tasks.map((t) => t.type))).sort();
+				MODALITIES = Array.from(new Set(tasks.map((t) => t.modality))).sort();
+				typeFilter = new Set(TASK_TYPES);
+				modalityFilter = new Set(MODALITIES);
+				loadingData = false;
+			} catch (e) {
+				loadError = e instanceof Error ? e.message : String(e);
+				loadingData = false;
+			}
+		})();
+	});
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
@@ -51,8 +79,8 @@
 	type SortId = (typeof SORTS)[number]['id'];
 
 	let query = $state('');
-	let typeFilter = $state<Set<string>>(new Set(TASK_TYPES));
-	let modalityFilter = $state<Set<string>>(new Set(MODALITIES));
+	let typeFilter = $state<Set<string>>(new Set());
+	let modalityFilter = $state<Set<string>>(new Set());
 	let sort = $state<SortId>('name');
 
 	function toggleType(t: string) {
@@ -111,6 +139,11 @@
 		</p>
 	</header>
 
+	{#if loadingData}
+		<p class="empty">Loading tasks…</p>
+	{:else if loadError}
+		<p class="empty">Failed to load tasks: {loadError}</p>
+	{:else}
 	<div class="toolbar">
 		<div class="row search-row">
 			<div class="search">
@@ -189,7 +222,7 @@
 	{#if filtered.length === 0}
 		<p class="empty">No tasks match those filters.</p>
 	{:else}
-		<div class="grid">
+		<div class="grid" data-loaded>
 			{#each filtered as t (t.name)}
 				<a class="card" href="{base}/explorer/tasks/{slug(t.name)}" data-type={t.type}>
 					<div class="card-head">
@@ -228,6 +261,7 @@
 				</a>
 			{/each}
 		</div>
+	{/if}
 	{/if}
 </div>
 

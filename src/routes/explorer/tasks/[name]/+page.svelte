@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { BENCHMARK_INDEX } from '$lib/data/mockBenchmarks';
-	import { buildMockSummary } from '$lib/data/mockSummary';
+	import { loadBenchmarkMenu, loadSummary } from '$lib/data/service';
 	import { languageLabel } from '$lib/data/languages';
-	import type { TaskMeta, ModelMeta } from '$lib/types';
+	import { isBenchmark, type Benchmark, type BenchmarkSummary, type MenuEntry, type TaskMeta, type ModelMeta } from '$lib/types';
 
 	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
 
@@ -14,26 +13,69 @@
 		benchmarkDisplay: string;
 	}
 
-	// Find the first benchmark that contains this task and pull its task metadata.
-	let task = $derived.by<TaskWithBenchmark | null>(() => {
-		for (const bench of Object.values(BENCHMARK_INDEX)) {
-			const summary = buildMockSummary(bench.name);
-			const meta = summary.tasksMeta.find((m) => m.name === taskName);
-			if (meta) return { meta, benchmarkName: bench.name, benchmarkDisplay: bench.displayName };
-		}
-		return null;
+	let allBenchmarks = $state<Benchmark[]>([]);
+	let summaries = $state<Map<string, BenchmarkSummary>>(new Map());
+	let loadingData = $state(true);
+
+	$effect(() => {
+		(async () => {
+			const menu = await loadBenchmarkMenu();
+			const out: Benchmark[] = [];
+			const walk = (m: MenuEntry) => {
+				for (const c of m.children) {
+					if (isBenchmark(c)) out.push(c);
+					else walk(c);
+				}
+			};
+			menu.forEach(walk);
+			allBenchmarks = out;
+		})();
 	});
 
-	// All benchmarks that contain this task (typically just one in our mock data).
-	let benchmarks = $derived.by(() => {
-		const list: { name: string; display: string }[] = [];
-		for (const bench of Object.values(BENCHMARK_INDEX)) {
-			const summary = buildMockSummary(bench.name);
-			if (summary.tasks.includes(taskName)) {
-				list.push({ name: bench.name, display: bench.displayName });
-			}
+	// Once benchmarks are listed, load the summary for each benchmark that lists
+	// this task. We need the summary to read tasksMeta + per-task scores.
+	$effect(() => {
+		const name = taskName;
+		if (!name || allBenchmarks.length === 0) return;
+		const hosting = allBenchmarks.filter((b) => b.tasks.includes(name));
+		if (hosting.length === 0) {
+			loadingData = false;
+			return;
 		}
-		return list;
+		const missing = hosting.filter((b) => !summaries.has(b.name));
+		if (missing.length === 0) {
+			loadingData = false;
+			return;
+		}
+		let pending = missing.length;
+		for (const b of missing) {
+			loadSummary(b.name)
+				.then((s) => {
+					const next = new Map(summaries);
+					next.set(b.name, s);
+					summaries = next;
+				})
+				.catch(() => {})
+				.finally(() => {
+					if (--pending === 0) loadingData = false;
+				});
+		}
+	});
+
+	let benchmarks = $derived(
+		allBenchmarks
+			.filter((b) => b.tasks.includes(taskName))
+			.map((b) => ({ name: b.name, display: b.displayName }))
+	);
+
+	let task = $derived.by<TaskWithBenchmark | null>(() => {
+		for (const b of benchmarks) {
+			const summary = summaries.get(b.name);
+			if (!summary) continue;
+			const meta = summary.tasksMeta.find((m) => m.name === taskName);
+			if (meta) return { meta, benchmarkName: b.name, benchmarkDisplay: b.display };
+		}
+		return null;
 	});
 
 	interface ModelScore {
@@ -83,7 +125,8 @@
 	let scores = $derived.by<ModelScore[]>(() => {
 		const rows: ModelScore[] = [];
 		for (const b of benchmarks) {
-			const summary = buildMockSummary(b.name);
+			const summary = summaries.get(b.name);
+			if (!summary) continue;
 			for (const r of summary.rows) {
 				const v = r.scoresByTask[taskName];
 				if (v === undefined) continue;
@@ -129,10 +172,12 @@
 		<span class="current">{taskName}</span>
 	</nav>
 
-	{#if !task}
+	{#if loadingData && !task}
+		<p class="muted">Loading task…</p>
+	{:else if !task}
 		<section class="empty card">
 			<h1>Unknown task</h1>
-			<p>No task named “{taskName}” exists in the mock data.</p>
+			<p>No task named “{taskName}” found.</p>
 			<a class="back" href="{base}/explorer/tasks">← All tasks</a>
 		</section>
 	{:else}

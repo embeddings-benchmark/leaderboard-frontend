@@ -1,15 +1,69 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { BENCHMARK_INDEX, DEFAULT_BENCHMARK_NAME } from '$lib/data/mockBenchmarks';
-	import { buildMockSummary } from '$lib/data/mockSummary';
+	import { DEFAULT_BENCHMARK_NAME, loadBenchmarkMenu, loadSummary } from '$lib/data/service';
+	import { isBenchmark, type Benchmark, type BenchmarkSummary, type MenuEntry } from '$lib/types';
 
 	let modelName = $derived(decodeURIComponent(page.params.name ?? ''));
 
-	// All model metadata is identical across summaries; we just need any one.
+	let allBenchmarks = $state<Benchmark[]>([]);
+	let summaries = $state<Map<string, BenchmarkSummary>>(new Map());
+	let loadingData = $state(true);
+
+	$effect(() => {
+		(async () => {
+			const menu = await loadBenchmarkMenu();
+			const out: Benchmark[] = [];
+			const walk = (m: MenuEntry) => {
+				for (const c of m.children) {
+					if (isBenchmark(c)) out.push(c);
+					else walk(c);
+				}
+			};
+			menu.forEach(walk);
+			allBenchmarks = out;
+			// Always load the default benchmark so we can resolve model metadata,
+			// even if the model has no row in any other benchmark.
+			if (!summaries.has(DEFAULT_BENCHMARK_NAME)) {
+				const s = await loadSummary(DEFAULT_BENCHMARK_NAME);
+				const next = new Map(summaries);
+				next.set(DEFAULT_BENCHMARK_NAME, s);
+				summaries = next;
+			}
+		})();
+	});
+
+	// Lazily load every benchmark summary so we can list this model's scores
+	// everywhere it appears. Cancels nothing — first hit warms the lru_cache on
+	// the backend and subsequent loads are immediate.
+	$effect(() => {
+		if (allBenchmarks.length === 0) return;
+		const missing = allBenchmarks.filter((b) => !summaries.has(b.name));
+		if (missing.length === 0) {
+			loadingData = false;
+			return;
+		}
+		let pending = missing.length;
+		for (const b of missing) {
+			loadSummary(b.name)
+				.then((s) => {
+					const next = new Map(summaries);
+					next.set(b.name, s);
+					summaries = next;
+				})
+				.catch(() => {})
+				.finally(() => {
+					if (--pending === 0) loadingData = false;
+				});
+		}
+	});
+
 	let model = $derived.by(() => {
-		const summary = buildMockSummary(DEFAULT_BENCHMARK_NAME);
-		return summary.rows.find((r) => r.model.name === modelName)?.model ?? null;
+		for (const [, s] of summaries) {
+			const m = s.rows.find((r) => r.model.name === modelName)?.model;
+			if (m) return m;
+		}
+		return null;
 	});
 
 	interface BenchScore {
@@ -26,8 +80,9 @@
 
 	let scoresByBenchmark = $derived.by<BenchScore[]>(() => {
 		const result: BenchScore[] = [];
-		for (const b of Object.values(BENCHMARK_INDEX)) {
-			const summary = buildMockSummary(b.name);
+		for (const b of allBenchmarks) {
+			const summary = summaries.get(b.name);
+			if (!summary) continue;
 			const row = summary.rows.find((r) => r.model.name === modelName);
 			if (!row) continue;
 			result.push({
@@ -89,10 +144,12 @@
 		<span class="current">{model?.displayName ?? modelName}</span>
 	</nav>
 
-	{#if !model}
+	{#if loadingData && !model}
+		<p class="muted">Loading model…</p>
+	{:else if !model}
 		<section class="empty card">
 			<h1>Unknown model</h1>
-			<p>No model named “{modelName}” exists in the mock data.</p>
+			<p>No model named “{modelName}” found.</p>
 			<a class="back" href="{base}/explorer/models">← All models</a>
 		</section>
 	{:else}

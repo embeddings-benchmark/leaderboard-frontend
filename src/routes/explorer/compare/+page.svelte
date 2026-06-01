@@ -1,22 +1,57 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
-	import { BENCHMARK_INDEX } from '$lib/data/mockBenchmarks';
-	import { buildMockSummary } from '$lib/data/mockSummary';
+	import { loadBenchmarkMenu, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
 	import type { Data, Layout } from 'plotly.js';
-	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
+	import type { Benchmark, BenchmarkSummary, MenuEntry, SummaryRow } from '$lib/types';
+	import { isBenchmark } from '$lib/types';
 	import { untrack } from 'svelte';
 
 	const MAX_PICKED = 4;
 	const MAX_BENCHMARKS = 6;
 	const MAX_TASKS = 12;
 	const RADAR_COLORS = ['#EE4266', '#00a6ed', '#ECA72C', '#3CBBB1'];
-	const ALL_BENCHMARKS = Object.values(BENCHMARK_INDEX);
+
+	let ALL_BENCHMARKS = $state<Benchmark[]>([]);
+	let benchIndex = $derived(new Map(ALL_BENCHMARKS.map((b) => [b.name, b])));
+	let summaryCache = $state<Map<string, BenchmarkSummary>>(new Map());
+
+	$effect(() => {
+		loadBenchmarkMenu().then((menu) => {
+			const out: Benchmark[] = [];
+			const walk = (m: MenuEntry) => {
+				for (const c of m.children) {
+					if (isBenchmark(c)) out.push(c);
+					else walk(c);
+				}
+			};
+			menu.forEach(walk);
+			ALL_BENCHMARKS = out;
+		});
+	});
 
 	let pickedBenchmarks = $state<string[]>([leaderboard.selected]);
+
+	// Kick off summary loads for every picked benchmark not yet in the cache.
+	$effect(() => {
+		const missing = pickedBenchmarks.filter((n) => !summaryCache.has(n));
+		if (missing.length === 0) return;
+		untrack(() => {
+			for (const name of missing) {
+				loadSummary(name).then((s) => {
+					const next = new Map(summaryCache);
+					next.set(name, s);
+					summaryCache = next;
+				});
+			}
+		});
+	});
+
 	let benchSummaries = $derived<BenchmarkSummary[]>(
-		pickedBenchmarks.map((name) => buildMockSummary(name))
+		pickedBenchmarks
+			.map((name) => summaryCache.get(name))
+			.filter((s): s is BenchmarkSummary => s !== undefined)
 	);
 	let primarySummary = $derived<BenchmarkSummary | null>(benchSummaries[0] ?? null);
 
@@ -332,7 +367,7 @@
 		<div class="bench-picker" bind:this={benchPickerRoot}>
 			<div class="picks bench-picks">
 				{#each pickedBenchmarks as bn (bn)}
-					{@const b = BENCHMARK_INDEX[bn]}
+					{@const b = benchIndex.get(bn)}
 					<span class="pick-chip bench-chip">
 						<span class="pick-name" title={bn}>{b?.displayName ?? bn}</span>
 						{#if pickedBenchmarks.length > 1}
@@ -593,7 +628,7 @@
 						{@const rankValues = rows.map((r) => (r ? r.rank : null))}
 						{@const rankWinners = winnersForRow(rankValues, 'min')}
 						<div class="cell metric-head sticky bench-row-head">
-							<span class="bench-label">{BENCHMARK_INDEX[bv.name]?.displayName ?? bv.name}</span>
+							<span class="bench-label">{benchIndex.get(bv.name)?.displayName ?? bv.name}</span>
 							<span class="bench-sub">Mean(Task) · Rank</span>
 						</div>
 						{#each pickedRows as p, i (p.model.name)}

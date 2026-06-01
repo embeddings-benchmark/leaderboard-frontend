@@ -20,7 +20,14 @@
 	import FAQ from '$lib/components/FAQ.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.benchmark ?? ''));
-	let benchmark = $derived(BENCHMARK_INDEX[benchmarkName] ?? null);
+	// Resolve the benchmark from the mock index first (fast offline path), then
+	// fall back to whatever the leaderboard store loaded for this URL — the
+	// store goes through the service layer, so this branch picks up real-API
+	// benchmarks that aren't in the mock data.
+	let benchmark = $derived(
+		BENCHMARK_INDEX[benchmarkName] ??
+			(leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null)
+	);
 
 	type TabId =
 		| 'overview'
@@ -42,14 +49,14 @@
 	let activeTab = $state<TabId>('summary');
 
 	$effect(() => {
-		if (!benchmark) return;
+		if (!benchmarkName) return;
 		// Trigger load both when the URL benchmark differs from the store's
 		// current selection AND when it matches but the summary hasn't loaded yet
 		// (cold visit where selected already defaulted to this benchmark name).
-		const needsSwitch = leaderboard.selected !== benchmark.name;
+		const needsSwitch = leaderboard.selected !== benchmarkName;
 		const needsInitialLoad = !leaderboard.summary && !leaderboard.loading;
 		if (needsSwitch || needsInitialLoad) {
-			leaderboard.select(benchmark.name);
+			leaderboard.select(benchmarkName);
 		}
 	});
 	$effect(() => {
@@ -71,10 +78,18 @@
 			<span class="current">{benchmark?.displayName ?? benchmarkName}</span>
 		</nav>
 
-		{#if !benchmark}
+		{#if leaderboard.loading && !benchmark}
+			<p class="muted">Loading benchmark…</p>
+		{:else if leaderboard.error && !benchmark}
+			<section class="empty card">
+				<h1>Couldn't load benchmark</h1>
+				<p>{leaderboard.error}</p>
+				<a class="back" href="{base}/explorer">← Back to Explorer</a>
+			</section>
+		{:else if !benchmark}
 			<section class="empty card">
 				<h1>Unknown benchmark</h1>
-				<p>No benchmark named “{benchmarkName}” exists in the mock data.</p>
+				<p>No benchmark named “{benchmarkName}”.</p>
 				<a class="back" href="{base}/explorer">← Back to Explorer</a>
 			</section>
 		{:else}

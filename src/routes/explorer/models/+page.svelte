@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { buildMockSummary } from '$lib/data/mockSummary';
-	import { DEFAULT_BENCHMARK_NAME } from '$lib/data/mockBenchmarks';
+	import { DEFAULT_BENCHMARK_NAME, loadSummary } from '$lib/data/service';
 	import { filters } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
@@ -11,7 +10,21 @@
 		return encodeURIComponent(name);
 	}
 
-	const ALL_MODELS: ModelMeta[] = buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.map((r) => r.model);
+	let ALL_MODELS = $state<ModelMeta[]>([]);
+	let loadingData = $state(true);
+	let loadError = $state<string | null>(null);
+
+	$effect(() => {
+		loadSummary(DEFAULT_BENCHMARK_NAME)
+			.then((s) => {
+				ALL_MODELS = s.rows.map((r) => r.model);
+				loadingData = false;
+			})
+			.catch((e) => {
+				loadError = e instanceof Error ? e.message : String(e);
+				loadingData = false;
+			});
+	});
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
@@ -97,7 +110,11 @@
 			</div>
 		</div>
 
-		{#if filtered.length === 0}
+		{#if loadingData}
+			<p class="empty">Loading models…</p>
+		{:else if loadError}
+			<p class="empty">Failed to load models: {loadError}</p>
+		{:else if filtered.length === 0}
 			<p class="empty">No models match those filters.</p>
 		{:else}
 			<div class="grid">
