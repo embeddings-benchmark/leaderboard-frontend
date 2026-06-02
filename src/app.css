@@ -2,21 +2,171 @@
 	--font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
 	--font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-	--bg: #f7f7f8;
-	--surface: #ffffff;
-	--surface-muted: #f1f3f5;
-	--border: #e2e4e8;
-	--border-strong: #cdd0d6;
-	--text: #1f2329;
-	--text-muted: #5b6470;
-	--text-subtle: #8a93a0;
-	--primary: #ff6f3c;
-	--primary-strong: #e85a2a;
-	--primary-soft: #fff1ec;
-	--link: #2563eb;
-	--row-alt: #fafbfc;
-	--row-hover: #eef0f4;
-	--shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+	/* Raw palettes — keep both per token so we can compose with light-dark()
+	   and so a hard-pinned theme (data-theme="light"/"dark") still has access
+	   to either side when needed. */
+	--bg-light: #f6f5f1;
+	--bg-dark: #14161b;
+	--surface-light: #ffffff;
+	--surface-dark: #1d1f26;
+	--surface-muted-light: #f2f0ea;
+	--surface-muted-dark: #23262e;
+	--border-light: #e4e1d8;
+	--border-dark: #2d313a;
+	--border-strong-light: #cdc9bd;
+	--border-strong-dark: #3f4452;
+	--text-light: #1b1f24;
+	--text-dark: #ecedf2;
+	--text-muted-light: #56606b;
+	--text-muted-dark: #b7bdc8;
+	--text-subtle-light: #87909c;
+	--text-subtle-dark: #8d96a4;
+	--ink-strong-light: #0e1116;
+	--ink-strong-dark: #f7f9fd;
+	--primary-light: #ff6f3c;
+	/* Dark theme pivots the accent from coral → azure. Orange on a dark
+	   surface reads as a warning ("this is hot"), while a clear sky blue
+	   keeps the same visual weight without the alarm-bell connotation. */
+	--primary-dark: #5da9ff;
+	--primary-strong-light: #d34d1c;
+	--primary-strong-dark: #88c2ff;
+	--primary-soft-light: #fff0e8;
+	--primary-soft-dark: #1a2839;
+	--link-light: #2563eb;
+	--link-dark: #88c2ff;
+	--row-alt-light: #fafaf6;
+	--row-alt-dark: #1f2229;
+	--row-hover-light: #efeee8;
+	--row-hover-dark: #2a2d36;
+	--shadow-sm-light: 0 1px 2px rgba(15, 23, 42, 0.04);
+	--shadow-sm-dark: 0 1px 2px rgba(0, 0, 0, 0.4);
+	/* Top-bar background — translucent so the page surface peeks through the
+	   blur. Pair per theme rather than mixing the same alpha both ways. */
+	--bar-bg-light: rgba(252, 250, 245, 0.78);
+	--bar-bg-dark: rgba(20, 22, 27, 0.78);
+
+	/* Live tokens — chosen by the browser based on the resolved color-scheme
+	   (system preference, or manually pinned via `data-theme`). */
+	--bg: light-dark(var(--bg-light), var(--bg-dark));
+	--surface: light-dark(var(--surface-light), var(--surface-dark));
+	--surface-muted: light-dark(var(--surface-muted-light), var(--surface-muted-dark));
+	--border: light-dark(var(--border-light), var(--border-dark));
+	--border-strong: light-dark(var(--border-strong-light), var(--border-strong-dark));
+	--text: light-dark(var(--text-light), var(--text-dark));
+	--text-muted: light-dark(var(--text-muted-light), var(--text-muted-dark));
+	--text-subtle: light-dark(var(--text-subtle-light), var(--text-subtle-dark));
+	--ink-strong: light-dark(var(--ink-strong-light), var(--ink-strong-dark));
+	--primary: light-dark(var(--primary-light), var(--primary-dark));
+	--primary-strong: light-dark(var(--primary-strong-light), var(--primary-strong-dark));
+	--primary-soft: light-dark(var(--primary-soft-light), var(--primary-soft-dark));
+	--link: light-dark(var(--link-light), var(--link-dark));
+	--row-alt: light-dark(var(--row-alt-light), var(--row-alt-dark));
+	--row-hover: light-dark(var(--row-hover-light), var(--row-hover-dark));
+	--shadow-sm: light-dark(var(--shadow-sm-light), var(--shadow-sm-dark));
+	--bar-bg: light-dark(var(--bar-bg-light), var(--bar-bg-dark));
+
+	/* Category-tint palette — one row per category used by model-type and
+	   simplified-task-type pills, card top-accents, and SummaryTable model
+	   column tints. Each row exposes:
+	   - --tint-<name>      a soft background fill
+	   - --tint-<name>-fg   a readable text color paired with that fill
+	   Both adapt per theme so consumers stop reaching for hardcoded white. */
+	--tint-blue: light-dark(#e8edff, #1e2740);
+	--tint-blue-fg: light-dark(#2740b8, #a7bbf0);
+	--tint-purple: light-dark(#f2e7ff, #2c2245);
+	--tint-purple-fg: light-dark(#6a32b1, #c4a8f5);
+	--tint-green: light-dark(#def7e9, #163828);
+	--tint-green-fg: light-dark(#1c7a4c, #8ad6a8);
+	--tint-orange: light-dark(#ffe6dc, #3a221b);
+	--tint-orange-fg: light-dark(#c0432e, #f0a890);
+	--tint-amber: light-dark(#fff1d4, #3a2d11);
+	--tint-amber-fg: light-dark(#a36100, #e9b86b);
+	--tint-pink: light-dark(#ffdee9, #3a1f2c);
+	--tint-pink-fg: light-dark(#b41868, #f0a3c2);
+	--tint-azure: light-dark(#dceefc, #1a2a3d);
+	--tint-azure-fg: light-dark(#1e6cc3, #8fbef0);
+	--tint-teal: light-dark(#d8f3fe, #16313c);
+	--tint-teal-fg: light-dark(#1c5d7a, #87cfe8);
+
+	/* Declare both schemes so the browser themes native UI (scrollbars,
+	   default canvas, form controls) to match the chosen scheme. */
+	color-scheme: light dark;
+	accent-color: var(--primary);
+}
+
+/* Hard pins set on <html data-theme="…"> by the toggle (and the inline
+   pre-paint script). Overriding `color-scheme` collapses light-dark() to the
+   chosen branch automatically — no token reassignment needed. */
+:root[data-theme='light'] {
+	color-scheme: light;
+}
+:root[data-theme='dark'] {
+	color-scheme: dark;
+}
+
+/* Progressive-enhancement fallback for browsers older than Baseline 2024-05
+   (no `light-dark()` support — Safari ≤17.4 etc). The media query still
+   delivers a dark palette; manual pinning is best-effort. */
+@supports not (color: light-dark(white, black)) {
+	:root {
+		--bg: var(--bg-light);
+		--surface: var(--surface-light);
+		--surface-muted: var(--surface-muted-light);
+		--border: var(--border-light);
+		--border-strong: var(--border-strong-light);
+		--text: var(--text-light);
+		--text-muted: var(--text-muted-light);
+		--text-subtle: var(--text-subtle-light);
+		--ink-strong: var(--ink-strong-light);
+		--primary: var(--primary-light);
+		--primary-strong: var(--primary-strong-light);
+		--primary-soft: var(--primary-soft-light);
+		--link: var(--link-light);
+		--row-alt: var(--row-alt-light);
+		--row-hover: var(--row-hover-light);
+		--shadow-sm: var(--shadow-sm-light);
+		--bar-bg: var(--bar-bg-light);
+	}
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme='light']) {
+			--bg: var(--bg-dark);
+			--surface: var(--surface-dark);
+			--surface-muted: var(--surface-muted-dark);
+			--border: var(--border-dark);
+			--border-strong: var(--border-strong-dark);
+			--text: var(--text-dark);
+			--text-muted: var(--text-muted-dark);
+			--text-subtle: var(--text-subtle-dark);
+			--ink-strong: var(--ink-strong-dark);
+			--primary: var(--primary-dark);
+			--primary-strong: var(--primary-strong-dark);
+			--primary-soft: var(--primary-soft-dark);
+			--link: var(--link-dark);
+			--row-alt: var(--row-alt-dark);
+			--row-hover: var(--row-hover-dark);
+			--shadow-sm: var(--shadow-sm-dark);
+			--bar-bg: var(--bar-bg-dark);
+		}
+	}
+	:root[data-theme='dark'] {
+		--bg: var(--bg-dark);
+		--surface: var(--surface-dark);
+		--surface-muted: var(--surface-muted-dark);
+		--border: var(--border-dark);
+		--border-strong: var(--border-strong-dark);
+		--text: var(--text-dark);
+		--text-muted: var(--text-muted-dark);
+		--text-subtle: var(--text-subtle-dark);
+		--ink-strong: var(--ink-strong-dark);
+		--primary: var(--primary-dark);
+		--primary-strong: var(--primary-strong-dark);
+		--primary-soft: var(--primary-soft-dark);
+		--link: var(--link-dark);
+		--row-alt: var(--row-alt-dark);
+		--row-hover: var(--row-hover-dark);
+		--shadow-sm: var(--shadow-sm-dark);
+		--bar-bg: var(--bar-bg-dark);
+	}
 }
 
 * {

@@ -4,6 +4,24 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<!-- color-scheme defaults to following the user's system preference.
+		     The inline script below pins it to the user's saved choice (if any)
+		     before first paint to avoid a flash of un-themed content. -->
+		<meta name="color-scheme" content="light dark" />
+		<script>
+			{
+				try {
+					const saved = localStorage.getItem('color-scheme');
+					if (saved === 'light' || saved === 'dark') {
+						document.documentElement.setAttribute('data-theme', saved);
+						const meta = document.querySelector('meta[name="color-scheme"]');
+						if (meta) meta.setAttribute('content', saved);
+					}
+				} catch {
+					/* localStorage may throw in private mode — fall back to system */
+				}
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

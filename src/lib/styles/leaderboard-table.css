@@ -1,0 +1,240 @@
+/* Shared chrome for leaderboard tables (SummaryTable, PerTaskTab, PerLanguageTab).
+   Component-specific rules — model-type tinted cells, ranked-pin combo cells,
+   per-language fake score colorings — stay in their own <style> blocks.
+
+   Usage: opt in via classes (no element-selector magic). A typical row looks like:
+     <div class="tbl-scroll">
+       <table class="tbl">
+         <thead>
+           <tr>
+             <th class="tbl-pin-col tbl-sticky-pin"></th>
+             <th class="tbl-sticky-col"><button class="tbl-sort tbl-sort-left">…</button></th>
+             <th class="tbl-num"><button class="tbl-sort">…</button></th>
+           </tr>
+         </thead>
+         <tbody>
+           <tr class:pinned={...}> … </tr>
+         </tbody>
+       </table>
+     </div>
+*/
+
+/* The sticky-thead overlay's inner scroll container mirrors the wrapper's
+   horizontal scroll, so its own scrollbar must be invisible. */
+.sticky-head-inner::-webkit-scrollbar {
+	display: none;
+}
+
+.tbl-scroll {
+	/* Horizontal scrollbar appears for wide tables. Browsers coerce overflow-y
+	   to auto whenever overflow-x is non-visible, so this also forms a
+	   scrollport on the y-axis. Sticky thead therefore anchors within this
+	   wrapper rather than the page viewport (see comment on .tbl thead th). */
+	overflow-x: auto;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface);
+	box-shadow: var(--shadow-sm);
+}
+
+.tbl {
+	border-collapse: separate;
+	border-spacing: 0;
+	font-size: 13px;
+}
+.tbl th,
+.tbl td {
+	border-bottom: 1px solid var(--border);
+	white-space: nowrap;
+	text-align: left;
+}
+.tbl td {
+	padding: 8px 12px;
+}
+.tbl thead th {
+	background: var(--surface-muted);
+	color: var(--text-muted);
+	font-weight: 600;
+	padding: 0;
+	/* Sticky to the top of .tbl-scroll. Anchoring to the page viewport would
+	   require .tbl-scroll to NOT be a scroll container, which conflicts with
+	   keeping wide tables horizontally contained in the wrapper. */
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+
+.tbl tbody tr:nth-child(even) td {
+	background: var(--row-alt);
+}
+.tbl tbody tr:hover td {
+	background: var(--row-hover);
+}
+.tbl tbody tr.pinned td {
+	background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
+}
+.tbl tbody tr.pinned + tr:not(.pinned) td {
+	border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
+}
+
+/* Numeric (right-aligned, tabular figures). Selector needs to beat
+   `.tbl th, .tbl td` on specificity. */
+.tbl th.tbl-num,
+.tbl td.tbl-num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.tbl-best {
+	font-weight: 700;
+}
+
+/* Sort button used inside any <th>. */
+.tbl-sort {
+	all: unset;
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	width: 100%;
+	padding: 8px 12px;
+	cursor: pointer;
+	color: var(--text-muted);
+	font-weight: 600;
+	transition:
+		color 0.12s,
+		background 0.12s;
+	box-sizing: border-box;
+}
+.tbl-sort.tbl-sort-left {
+	justify-content: flex-start;
+}
+.tbl-sort:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--primary-soft) 60%, transparent);
+}
+.tbl-sort:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: -2px;
+	border-radius: 4px;
+}
+.tbl-sort-ind {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--text-subtle);
+	opacity: 0.4;
+	transition:
+		opacity 0.12s,
+		color 0.12s;
+}
+.tbl-sort:hover .tbl-sort-ind {
+	opacity: 1;
+}
+.tbl-sort-ind.on {
+	color: var(--primary-strong);
+	opacity: 1;
+}
+
+/* Left-edge pin column (32px) + the pin button itself. */
+.tbl-pin-col {
+	width: 32px;
+	min-width: 32px;
+	padding: 0;
+	text-align: center;
+}
+.tbl-sticky-pin {
+	position: sticky;
+	left: 0;
+	background: var(--surface);
+	z-index: 2;
+}
+.tbl thead th.tbl-sticky-pin {
+	background: var(--surface-muted);
+	z-index: 3;
+}
+.tbl tbody tr:nth-child(even) td.tbl-sticky-pin {
+	background: var(--row-alt);
+}
+.tbl tbody tr:hover td.tbl-sticky-pin {
+	background: var(--row-hover);
+}
+.tbl tbody tr.pinned td.tbl-sticky-pin {
+	background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
+}
+
+.tbl-pin-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	background: none;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	color: var(--border-strong);
+	cursor: pointer;
+	padding: 0;
+	transition:
+		color 0.12s,
+		background 0.12s,
+		transform 0.06s;
+}
+.tbl-pin-btn:hover {
+	color: var(--text-muted);
+	background: var(--surface-muted);
+}
+.tbl-pin-btn.on {
+	color: var(--primary);
+	background: var(--primary-soft);
+	border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+	transform: rotate(35deg);
+}
+.tbl-pin-btn:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 1px;
+}
+
+/* Left-sticky Model column (PerTaskTab + PerLanguageTab use this directly;
+   SummaryTable overrides per-model-type tints in its own <style>). */
+.tbl-sticky-col {
+	position: sticky;
+	left: 32px;
+	background: var(--surface);
+	z-index: 2;
+	min-width: 220px;
+	max-width: 280px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tbl thead th.tbl-sticky-col {
+	background: var(--surface-muted);
+	z-index: 3;
+}
+.tbl tbody tr:nth-child(even) td.tbl-sticky-col {
+	background: var(--row-alt);
+}
+.tbl tbody tr:hover td.tbl-sticky-col {
+	background: var(--row-hover);
+}
+.tbl tbody tr.pinned td.tbl-sticky-col {
+	background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
+}
+
+/* Model identity rendered as org/name (HF-style). Org and slash are muted so
+   the model name reads clearly without losing the organization. */
+.tbl-model-link {
+	display: inline;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+}
+.tbl-model-org {
+	color: var(--text-subtle);
+	font-weight: 400;
+}
+.tbl-model-sep {
+	color: var(--border-strong);
+	margin: 0 1px;
+}
+.tbl-model-name {
+	font-weight: 600;
+}

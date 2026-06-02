@@ -86,6 +86,7 @@ function makeBenchmark(partial: Partial<Benchmark> & { name: string }): Benchmar
 		tasks: partial.tasks ?? [],
 		domains: partial.domains ?? ['Web', 'News', 'Academic'],
 		modalities: partial.modalities ?? ['text'],
+		aggregations: partial.aggregations ?? ['mean_task', 'mean_task_type', 'task_types'],
 		...partial
 	};
 }

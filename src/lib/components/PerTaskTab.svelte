@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import { stickyHead } from '$lib/actions/sticky-head';
+	import { getParam, updateUrl } from '$lib/url-state';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 
 	type Tip = {
@@ -22,8 +24,16 @@
 	let { summary }: Props = $props();
 
 	type SortKey = 'model' | `task:${string}`;
-	let sortKey = $state<SortKey | null>(null);
-	let sortDir = $state<'asc' | 'desc'>('desc');
+	const initialKey = getParam('s.task');
+	const initialDir = getParam('d.task');
+	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
+	let sortDir = $state<'asc' | 'desc'>(initialDir === 'asc' ? 'asc' : 'desc');
+	$effect(() => {
+		updateUrl({
+			's.task': sortKey,
+			'd.task': sortKey ? sortDir : null
+		});
+	});
 
 	function defaultDir(k: SortKey): 'asc' | 'desc' {
 		return k === 'model' ? 'asc' : 'desc';
@@ -106,23 +116,23 @@
 			Per-task scores for each visible model. {summary.tasks.length} tasks; scroll horizontally to
 			see them all. Click any column header to sort.
 		</p>
-		<div class="scroll">
-			<table>
+		<div class="tbl-scroll">
+			<table class="tbl" use:stickyHead>
 				<thead>
 					<tr>
-						<th class="pin-col sticky-pin" aria-label="Pinned"></th>
-						<th class="sticky" aria-sort={ariaSort('model')}>
-							<button class="sort left" onclick={() => clickSort('model')}>
+						<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
+						<th class="tbl-sticky-col" aria-sort={ariaSort('model')}>
+							<button class="tbl-sort tbl-sort-left" onclick={() => clickSort('model')}>
 								<span>Model</span>
-								<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model')}</span>
+								<span class="tbl-sort-ind" class:on={sortKey === 'model'}>{sortIcon('model')}</span>
 							</button>
 						</th>
 						{#each summary.tasks as task (task)}
 							{@const k = `task:${task}` as SortKey}
-							<th class="num" aria-sort={ariaSort(k)}>
-								<button class="sort" onclick={() => clickSort(k)} title={task}>
+							<th class="tbl-num" aria-sort={ariaSort(k)}>
+								<button class="tbl-sort" onclick={() => clickSort(k)} title={task}>
 									<span class="lbl">{task}</span>
-									<span class="ind" class:on={sortKey === k}>{sortIcon(k)}</span>
+									<span class="tbl-sort-ind" class:on={sortKey === k}>{sortIcon(k)}</span>
 								</button>
 							</th>
 						{/each}
@@ -131,10 +141,10 @@
 				<tbody>
 					{#each sortedRows as row (row.model.name)}
 						<tr class:pinned={pinnedModels.has(row.model.name)}>
-							<td class="pin-col sticky-pin">
+							<td class="tbl-pin-col tbl-sticky-pin">
 								<button
 									type="button"
-									class="pin-btn"
+									class="tbl-pin-btn"
 									class:on={pinnedModels.has(row.model.name)}
 									onclick={() => pinnedModels.toggle(row.model.name)}
 									aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
@@ -157,24 +167,30 @@
 								</button>
 							</td>
 							<td
-								class="sticky"
+								class="tbl-sticky-col"
 								onpointerenter={(e) => onCellEnter(e, row)}
 								onpointerleave={onCellLeave}
 								onfocusin={(e) => onCellEnter(e, row)}
 								onfocusout={onCellLeave}
 							>
 								{#if row.model.url}
-									<a href={row.model.url} target="_blank" rel="noreferrer">
-										{row.model.displayName}
+									<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
+										<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
+											class="tbl-model-name">{row.model.displayName}</span
+										>
 									</a>
 								{:else}
-									{row.model.displayName}
+									<span class="tbl-model-link">
+										<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
+											class="tbl-model-name">{row.model.displayName}</span
+										>
+									</span>
 								{/if}
 							</td>
 							{#each summary.tasks as task (task)}
 								<td
-									class="num"
-									class:best={row.scoresByTask[task] === best[task]}
+									class="tbl-num"
+									class:tbl-best={row.scoresByTask[task] === best[task]}
 									style={heat(row.scoresByTask[task])}
 								>
 									{fmt(row.scoresByTask[task])}
@@ -198,173 +214,11 @@
 		color: var(--text-muted);
 		margin: 0 0 12px;
 	}
-	.scroll {
-		overflow-x: auto;
-		max-height: 700px;
-		overflow-y: auto;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface);
-		box-shadow: var(--shadow-sm);
-	}
-	table {
-		border-collapse: separate;
-		border-spacing: 0;
-		font-size: 13px;
-	}
-	th,
-	td {
-		border-bottom: 1px solid var(--border);
-		white-space: nowrap;
-		text-align: left;
-	}
-	td {
-		padding: 8px 12px;
-	}
-	thead th {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		font-weight: 600;
-		position: sticky;
-		top: 0;
-		z-index: 1;
-		padding: 0;
-	}
-	.sort {
-		all: unset;
-		display: inline-flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 6px;
-		width: 100%;
-		padding: 8px 12px;
-		cursor: pointer;
-		color: var(--text-muted);
-		font-weight: 600;
-		transition:
-			color 0.12s,
-			background 0.12s;
-		box-sizing: border-box;
-	}
-	.sort.left {
-		justify-content: flex-start;
-	}
-	.sort:hover {
-		color: var(--text);
-		background: color-mix(in srgb, var(--primary-soft) 60%, transparent);
-	}
-	.sort:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: -2px;
-		border-radius: 4px;
-	}
+	/* Task column headers can be long ("AmazonReviewsClassification…") — clip
+	   them so they don't push the column impossibly wide. */
 	.lbl {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 160px;
-	}
-	.ind {
-		font-size: 11px;
-		font-weight: 700;
-		color: var(--text-subtle);
-		opacity: 0.4;
-		transition:
-			opacity 0.12s,
-			color 0.12s;
-	}
-	.sort:hover .ind {
-		opacity: 1;
-	}
-	.ind.on {
-		color: var(--primary-strong);
-		opacity: 1;
-	}
-	.num {
-		text-align: right;
-		font-variant-numeric: tabular-nums;
-	}
-	.sticky {
-		position: sticky;
-		left: 32px;
-		background: var(--surface);
-		z-index: 2;
-		min-width: 220px;
-		max-width: 280px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	thead th.sticky {
-		background: var(--surface-muted);
-		z-index: 3;
-	}
-	.pin-col {
-		width: 32px;
-		min-width: 32px;
-		padding: 0;
-		text-align: center;
-	}
-	.sticky-pin {
-		position: sticky;
-		left: 0;
-		background: var(--surface);
-		z-index: 2;
-	}
-	thead th.sticky-pin {
-		background: var(--surface-muted);
-		z-index: 3;
-	}
-	tbody tr:nth-child(even) td.sticky-pin {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td.sticky-pin {
-		background: var(--row-hover);
-	}
-	.pin-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		background: none;
-		border: 1px solid transparent;
-		border-radius: 6px;
-		color: var(--border-strong);
-		cursor: pointer;
-		padding: 0;
-		transition:
-			color 0.12s,
-			background 0.12s,
-			transform 0.06s;
-	}
-	.pin-btn:hover {
-		color: var(--text-muted);
-		background: var(--surface-muted);
-	}
-	.pin-btn.on {
-		color: var(--primary);
-		background: var(--primary-soft);
-		border-color: color-mix(in srgb, var(--primary) 35%, transparent);
-		transform: rotate(35deg);
-	}
-	tbody tr.pinned td {
-		background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
-	}
-	tbody tr.pinned + tr:not(.pinned) td {
-		border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
-	}
-	tbody tr:nth-child(even) td {
-		background: var(--row-alt);
-	}
-	tbody tr:nth-child(even) td.sticky {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td {
-		background: var(--row-hover);
-	}
-	tbody tr:hover td.sticky {
-		background: var(--row-hover);
-	}
-	.best {
-		font-weight: 700;
 	}
 </style>

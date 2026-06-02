@@ -3,8 +3,9 @@
 
 	interface Props {
 		hideScope?: boolean;
+		flatModel?: boolean;
 	}
-	let { hideScope = false }: Props = $props();
+	let { hideScope = false, flatModel = false }: Props = $props();
 
 	let collapsed = $state(false);
 </script>
@@ -24,7 +25,7 @@
 	</button>
 
 	{#if !collapsed}
-		<FilterContent {hideScope} />
+		<FilterContent {hideScope} {flatModel} />
 	{/if}
 </aside>
 

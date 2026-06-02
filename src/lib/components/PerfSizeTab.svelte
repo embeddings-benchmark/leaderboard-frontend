@@ -14,7 +14,7 @@
 <div class="wrap">
 	<p class="muted">
 		Mean(Task) score vs. number of active parameters (log scale). Bubble size scales with embedding
-		dimension; color shows max-token length.
+		dimension; color shows max-token length. Hover a point for the model name.
 	</p>
 	<PlotlyChart data={spec.data} layout={spec.layout} height={520} />
 </div>

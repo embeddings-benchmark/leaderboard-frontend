@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { DEFAULT_BENCHMARK_NAME, loadSummary } from '$lib/data/service';
-	import { filters } from '$lib/stores/filters.svelte';
+	import { loadModels } from '$lib/data/service';
+	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import type { ModelMeta } from '$lib/types';
@@ -15,9 +15,16 @@
 	let loadError = $state<string | null>(null);
 
 	$effect(() => {
-		loadSummary(DEFAULT_BENCHMARK_NAME)
-			.then((s) => {
-				ALL_MODELS = s.rows.map((r) => r.model);
+		// Re-fetch whenever the modality picker (now in the FilterSidebar)
+		// changes. When all modalities are selected we omit the param so the
+		// server returns the full registry from its hot cache slot.
+		const all = filters.modelModalities.size === MODEL_MODALITIES.length;
+		const mods = all ? undefined : [...filters.modelModalities];
+		loadingData = true;
+		loadError = null;
+		loadModels(mods ? { modalities: mods } : {})
+			.then((m) => {
+				ALL_MODELS = m;
 				loadingData = false;
 			})
 			.catch((e) => {
@@ -32,7 +39,25 @@
 		{ id: 'released', label: 'Release date' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];
+	type SortDir = 'asc' | 'desc';
+	// Each sort key has a "natural" direction (alphabetical → asc, numeric and
+	// dates → desc/newest-first). When the user picks a new key we snap to
+	// that default; the explicit toggle below lets them override.
+	const NATURAL_DIR: Record<SortId, SortDir> = {
+		name: 'asc',
+		params: 'desc',
+		released: 'desc'
+	};
 	let sort = $state<SortId>('params');
+	let sortDir = $state<SortDir>(NATURAL_DIR.params);
+
+	function onSortKeyChange(next: SortId) {
+		sort = next;
+		sortDir = NATURAL_DIR[next];
+	}
+	function toggleSortDir() {
+		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+	}
 
 	// Apply the shared leaderboard filter store's predicates to a flat model
 	// list. Same logic as applyFilters() in filters.svelte.ts, just minus the
@@ -63,17 +88,22 @@
 
 	let filtered = $derived.by(() => {
 		const list = ALL_MODELS.filter(passes);
+		// Comparator always computes "ascending" raw cmp; sortDir flips at the
+		// end so the direction toggle is a single point of control.
 		list.sort((a, b) => {
-			if (sort === 'name') return a.name.localeCompare(b.name);
-			if (sort === 'params') {
+			let cmp: number;
+			if (sort === 'name') {
+				cmp = a.name.localeCompare(b.name);
+			} else if (sort === 'params') {
 				const aP = a.totalParamsB || -1;
 				const bP = b.totalParamsB || -1;
-				return bP - aP;
+				cmp = aP - bP;
+			} else if (sort === 'released') {
+				cmp = (a.releaseDate ?? '').localeCompare(b.releaseDate ?? '');
+			} else {
+				cmp = 0;
 			}
-			if (sort === 'released') {
-				return (b.releaseDate ?? '').localeCompare(a.releaseDate ?? '');
-			}
-			return 0;
+			return sortDir === 'asc' ? cmp : -cmp;
 		});
 		return list;
 	});
@@ -102,11 +132,24 @@
 			<ModelSearchBar matchCount={filtered.length} totalCount={ALL_MODELS.length} />
 			<div class="sort">
 				<label for="sort-select">Sort by</label>
-				<select id="sort-select" bind:value={sort}>
+				<select
+					id="sort-select"
+					value={sort}
+					onchange={(e) => onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
+				>
 					{#each SORTS as s (s.id)}
 						<option value={s.id}>{s.label}</option>
 					{/each}
 				</select>
+				<button
+					type="button"
+					class="dir-btn"
+					onclick={toggleSortDir}
+					aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+					title={sortDir === 'asc' ? 'Ascending (click for descending)' : 'Descending (click for ascending)'}
+				>
+					{sortDir === 'asc' ? '↑' : '↓'}
+				</button>
 			</div>
 		</div>
 
@@ -121,7 +164,7 @@
 				{#each filtered as m (m.name)}
 					<a
 						class="card"
-						href="{base}/explorer/models/{slug(m.name)}"
+						href="{base}/models/{slug(m.name)}"
 						data-type={m.modelType}
 						title={m.modelType}
 					>
@@ -168,7 +211,7 @@
 		{/if}
 	</main>
 
-	<FilterSidebar hideScope />
+	<FilterSidebar hideScope flatModel />
 </div>
 
 <style>
@@ -221,6 +264,22 @@
 		font-family: inherit;
 		color: var(--text);
 	}
+	.dir-btn {
+		padding: 6px 10px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		font-size: 13px;
+		font-weight: 700;
+		line-height: 1;
+		background: var(--surface);
+		color: var(--text-muted);
+		cursor: pointer;
+		font-variant-numeric: tabular-nums;
+	}
+	.dir-btn:hover {
+		color: var(--text);
+		border-color: var(--border-strong);
+	}
 
 	/* Cards ---------------------------------------------------------------- */
 	.grid {
@@ -262,25 +321,33 @@
 		height: 3px;
 		background: var(--card-accent, var(--border));
 	}
+	/* Per-type cards: a flat surface so dark mode reads cleanly, plus the
+	   accent bar (.card::before) and a soft 40% tint at the very top via
+	   the theme-aware --tint-* tokens. */
 	.card[data-type='dense'] {
-		--card-accent: #2740b8;
-		background: linear-gradient(180deg, color-mix(in srgb, #e8edff 40%, white) 0%, var(--surface) 80px);
+		--card-accent: var(--tint-blue-fg);
+		--card-tint: var(--tint-blue);
+		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%, var(--surface) 64px);
 	}
 	.card[data-type='cross-encoder'] {
-		--card-accent: #c0432e;
-		background: linear-gradient(180deg, color-mix(in srgb, #ffe6dc 40%, white) 0%, var(--surface) 80px);
+		--card-accent: var(--tint-orange-fg);
+		--card-tint: var(--tint-orange);
+		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%, var(--surface) 64px);
 	}
 	.card[data-type='late-interaction'] {
-		--card-accent: #1c7a4c;
-		background: linear-gradient(180deg, color-mix(in srgb, #def7e9 40%, white) 0%, var(--surface) 80px);
+		--card-accent: var(--tint-green-fg);
+		--card-tint: var(--tint-green);
+		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%, var(--surface) 64px);
 	}
 	.card[data-type='sparse'] {
-		--card-accent: #a36100;
-		background: linear-gradient(180deg, color-mix(in srgb, #fff1d4 40%, white) 0%, var(--surface) 80px);
+		--card-accent: var(--tint-amber-fg);
+		--card-tint: var(--tint-amber);
+		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%, var(--surface) 64px);
 	}
 	.card[data-type='router'] {
-		--card-accent: #6a32b1;
-		background: linear-gradient(180deg, color-mix(in srgb, #f2e7ff 40%, white) 0%, var(--surface) 80px);
+		--card-accent: var(--tint-purple-fg);
+		--card-tint: var(--tint-purple);
+		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%, var(--surface) 64px);
 	}
 	.card:hover {
 		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
@@ -349,7 +416,7 @@
 		border-radius: 999px;
 		white-space: nowrap;
 		text-transform: lowercase;
-		background: color-mix(in srgb, var(--card-accent, var(--border)) 14%, white);
+		background: var(--card-tint, var(--surface-muted));
 		color: var(--card-accent, var(--text-muted));
 		border: 1px solid color-mix(in srgb, var(--card-accent, var(--border)) 35%, transparent);
 	}

@@ -2,19 +2,29 @@
 	import { untrack } from 'svelte';
 	import {
 		filters,
+		MODEL_MODALITIES,
 		MODEL_TYPES,
 		SIZE_LOG_MIN,
 		SIZE_LOG_MAX,
-		SIZE_MIN_M,
-		SIZE_MAX_M,
 		type ZeroShotMode,
 		type Availability,
 		type InstructionMode
 	} from '$lib/stores/filters.svelte';
 	import RangeSlider from './RangeSlider.svelte';
+	import { humanizeType } from '$lib/format';
 
+	// Size slider works in log10(M-of-params). Bounds are derived per benchmark
+	// from filters.availableMin/MaxModelSizeM and clamp into the global
+	// [SIZE_LOG_MIN, SIZE_LOG_MAX] window so the math stays well-defined when
+	// no benchmark is loaded yet.
+	let sizeLogMin = $derived(
+		Math.max(SIZE_LOG_MIN, Math.log10(Math.max(filters.availableMinModelSizeM, 1)))
+	);
+	let sizeLogMax = $derived(
+		Math.min(SIZE_LOG_MAX, Math.log10(Math.max(filters.availableMaxModelSizeM, 1)))
+	);
 	function paramsToLog(m: number): number {
-		return Math.max(SIZE_LOG_MIN, Math.min(SIZE_LOG_MAX, Math.log10(Math.max(m, 1))));
+		return Math.max(sizeLogMin, Math.min(sizeLogMax, Math.log10(Math.max(m, 1))));
 	}
 	function logToParams(v: number): number {
 		return Math.pow(10, v);
@@ -33,10 +43,33 @@
 		}
 		return `${(mm * 1000).toFixed(0)}K`;
 	}
-	const SIZE_TICKS = [0, 2, 4, 6];
 	function formatLog(v: number): string {
 		return formatParams(logToParams(v));
 	}
+
+	// Distribute ~4 tick marks across the benchmark's log-size window. Both
+	// endpoints are pinned so the rightmost tick aligns with the slider's
+	// edge — otherwise spans that don't divide evenly into ``stepDecades``
+	// leave a visible gap (e.g. 2.3 → 3.8 with step 0.5 stops at 6.3B even
+	// though the slider's right edge is 10B).
+	let sizeTicks = $derived.by(() => {
+		const lo = sizeLogMin;
+		const hi = sizeLogMax;
+		if (hi <= lo) return [lo];
+		const span = hi - lo;
+		const stepDecades = span >= 3 ? 1 : span >= 1.5 ? 0.5 : span / 3;
+		const ticks: number[] = [lo];
+		// Half of a step is the threshold below which a tick visually collides
+		// with the endpoint — skip intermediates that come too close to lo/hi.
+		const minGap = stepDecades * 0.5;
+		let v = Math.ceil((lo + 1e-6) / stepDecades) * stepDecades;
+		while (v < hi - 1e-3) {
+			if (v - lo >= minGap && hi - v >= minGap) ticks.push(v);
+			v += stepDecades;
+		}
+		ticks.push(hi);
+		return ticks.map((t) => Math.round(t * 100) / 100);
+	});
 
 	interface Props {
 		defaultModelOpen?: boolean;
@@ -44,11 +77,16 @@
 		// On pages without a benchmark context (e.g. the Models directory) the
 		// Customize / Benchmark scope section is irrelevant — hide it entirely.
 		hideScope?: boolean;
+		// On pages where the sidebar only ever shows model filters (Models
+		// directory), drop the collapsible "Model filters" card chrome so the
+		// controls read as the section itself instead of a card-in-a-sidebar.
+		flatModel?: boolean;
 	}
 	let {
 		defaultModelOpen = true,
 		defaultScopeOpen = false,
-		hideScope = false
+		hideScope = false,
+		flatModel = false
 	}: Props = $props();
 
 	let modelOpen = $state(untrack(() => defaultModelOpen));
@@ -121,13 +159,16 @@
 				clear: () => (filters.sentenceTransformersOnly = false)
 			});
 		}
-		if (filters.minModelSizeM > SIZE_MIN_M || filters.maxModelSizeM < SIZE_MAX_M) {
+		if (
+			filters.minModelSizeM > filters.availableMinModelSizeM ||
+			filters.maxModelSizeM < filters.availableMaxModelSizeM
+		) {
 			list.push({
 				key: 'size',
 				label: `Size ${formatParams(filters.minModelSizeM)}–${formatParams(filters.maxModelSizeM)}`,
 				clear: () => {
-					filters.minModelSizeM = SIZE_MIN_M;
-					filters.maxModelSizeM = SIZE_MAX_M;
+					filters.minModelSizeM = filters.availableMinModelSizeM;
+					filters.maxModelSizeM = filters.availableMaxModelSizeM;
 				}
 			});
 		}
@@ -136,6 +177,13 @@
 				key: 'mtype',
 				label: `Type · ${filters.modelTypes.size}/${MODEL_TYPES.length}`,
 				clear: () => filters.setAll('modelTypes', MODEL_TYPES, true)
+			});
+		}
+		if (filters.modelModalities.size !== MODEL_MODALITIES.length) {
+			list.push({
+				key: 'mmod',
+				label: `Modality · ${filters.modelModalities.size}/${MODEL_MODALITIES.length}`,
+				clear: () => filters.setAll('modelModalities', MODEL_MODALITIES, true)
 			});
 		}
 		const hasTT = filters.availableTaskTypes.length > 0;
@@ -192,8 +240,13 @@
 		if (filters.zeroShot !== 'allow_all') n++;
 		if (filters.instructions !== 'both') n++;
 		if (filters.sentenceTransformersOnly) n++;
-		if (filters.minModelSizeM > SIZE_MIN_M || filters.maxModelSizeM < SIZE_MAX_M) n++;
+		if (
+			filters.minModelSizeM > filters.availableMinModelSizeM ||
+			filters.maxModelSizeM < filters.availableMaxModelSizeM
+		)
+			n++;
 		if (filters.modelTypes.size !== MODEL_TYPES.length) n++;
+		if (filters.modelModalities.size !== MODEL_MODALITIES.length) n++;
 		return n;
 	});
 	let activeScopeCount = $derived.by(() => {
@@ -263,24 +316,9 @@
 		</div>
 	{/if}
 
-	<section class="block">
-		<button
-			type="button"
-			class="block-head"
-			onclick={() => (modelOpen = !modelOpen)}
-			aria-expanded={modelOpen}
-		>
-			<span class="block-title">Model filters</span>
-			{#if activeModelCount > 0}
-				<span class="count-pill">{activeModelCount}</span>
-			{/if}
-			<span class="chev" class:open={modelOpen}>›</span>
-		</button>
-
-		{#if modelOpen}
-			<div class="block-body">
-				<div class="group">
-					<div class="group-label">Availability</div>
+	{#snippet modelGroups()}
+		<div class="group">
+			<div class="group-label">Availability</div>
 					<div class="segmented" role="radiogroup" aria-label="Availability">
 						{#each AVAILABILITY_OPTS as opt (opt.value)}
 							<button
@@ -323,15 +361,15 @@
 						</span>
 					</div>
 					<RangeSlider
-						min={SIZE_LOG_MIN}
-						max={SIZE_LOG_MAX}
+						min={sizeLogMin}
+						max={sizeLogMax}
 						step={0.05}
 						valueMin={paramsToLog(filters.minModelSizeM)}
 						valueMax={paramsToLog(filters.maxModelSizeM)}
 						onMinChange={(v) => (filters.minModelSizeM = logToParams(v))}
 						onMaxChange={(v) => (filters.maxModelSizeM = logToParams(v))}
 						format={formatLog}
-						ticks={SIZE_TICKS}
+						ticks={sizeTicks}
 					/>
 				</div>
 
@@ -397,9 +435,67 @@
 						{/each}
 					</div>
 				</div>
-			</div>
-		{/if}
-	</section>
+
+				<div class="group">
+					<div class="group-header">
+						<span class="group-label">Modality</span>
+						<button
+							type="button"
+							class="link-btn"
+							onclick={() =>
+								filters.setAll(
+									'modelModalities',
+									MODEL_MODALITIES,
+									filters.modelModalities.size !== MODEL_MODALITIES.length
+								)}
+						>
+							{filters.modelModalities.size === MODEL_MODALITIES.length ? 'Clear' : 'All'}
+						</button>
+					</div>
+					<div class="pills">
+						{#each MODEL_MODALITIES as m (m)}
+							<button
+								type="button"
+								class="pill"
+								class:on={filters.modelModalities.has(m)}
+								onclick={() => filters.toggleInSet('modelModalities', m)}
+								aria-pressed={filters.modelModalities.has(m)}
+							>
+								{m}
+							</button>
+						{/each}
+					</div>
+				</div>
+	{/snippet}
+
+	{#if flatModel}
+		<!-- Flat layout: model filters render inline. Used on /models
+		     where the sidebar only ever shows these controls — no need to nest
+		     them in a collapsible "Model filters" card-in-a-sidebar. -->
+		<div class="flat-groups">
+			{@render modelGroups()}
+		</div>
+	{:else}
+		<section class="block">
+			<button
+				type="button"
+				class="block-head"
+				onclick={() => (modelOpen = !modelOpen)}
+				aria-expanded={modelOpen}
+			>
+				<span class="block-title">Model filters</span>
+				{#if activeModelCount > 0}
+					<span class="count-pill">{activeModelCount}</span>
+				{/if}
+				<span class="chev" class:open={modelOpen}>›</span>
+			</button>
+			{#if modelOpen}
+				<div class="block-body">
+					{@render modelGroups()}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	{#if !hideScope}
 	<section class="block">
@@ -448,7 +544,7 @@
 								onclick={() => filters.toggleInSet('taskTypes', tt)}
 								aria-pressed={filters.taskTypes.has(tt)}
 							>
-								{tt}
+								{humanizeType(tt)}
 							</button>
 						{/each}
 					</div>
@@ -749,6 +845,13 @@
 		gap: 16px;
 		border-top: 1px solid var(--border);
 	}
+	/* Sibling of `.block` used in flat mode — no card chrome, just the groups. */
+	.flat-groups {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 0 2px;
+	}
 
 	/* Groups ------------------------------------------------------------------ */
 	.group {
@@ -872,31 +975,33 @@
 	.pill.on:hover {
 		background: color-mix(in srgb, var(--primary) 18%, white);
 	}
-	/* Model-type pills carry the type's signature color when active. */
+	/* Model-type pills carry the type's signature color when active. Pulled
+	   from the shared --tint-* palette so they match SummaryTable's column
+	   tints exactly in both themes. */
 	.model-type-pill.on[data-type='dense'] {
-		background: #e8edff;
-		border-color: #c4cef9;
-		color: #2740b8;
+		background: var(--tint-blue);
+		border-color: color-mix(in srgb, var(--tint-blue-fg) 35%, transparent);
+		color: var(--tint-blue-fg);
 	}
 	.model-type-pill.on[data-type='cross-encoder'] {
-		background: #ffe6dc;
-		border-color: #f7c4b2;
-		color: #c0432e;
+		background: var(--tint-orange);
+		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
+		color: var(--tint-orange-fg);
 	}
 	.model-type-pill.on[data-type='late-interaction'] {
-		background: #def7e9;
-		border-color: #aedeb9;
-		color: #1c7a4c;
+		background: var(--tint-green);
+		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, transparent);
+		color: var(--tint-green-fg);
 	}
 	.model-type-pill.on[data-type='sparse'] {
-		background: #fff1d4;
-		border-color: #f4d595;
-		color: #a36100;
+		background: var(--tint-amber);
+		border-color: color-mix(in srgb, var(--tint-amber-fg) 35%, transparent);
+		color: var(--tint-amber-fg);
 	}
 	.model-type-pill.on[data-type='router'] {
-		background: #f2e7ff;
-		border-color: #d5bff0;
-		color: #6a32b1;
+		background: var(--tint-purple);
+		border-color: color-mix(in srgb, var(--tint-purple-fg) 35%, transparent);
+		color: var(--tint-purple-fg);
 	}
 	.model-type-pill.on:hover {
 		filter: brightness(0.97);

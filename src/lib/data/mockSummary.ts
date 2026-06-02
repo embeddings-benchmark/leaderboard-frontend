@@ -466,9 +466,12 @@ function buildTasksMeta(
 		return {
 			name,
 			type,
+			// API supplies simplifiedType; the mock fallback just echoes the
+			// raw type lowercased so callers never see undefined.
+			simplifiedType: type.toLowerCase(),
 			languages: uniqueLangs,
 			domains: [domain],
-			modality,
+			modalities: [modality],
 			description: taskDescription(name, type, domain, modality, uniqueLangs)
 		};
 	});
@@ -486,7 +489,7 @@ export function buildMockSummary(benchmarkName: string): BenchmarkSummary {
 	const tasksMeta = buildTasksMeta(tasks, taskTypes, languages, domains, modalities);
 
 	const rows = MOCK_MODELS.map((m, i) => buildRow(m, taskTypes, tasks, seed, i));
-	rows.sort((a, b) => b.meanTask - a.meanTask);
+	rows.sort((a, b) => (b.meanTask ?? -Infinity) - (a.meanTask ?? -Infinity));
 	rows.forEach((r, i) => (r.rank = i + 1));
 
 	return {
@@ -494,6 +497,7 @@ export function buildMockSummary(benchmarkName: string): BenchmarkSummary {
 		taskTypes,
 		tasks,
 		tasksMeta,
-		rows
+		rows,
+		aggregations: ['mean_task', 'mean_task_type', 'task_types']
 	};
 }

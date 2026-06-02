@@ -1,10 +1,15 @@
 <script lang="ts">
-	import type { Benchmark } from '$lib/types';
+	import { base } from '$app/paths';
+	import type { Benchmark, TaskMeta } from '$lib/types';
 
 	interface Props {
 		benchmark: Benchmark;
+		// Real per-task metadata (TaskMeta[]) from the loaded summary. When
+		// absent (cold visit, summary still loading) we fall back to rendering
+		// just the task name from `benchmark.tasks`.
+		tasksMeta?: TaskMeta[];
 	}
-	let { benchmark }: Props = $props();
+	let { benchmark, tasksMeta = [] }: Props = $props();
 
 	let query = $state('');
 
@@ -13,38 +18,36 @@
 		type: string;
 		languages: string;
 		domains: string;
-		modality: string;
-		isPublic: string;
+		modalities: string;
 	}
 
-	function makeRows(): TaskRow[] {
-		const types = benchmark.taskTypes;
-		const domains = benchmark.domains;
-		const langs = benchmark.languages.slice(0, 3).join(', ');
-		const modalities = ['text', 'image', 'audio'];
-		return benchmark.tasks.map((name, i) => ({
-			name,
-			type: types[i % types.length] ?? '',
-			languages: langs || '—',
-			domains: domains.length ? domains[i % domains.length] : '—',
-			modality: modalities[i % modalities.length],
-			isPublic: i % 5 === 0 ? 'No' : 'Yes'
-		}));
-	}
+	let rows = $derived.by<TaskRow[]>(() => {
+		const byName = new Map(tasksMeta.map((t) => [t.name, t]));
+		return benchmark.tasks.map((name) => {
+			const meta = byName.get(name);
+			return {
+				name,
+				type: meta?.type ?? '—',
+				languages: meta?.languages.length ? meta.languages.join(', ') : '—',
+				domains: meta?.domains.length ? meta.domains.join(', ') : '—',
+				modalities: meta?.modalities.length ? meta.modalities.join(', ') : '—'
+			};
+		});
+	});
 
-	let rows = $derived(makeRows());
 	let filtered = $derived(
 		query.trim()
 			? rows.filter((r) => r.name.toLowerCase().includes(query.toLowerCase().trim()))
 			: rows
 	);
+
+	function slug(name: string): string {
+		return encodeURIComponent(name);
+	}
 </script>
 
 <div class="wrap">
-	<p class="muted">
-		{benchmark.tasks.length} tasks in this benchmark. The metadata shown here is mock — the real
-		values will come from the backend once it's wired up.
-	</p>
+	<p class="muted">{benchmark.tasks.length} tasks in this benchmark.</p>
 	<div class="filter">
 		<input type="search" placeholder="Filter tasks…" bind:value={query} />
 		<span class="count">{filtered.length} / {rows.length}</span>
@@ -55,21 +58,21 @@
 				<tr>
 					<th>Task Name</th>
 					<th>Task Type</th>
-					<th>Languages</th>
-					<th>Domains</th>
-					<th>Modality</th>
-					<th>Public</th>
+					<th class="wrap-col">Languages</th>
+					<th class="wrap-col">Domains</th>
+					<th>Modalities</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each filtered as row (row.name)}
 					<tr>
-						<td>{row.name}</td>
+						<td>
+							<a class="task-link" href="{base}/tasks/{slug(row.name)}">{row.name}</a>
+						</td>
 						<td>{row.type}</td>
-						<td>{row.languages}</td>
-						<td>{row.domains}</td>
-						<td>{row.modality}</td>
-						<td>{row.isPublic}</td>
+						<td class="wrap-col" title={row.languages}>{row.languages}</td>
+						<td class="wrap-col" title={row.domains}>{row.domains}</td>
+						<td>{row.modalities}</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -129,6 +132,16 @@
 		border-bottom: 1px solid var(--border);
 		text-align: left;
 		white-space: nowrap;
+		vertical-align: top;
+	}
+	/* Languages + Domains can carry hundreds of entries on multilingual tasks
+	   (MMTEB, MIEB(Multilingual), ...). Cap the column and let the cell wrap
+	   so the row grows vertically instead of the table going horizontal. */
+	.wrap-col {
+		max-width: 320px;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		line-height: 1.4;
 	}
 	thead th {
 		background: var(--surface-muted);
@@ -143,5 +156,15 @@
 	}
 	tbody tr:hover td {
 		background: var(--row-hover);
+	}
+	.task-link {
+		color: var(--text);
+		font-weight: 600;
+		text-decoration: underline dotted color-mix(in srgb, var(--link) 45%, transparent);
+		text-underline-offset: 3px;
+	}
+	.task-link:hover {
+		color: var(--link);
+		text-decoration-color: var(--link);
 	}
 </style>

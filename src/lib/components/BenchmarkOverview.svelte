@@ -53,14 +53,15 @@
 			.filter((k) => buckets.has(k))
 			.map((k) => {
 				const grp = buckets.get(k)!;
-				const top = grp.reduce((a, b) => (a.meanTask >= b.meanTask ? a : b));
+				const top = grp.reduce((a, b) => ((a.meanTask ?? -Infinity) >= (b.meanTask ?? -Infinity) ? a : b));
 				return { label: k, top, count: grp.length };
 			});
 	});
 
 	let timeSpec = $derived(performanceOverTimePlot(summary));
 
-	function fmtPct(v: number): string {
+	function fmtPct(v: number | null | undefined): string {
+		if (v == null) return '—';
 		return (v * 100).toFixed(2);
 	}
 </script>
@@ -242,19 +243,19 @@
 		border-radius: 4px;
 	}
 	.type-row[data-model-type='dense'] {
-		--c: #2740b8;
+		--c: var(--tint-blue-fg);
 	}
 	.type-row[data-model-type='cross-encoder'] {
-		--c: #c0432e;
+		--c: var(--tint-orange-fg);
 	}
 	.type-row[data-model-type='late-interaction'] {
-		--c: #1c7a4c;
+		--c: var(--tint-green-fg);
 	}
 	.type-row[data-model-type='sparse'] {
-		--c: #a36100;
+		--c: var(--tint-amber-fg);
 	}
 	.type-row[data-model-type='router'] {
-		--c: #6a32b1;
+		--c: var(--tint-purple-fg);
 	}
 	.type-name {
 		font-size: 10px;

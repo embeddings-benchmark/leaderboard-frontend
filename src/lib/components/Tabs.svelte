@@ -27,27 +27,63 @@
 <style>
 	.tabs {
 		display: flex;
-		gap: 0;
+		flex-wrap: wrap;
+		gap: 4px;
 		border-bottom: 1px solid var(--border);
-		overflow-x: auto;
+		padding-top: 2px;
 	}
 	.tab {
-		padding: 10px 16px;
+		position: relative;
+		padding: 10px 16px 12px;
 		background: none;
 		border: none;
-		border-bottom: 2px solid transparent;
 		cursor: pointer;
-		font-size: 13px;
+		font-family: var(--font-sans);
+		font-size: 11px;
 		font-weight: 500;
-		color: var(--text-muted);
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
 		white-space: nowrap;
-		transition: color 0.12s, border-color 0.12s;
+		transition: color 0.16s ease;
+	}
+	/* Resting underline accent — sits flush against the hairline, scales on
+	   active. Subtler than a 2px border because it has rounded ends and a
+	   soft secondary glow. */
+	.tab::after {
+		content: '';
+		position: absolute;
+		left: 12px;
+		right: 12px;
+		bottom: -1px;
+		height: 3px;
+		background: var(--primary);
+		border-radius: 2px 2px 0 0;
+		transform: scaleY(0.001) translateY(2px);
+		transform-origin: bottom center;
+		transition:
+			transform 0.22s cubic-bezier(0.6, 0.1, 0.2, 1),
+			opacity 0.12s;
+		opacity: 0;
 	}
 	.tab:hover {
-		color: var(--text);
+		color: var(--ink-strong);
+	}
+	.tab:hover::after {
+		opacity: 0.35;
+		transform: scaleY(0.55) translateY(1px);
 	}
 	.tab.active {
-		color: var(--primary-strong);
-		border-bottom-color: var(--primary);
+		color: var(--ink-strong);
+	}
+	.tab.active::after {
+		opacity: 1;
+		transform: scaleY(1);
+		box-shadow: 0 -2px 6px color-mix(in srgb, var(--primary) 28%, transparent);
+	}
+	.tab:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: -3px;
+		border-radius: 4px;
 	}
 </style>

@@ -1,7 +1,11 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import { stickyHead } from '$lib/actions/sticky-head';
+	import { sanitizeFilename, type CsvCell } from '$lib/csv';
+	import { getParam, updateUrl } from '$lib/url-state';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
+	import DownloadButton from './DownloadButton.svelte';
 
 	type Tip = {
 		showFor: (t: HTMLElement, row: SummaryRow) => void;
@@ -23,12 +27,25 @@
 
 	const LANGUAGES = ['English', 'Chinese', 'French', 'German', 'Spanish', 'Arabic'];
 
-	function fakeLangScore(row: SummaryRow, langIdx: number): number {
+	// Returns null when the row has no overall mean (partial benchmark coverage);
+	// downstream renders that as '—' so missing data doesn't masquerade as 0.00.
+	function fakeLangScore(row: SummaryRow, langIdx: number): number | null {
+		if (row.meanTask == null) return null;
 		const base = row.meanTask * 100;
 		const shift = ((langIdx + row.rank) % 7) - 3;
 		const firstType = summary.taskTypes[0];
 		const delta = firstType ? (row.scoresByTaskType[firstType] ?? 0) * 5 : 0;
 		return Math.max(0, Math.min(99, base + shift + delta - 4));
+	}
+
+	function rowMean(row: SummaryRow): number | null {
+		const vals: number[] = [];
+		for (let i = 0; i < LANGUAGES.length; i++) {
+			const v = fakeLangScore(row, i);
+			if (v != null) vals.push(v);
+		}
+		if (vals.length === 0) return null;
+		return vals.reduce((a, b) => a + b, 0) / vals.length;
 	}
 
 	function bestPerLang(): Record<string, number> {
@@ -37,17 +54,33 @@
 			let max = -Infinity;
 			for (const r of summary.rows) {
 				const v = fakeLangScore(r, idx);
-				if (v > max) max = v;
+				if (v != null && v > max) max = v;
 			}
 			best[lang] = max;
 		});
 		return best;
 	}
 	let best = $derived(bestPerLang());
+	let bestMean = $derived.by(() => {
+		let max = -Infinity;
+		for (const r of summary.rows) {
+			const v = rowMean(r);
+			if (v != null && v > max) max = v;
+		}
+		return max;
+	});
 
-	type SortKey = 'model' | `lang:${string}`;
-	let sortKey = $state<SortKey | null>(null);
-	let sortDir = $state<'asc' | 'desc'>('desc');
+	type SortKey = 'model' | 'mean' | `lang:${string}`;
+	const initialKey = getParam('s.lang');
+	const initialDir = getParam('d.lang');
+	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
+	let sortDir = $state<'asc' | 'desc'>(initialDir === 'asc' ? 'asc' : 'desc');
+	$effect(() => {
+		updateUrl({
+			's.lang': sortKey,
+			'd.lang': sortKey ? sortDir : null
+		});
+	});
 
 	function defaultDir(k: SortKey): 'asc' | 'desc' {
 		return k === 'model' ? 'asc' : 'desc';
@@ -81,10 +114,13 @@
 						a.model.displayName.toLowerCase().localeCompare(b.model.displayName.toLowerCase()) * dir
 					);
 				}
-				const lang = key.slice(5);
-				const idx = LANGUAGES.indexOf(lang);
-				if (idx < 0) return 0;
-				return (fakeLangScore(a, idx) - fakeLangScore(b, idx)) * dir;
+				const va: number | null = key === 'mean' ? rowMean(a) : fakeLangScore(a, LANGUAGES.indexOf(key.slice(5)));
+				const vb: number | null = key === 'mean' ? rowMean(b) : fakeLangScore(b, LANGUAGES.indexOf(key.slice(5)));
+				// Push nulls to the bottom regardless of direction.
+				if (va == null && vb == null) return 0;
+				if (va == null) return 1;
+				if (vb == null) return -1;
+				return (va - vb) * dir;
 			});
 		}
 		if (pinnedModels.size === 0) return rows;
@@ -92,11 +128,24 @@
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
 
-	function fmt(n: number): string {
+	function fmt(n: number | null): string {
+		if (n == null) return '—';
 		return n.toFixed(2);
 	}
-	function heat(score: number | undefined): string {
-		if (score === undefined) return '';
+	function buildCsv() {
+		const headers = ['Rank', 'Model', 'Mean', ...LANGUAGES];
+		const round = (n: number | null) => (n == null ? null : Number(n.toFixed(2)));
+		const rows: CsvCell[][] = summary.rows.map((row) => [
+			row.rank,
+			row.model.name,
+			round(rowMean(row)),
+			...LANGUAGES.map((_, i) => round(fakeLangScore(row, i)))
+		]);
+		return { headers, rows };
+	}
+
+	function heat(score: number | null | undefined): string {
+		if (score == null) return '';
 		// Score is 0..99 here; normalize and shape with the same 0.45–0.75 curve.
 		const normalized = score / 100;
 		const v = Math.max(0, Math.min(1, (normalized - 0.45) / 0.3));
@@ -107,27 +156,39 @@
 </script>
 
 <div class="wrap">
-	<p class="muted">
-		Example per-language scores for the visible models. Click any column header to sort. Values are
-		simulated until the backend exposes the real per-language breakdown.
-	</p>
-	<div class="scroll">
-		<table>
+	<div class="head">
+		<p class="muted">
+			Example per-language scores for the visible models. Click any column header to sort.
+			Values are simulated until the backend exposes the real per-language breakdown.
+		</p>
+		<DownloadButton
+			filename="{sanitizeFilename(summary.benchmarkName)}_per_language"
+			build={buildCsv}
+		/>
+	</div>
+	<div class="tbl-scroll">
+		<table class="tbl lang-table" use:stickyHead>
 			<thead>
 				<tr>
-					<th class="pin-col sticky-pin" aria-label="Pinned"></th>
-					<th class="sticky" aria-sort={ariaSort('model')}>
-						<button class="sort left" onclick={() => clickSort('model')}>
+					<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
+					<th class="tbl-sticky-col" aria-sort={ariaSort('model')}>
+						<button class="tbl-sort tbl-sort-left" onclick={() => clickSort('model')}>
 							<span>Model</span>
-							<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model')}</span>
+							<span class="tbl-sort-ind" class:on={sortKey === 'model'}>{sortIcon('model')}</span>
+						</button>
+					</th>
+					<th class="tbl-num" aria-sort={ariaSort('mean')}>
+						<button class="tbl-sort" onclick={() => clickSort('mean')}>
+							<span>Mean</span>
+							<span class="tbl-sort-ind" class:on={sortKey === 'mean'}>{sortIcon('mean')}</span>
 						</button>
 					</th>
 					{#each LANGUAGES as lang (lang)}
 						{@const k = `lang:${lang}` as SortKey}
-						<th class="num" aria-sort={ariaSort(k)}>
-							<button class="sort" onclick={() => clickSort(k)}>
+						<th class="tbl-num" aria-sort={ariaSort(k)}>
+							<button class="tbl-sort" onclick={() => clickSort(k)}>
 								<span>{lang}</span>
-								<span class="ind" class:on={sortKey === k}>{sortIcon(k)}</span>
+								<span class="tbl-sort-ind" class:on={sortKey === k}>{sortIcon(k)}</span>
 							</button>
 						</th>
 					{/each}
@@ -135,11 +196,12 @@
 			</thead>
 			<tbody>
 				{#each sortedRows as row (row.model.name)}
+					{@const mean = rowMean(row)}
 					<tr class:pinned={pinnedModels.has(row.model.name)}>
-						<td class="pin-col sticky-pin">
+						<td class="tbl-pin-col tbl-sticky-pin">
 							<button
 								type="button"
-								class="pin-btn"
+								class="tbl-pin-btn"
 								class:on={pinnedModels.has(row.model.name)}
 								onclick={() => pinnedModels.toggle(row.model.name)}
 								aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
@@ -162,21 +224,40 @@
 							</button>
 						</td>
 						<td
-							class="sticky"
+							class="tbl-sticky-col"
 							onpointerenter={(e) => onCellEnter(e, row)}
 							onpointerleave={onCellLeave}
 							onfocusin={(e) => onCellEnter(e, row)}
 							onfocusout={onCellLeave}
 						>
 							{#if row.model.url}
-								<a href={row.model.url} target="_blank" rel="noreferrer">{row.model.displayName}</a>
+								<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
+									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
+										class="tbl-model-name">{row.model.displayName}</span
+									>
+								</a>
 							{:else}
-								{row.model.displayName}
+								<span class="tbl-model-link">
+									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
+										class="tbl-model-name">{row.model.displayName}</span
+									>
+								</span>
 							{/if}
+						</td>
+						<td
+							class="tbl-num"
+							class:tbl-best={mean != null && mean === bestMean}
+							style={heat(mean)}
+						>
+							{fmt(mean)}
 						</td>
 						{#each LANGUAGES as lang, idx (lang)}
 							{@const score = fakeLangScore(row, idx)}
-							<td class="num" class:best={score === best[lang]} style={heat(score)}>
+							<td
+								class="tbl-num"
+								class:tbl-best={score != null && score === best[lang]}
+								style={heat(score)}
+							>
 								{fmt(score)}
 							</td>
 						{/each}
@@ -195,165 +276,21 @@
 	}
 	.muted {
 		color: var(--text-muted);
-		margin: 0 0 12px;
+		margin: 0;
 	}
-	.scroll {
-		overflow-x: auto;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface);
-		box-shadow: var(--shadow-sm);
+	.head {
+		display: flex;
+		gap: 12px;
+		align-items: flex-start;
+		justify-content: space-between;
+		margin-bottom: 12px;
 	}
-	table {
+	.head .muted {
+		flex: 1;
+		min-width: 0;
+	}
+	/* Per-language table always fits the main column; stretch to fill it. */
+	.lang-table {
 		width: 100%;
-		border-collapse: separate;
-		border-spacing: 0;
-		font-size: 13px;
-	}
-	th,
-	td {
-		border-bottom: 1px solid var(--border);
-		white-space: nowrap;
-		text-align: left;
-	}
-	td {
-		padding: 8px 12px;
-	}
-	thead th {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		font-weight: 600;
-		position: sticky;
-		top: 0;
-		padding: 0;
-	}
-	.sort {
-		all: unset;
-		display: inline-flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 6px;
-		width: 100%;
-		padding: 8px 12px;
-		cursor: pointer;
-		color: var(--text-muted);
-		font-weight: 600;
-		transition:
-			color 0.12s,
-			background 0.12s;
-		box-sizing: border-box;
-	}
-	.sort.left {
-		justify-content: flex-start;
-	}
-	.sort:hover {
-		color: var(--text);
-		background: color-mix(in srgb, var(--primary-soft) 60%, transparent);
-	}
-	.sort:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: -2px;
-		border-radius: 4px;
-	}
-	.ind {
-		font-size: 11px;
-		font-weight: 700;
-		color: var(--text-subtle);
-		opacity: 0.4;
-		transition:
-			opacity 0.12s,
-			color 0.12s;
-	}
-	.sort:hover .ind {
-		opacity: 1;
-	}
-	.ind.on {
-		color: var(--primary-strong);
-		opacity: 1;
-	}
-	.num {
-		text-align: right;
-		font-variant-numeric: tabular-nums;
-	}
-	.sticky {
-		position: sticky;
-		left: 32px;
-		background: var(--surface);
-		z-index: 1;
-		min-width: 220px;
-	}
-	thead th.sticky {
-		background: var(--surface-muted);
-		z-index: 2;
-	}
-	.pin-col {
-		width: 32px;
-		min-width: 32px;
-		padding: 0;
-		text-align: center;
-	}
-	.sticky-pin {
-		position: sticky;
-		left: 0;
-		background: var(--surface);
-		z-index: 1;
-	}
-	thead th.sticky-pin {
-		background: var(--surface-muted);
-		z-index: 2;
-	}
-	tbody tr:nth-child(even) td.sticky-pin {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td.sticky-pin {
-		background: var(--row-hover);
-	}
-	.pin-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		background: none;
-		border: 1px solid transparent;
-		border-radius: 6px;
-		color: var(--border-strong);
-		cursor: pointer;
-		padding: 0;
-		transition:
-			color 0.12s,
-			background 0.12s,
-			transform 0.06s;
-	}
-	.pin-btn:hover {
-		color: var(--text-muted);
-		background: var(--surface-muted);
-	}
-	.pin-btn.on {
-		color: var(--primary);
-		background: var(--primary-soft);
-		border-color: color-mix(in srgb, var(--primary) 35%, transparent);
-		transform: rotate(35deg);
-	}
-	tbody tr.pinned td {
-		background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
-	}
-	tbody tr.pinned + tr:not(.pinned) td {
-		border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
-	}
-	tbody tr:nth-child(even) td {
-		background: var(--row-alt);
-	}
-	tbody tr:nth-child(even) td.sticky {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td {
-		background: var(--row-hover);
-	}
-	tbody tr:hover td.sticky {
-		background: var(--row-hover);
-	}
-	.best {
-		font-weight: 700;
 	}
 </style>

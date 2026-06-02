@@ -1,6 +1,9 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import { humanizeType } from '$lib/format';
+	import { stickyHead } from '$lib/actions/sticky-head';
+	import { getParam, updateUrl } from '$lib/url-state';
 
 	const INFO = {
 		rank: {
@@ -30,6 +33,14 @@
 		meanTaskType: {
 			title: 'Mean (TaskType)',
 			text: 'Weighted average computed by first averaging per task category (Classification, Retrieval, …) and then averaging across categories. Rewards models that perform well in every category.'
+		},
+		meanPublic: {
+			title: 'Mean (Public)',
+			text: "Average score across the benchmark's public (openly-released) task subset. Recomputed live when you narrow the visible task set with filters."
+		},
+		meanPrivate: {
+			title: 'Mean (Private)',
+			text: "Average score across the benchmark's private (held-out) task subset — datasets the benchmark keeps closed to discourage training-set contamination. Recomputed live with filters."
 		}
 	} as const;
 
@@ -44,11 +55,24 @@
 		| 'totalParams'
 		| 'meanTask'
 		| 'meanTaskType'
+		| 'meanPublic'
+		| 'meanPrivate'
 		| `tt:${string}`;
 	type Dir = 'asc' | 'desc';
 
-	let sortKey = $state<SortKey | null>(null);
-	let sortDir = $state<Dir>('desc');
+	// Hydrate sort from `?s.summary=<key>` + `?d.summary=<asc|desc>` so a
+	// shared link restores the user's ordering. Per-table namespace keeps the
+	// per-task / per-language tabs independent.
+	const initialKey = getParam('s.summary');
+	const initialDir = getParam('d.summary');
+	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
+	let sortDir = $state<Dir>(initialDir === 'asc' ? 'asc' : 'desc');
+	$effect(() => {
+		updateUrl({
+			's.summary': sortKey,
+			'd.summary': sortKey ? sortDir : null
+		});
+	});
 
 	// Score-like columns default to descending (best first); rank and name default to ascending.
 	function defaultDir(key: SortKey): Dir {
@@ -78,9 +102,17 @@
 			case 'totalParams':
 				return { v: row.totalParamsB, missing: row.totalParamsB === 0 };
 			case 'meanTask':
-				return { v: row.meanTask, missing: false };
+				return { v: row.meanTask ?? 0, missing: row.meanTask == null };
 			case 'meanTaskType':
-				return { v: row.meanTaskType, missing: false };
+				return { v: row.meanTaskType ?? 0, missing: row.meanTaskType == null };
+			case 'meanPublic': {
+				const v = liveMeanPublic(row);
+				return { v: v ?? 0, missing: v == null };
+			}
+			case 'meanPrivate': {
+				const v = liveMeanPrivate(row);
+				return { v: v ?? 0, missing: v == null };
+			}
 		}
 		if (key.startsWith('tt:')) {
 			const tt = key.slice(3);
@@ -112,13 +144,14 @@
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
 
-	function fmtPct(score: number): string {
+	function fmtPct(score: number | null | undefined): string {
+		if (score == null) return '—';
 		return (score * 100).toFixed(2);
 	}
 	/* Heatmap shade for score cells: stretches the meaningful 0.45–0.75 range
 	   across a 0–55% orange wash so weak scores look pale and strong scores pop. */
-	function heat(score: number | undefined): string {
-		if (score === undefined) return '';
+	function heat(score: number | null | undefined): string {
+		if (score == null) return '';
 		const v = Math.max(0, Math.min(1, (score - 0.45) / 0.3));
 		const pct = Math.round(v * 55);
 		if (pct === 0) return '';
@@ -159,8 +192,77 @@
 		return best;
 	}
 	let best = $derived(bestPerTaskType());
-	let bestMeanTask = $derived(Math.max(...summary.rows.map((r) => r.meanTask)));
-	let bestMeanTaskType = $derived(Math.max(...summary.rows.map((r) => r.meanTaskType)));
+	let bestMeanTask = $derived(
+		Math.max(
+			...summary.rows.map((r) => r.meanTask).filter((v): v is number => v != null),
+			-Infinity
+		)
+	);
+	let bestMeanTaskType = $derived(
+		Math.max(
+			...summary.rows.map((r) => r.meanTaskType).filter((v): v is number => v != null),
+			-Infinity
+		)
+	);
+	// Column visibility is declarative — `summary.aggregations` lists exactly
+	// which mean columns belong on this benchmark's leaderboard. Avoids
+	// inferring from the score data (which led to ViDoRe showing an empty
+	// Mean (TaskType) column it doesn't actually compute).
+	let aggs = $derived(new Set(summary.aggregations ?? []));
+	let showMeanTask = $derived(aggs.has('mean_task'));
+	let showMeanTaskType = $derived(aggs.has('mean_task_type'));
+	let showTaskTypes = $derived(aggs.has('task_types'));
+	let showPublicPrivate = $derived(aggs.has('public_private'));
+	// Recompute Mean (Public) / Mean (Private) from the model's per-task scores
+	// using the benchmark's `tasksMeta[].isPublic` flag. This way the means
+	// update live when the user filters the task set, instead of staying frozen
+	// at the original benchmark-level values.
+	let publicTaskNames = $derived(
+		new Set(summary.tasksMeta.filter((t) => t.isPublic !== false).map((t) => t.name))
+	);
+	let privateTaskNames = $derived(
+		new Set(summary.tasksMeta.filter((t) => t.isPublic === false).map((t) => t.name))
+	);
+	function meanOver(row: SummaryRow, names: Set<string>): number | null {
+		if (names.size === 0) return null;
+		let sum = 0;
+		let n = 0;
+		for (const name of names) {
+			const v = row.scoresByTask[name];
+			if (typeof v === 'number') {
+				sum += v;
+				n += 1;
+			}
+		}
+		// Strict: missing any visible task drops the mean to null, matching the
+		// policy applied to Mean (Task) / Mean (TaskType).
+		return n === names.size ? sum / n : null;
+	}
+	// No fallback to the backend's row.meanPublic / row.meanPrivate: the user
+	// might have deliberately filtered every public (or private) task out, in
+	// which case the mean is undefined — falling back would surface the
+	// pre-filter number and look stale. ``meanOver`` is null on empty input,
+	// which is exactly the right answer.
+	function liveMeanPublic(row: SummaryRow): number | null {
+		if (!showPublicPrivate) return null;
+		return meanOver(row, publicTaskNames);
+	}
+	function liveMeanPrivate(row: SummaryRow): number | null {
+		if (!showPublicPrivate) return null;
+		return meanOver(row, privateTaskNames);
+	}
+	let bestMeanPublic = $derived(
+		Math.max(
+			...summary.rows.map(liveMeanPublic).filter((v): v is number => v != null),
+			-Infinity
+		)
+	);
+	let bestMeanPrivate = $derived(
+		Math.max(
+			...summary.rows.map(liveMeanPrivate).filter((v): v is number => v != null),
+			-Infinity
+		)
+	);
 
 	function isBestScore(row: SummaryRow, taskType: string): boolean {
 		return row.scoresByTaskType[taskType] === best[taskType];
@@ -257,8 +359,8 @@
 </script>
 
 <div class="summary">
-<div class="scroll">
-	<table>
+<div class="tbl-scroll">
+	<table class="tbl summary-table" use:stickyHead>
 		<thead>
 			<tr>
 				<th
@@ -271,7 +373,7 @@
 					onfocusout={hideTip}
 					aria-sort={ariaSort('rank')}
 				>
-					<button class="sort-btn num" onclick={() => clickSort('rank')}>
+					<button class="sort-btn tbl-num" onclick={() => clickSort('rank')}>
 						<span>Rank</span>
 						<span class="ind" class:on={sortKey === 'rank'}>{sortIcon('rank') || '↕'}</span>
 					</button>
@@ -283,7 +385,7 @@
 					</button>
 				</th>
 				<th
-					class="num"
+					class="tbl-num"
 					data-tip-title={INFO.totalParams.title}
 					data-tip={INFO.totalParams.text}
 					onpointerenter={showTip}
@@ -292,15 +394,16 @@
 					onfocusout={hideTip}
 					aria-sort={ariaSort('totalParams')}
 				>
-					<button class="sort-btn num" onclick={() => clickSort('totalParams')}>
+					<button class="sort-btn tbl-num" onclick={() => clickSort('totalParams')}>
 						<span>Total Params</span>
 						<span class="ind" class:on={sortKey === 'totalParams'}
 							>{sortIcon('totalParams') || '↕'}</span
 						>
 					</button>
 				</th>
+				{#if showMeanTask}
 				<th
-					class="num"
+					class="tbl-num"
 					data-tip-title={INFO.meanTask.title}
 					data-tip={INFO.meanTask.text}
 					onpointerenter={showTip}
@@ -309,15 +412,17 @@
 					onfocusout={hideTip}
 					aria-sort={ariaSort('meanTask')}
 				>
-					<button class="sort-btn num" onclick={() => clickSort('meanTask')}>
+					<button class="sort-btn tbl-num" onclick={() => clickSort('meanTask')}>
 						<span>Mean (Task)</span>
 						<span class="ind" class:on={sortKey === 'meanTask'}
 							>{sortIcon('meanTask') || '↕'}</span
 						>
 					</button>
 				</th>
+				{/if}
+				{#if showMeanTaskType}
 				<th
-					class="num"
+					class="tbl-num"
 					data-tip-title={INFO.meanTaskType.title}
 					data-tip={INFO.meanTaskType.text}
 					onpointerenter={showTip}
@@ -326,22 +431,61 @@
 					onfocusout={hideTip}
 					aria-sort={ariaSort('meanTaskType')}
 				>
-					<button class="sort-btn num" onclick={() => clickSort('meanTaskType')}>
+					<button class="sort-btn tbl-num" onclick={() => clickSort('meanTaskType')}>
 						<span>Mean (TaskType)</span>
 						<span class="ind" class:on={sortKey === 'meanTaskType'}
 							>{sortIcon('meanTaskType') || '↕'}</span
 						>
 					</button>
 				</th>
-				{#each summary.taskTypes as tt (tt)}
-					{@const k = `tt:${tt}` as SortKey}
-					<th class="num" aria-sort={ariaSort(k)}>
-						<button class="sort-btn num" onclick={() => clickSort(k)}>
-							<span>{tt}</span>
-							<span class="ind" class:on={sortKey === k}>{sortIcon(k) || '↕'}</span>
+				{/if}
+				{#if showPublicPrivate}
+					<th
+						class="tbl-num"
+						data-tip-title={INFO.meanPublic.title}
+						data-tip={INFO.meanPublic.text}
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						aria-sort={ariaSort('meanPublic')}
+					>
+						<button class="sort-btn tbl-num" onclick={() => clickSort('meanPublic')}>
+							<span>Mean (Public)</span>
+							<span class="ind" class:on={sortKey === 'meanPublic'}
+								>{sortIcon('meanPublic') || '↕'}</span
+							>
 						</button>
 					</th>
-				{/each}
+					<th
+						class="tbl-num"
+						data-tip-title={INFO.meanPrivate.title}
+						data-tip={INFO.meanPrivate.text}
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						aria-sort={ariaSort('meanPrivate')}
+					>
+						<button class="sort-btn tbl-num" onclick={() => clickSort('meanPrivate')}>
+							<span>Mean (Private)</span>
+							<span class="ind" class:on={sortKey === 'meanPrivate'}
+								>{sortIcon('meanPrivate') || '↕'}</span
+							>
+						</button>
+					</th>
+				{/if}
+				{#if showTaskTypes}
+					{#each summary.taskTypes as tt (tt)}
+						{@const k = `tt:${tt}` as SortKey}
+						<th class="tbl-num" aria-sort={ariaSort(k)}>
+							<button class="sort-btn tbl-num" onclick={() => clickSort(k)}>
+								<span>{humanizeType(tt)}</span>
+								<span class="ind" class:on={sortKey === k}>{sortIcon(k) || '↕'}</span>
+							</button>
+						</th>
+					{/each}
+				{/if}
 			</tr>
 		</thead>
 		<tbody>
@@ -351,7 +495,7 @@
 						<div class="rank-cell">
 							<button
 								type="button"
-								class="pin-btn"
+								class="tbl-pin-btn"
 								class:on={pinnedModels.has(row.model.name)}
 								onclick={() => pinnedModels.toggle(row.model.name)}
 								aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
@@ -384,43 +528,71 @@
 						onfocusout={hideTip}
 					>
 						{#if row.model.url}
-							<a href={row.model.url} target="_blank" rel="noreferrer" class="model-link">
-								<span class="model-org">{row.model.org}</span><span class="model-sep">/</span><span
-									class="model-name">{row.model.displayName}</span
+							<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
+								<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
+									class="tbl-model-name">{row.model.displayName}</span
 								>
 							</a>
 						{:else}
-							<span class="model-link">
-								<span class="model-org">{row.model.org}</span><span class="model-sep">/</span><span
-									class="model-name">{row.model.displayName}</span
+							<span class="tbl-model-link">
+								<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
+									class="tbl-model-name">{row.model.displayName}</span
 								>
 							</span>
 						{/if}
 					</td>
-					<td class="num param-cell" data-model-type={row.model.modelType}>
+					<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
 						{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
 								class="unit">{fmtParamsUnit(row.totalParamsB)}</span
 							>{/if}
 					</td>
-					<td class="num" class:best={row.meanTask === bestMeanTask} style={heat(row.meanTask)}>
-						{fmtPct(row.meanTask)}
-					</td>
-					<td
-						class="num"
-						class:best={row.meanTaskType === bestMeanTaskType}
-						style={heat(row.meanTaskType)}
-					>
-						{fmtPct(row.meanTaskType)}
-					</td>
-					{#each summary.taskTypes as tt (tt)}
+					{#if showMeanTask}
 						<td
-							class="num"
-							class:best={isBestScore(row, tt)}
-							style={heat(row.scoresByTaskType[tt])}
+							class="tbl-num"
+							class:tbl-best={row.meanTask === bestMeanTask}
+							style={heat(row.meanTask)}
 						>
-							{row.scoresByTaskType[tt] !== undefined ? fmtPct(row.scoresByTaskType[tt]) : ''}
+							{fmtPct(row.meanTask)}
 						</td>
-					{/each}
+					{/if}
+					{#if showMeanTaskType}
+						<td
+							class="tbl-num"
+							class:tbl-best={row.meanTaskType === bestMeanTaskType}
+							style={heat(row.meanTaskType)}
+						>
+							{fmtPct(row.meanTaskType)}
+						</td>
+					{/if}
+					{#if showPublicPrivate}
+						{@const mp = liveMeanPublic(row)}
+						{@const mpr = liveMeanPrivate(row)}
+						<td
+							class="tbl-num"
+							class:tbl-best={mp != null && mp === bestMeanPublic}
+							style={heat(mp)}
+						>
+							{fmtPct(mp)}
+						</td>
+						<td
+							class="tbl-num"
+							class:tbl-best={mpr != null && mpr === bestMeanPrivate}
+							style={heat(mpr)}
+						>
+							{fmtPct(mpr)}
+						</td>
+					{/if}
+					{#if showTaskTypes}
+						{#each summary.taskTypes as tt (tt)}
+							<td
+								class="tbl-num"
+								class:tbl-best={isBestScore(row, tt)}
+								style={heat(row.scoresByTaskType[tt])}
+							>
+								{row.scoresByTaskType[tt] !== undefined ? fmtPct(row.scoresByTaskType[tt]) : ''}
+							</td>
+						{/each}
+					{/if}
 				</tr>
 			{/each}
 		</tbody>
@@ -452,30 +624,11 @@
 </div>
 
 <style>
-	.scroll {
-		overflow-x: auto;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface);
-		box-shadow: var(--shadow-sm);
-	}
-	table {
+	/* Stretch this table to the full main-column width — shared `.tbl` deliberately
+	   doesn't set a width because per-task/language tables let columns size to
+	   content. */
+	.summary-table {
 		width: 100%;
-		border-collapse: separate;
-		border-spacing: 0;
-		font-size: 13px;
-	}
-	thead th {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		font-weight: 600;
-		text-align: left;
-		padding: 0;
-		border-bottom: 1px solid var(--border);
-		white-space: nowrap;
-		position: sticky;
-		top: 0;
-		z-index: 1;
 	}
 	/* Tooltip portal — rendered as a sibling of .scroll so it isn't trapped in
 	   any sticky <th>'s stacking context. position:fixed with JS coordinates. */
@@ -546,28 +699,28 @@
 		color: #f1f3f5;
 	}
 
-	/* Soft per-model-type tint on the Model + Params columns. The chosen
-	   color-mix targets are opaque (mixed with white) so they cover the sticky
-	   Model cell's white background while still feeling subtle.   */
+	/* Soft per-model-type tint on the Model + Params columns. Theme-aware
+	   tints from the shared --tint-* palette — pastel-on-white in light
+	   mode, dim-muted-on-dark in dark mode. */
 	.sticky-model[data-model-type='dense'],
 	.param-cell[data-model-type='dense'] {
-		background-color: color-mix(in srgb, #e8edff 55%, white);
+		background-color: color-mix(in srgb, var(--tint-blue) 70%, var(--surface));
 	}
 	.sticky-model[data-model-type='cross-encoder'],
 	.param-cell[data-model-type='cross-encoder'] {
-		background-color: color-mix(in srgb, #ffe6dc 55%, white);
+		background-color: color-mix(in srgb, var(--tint-orange) 70%, var(--surface));
 	}
 	.sticky-model[data-model-type='late-interaction'],
 	.param-cell[data-model-type='late-interaction'] {
-		background-color: color-mix(in srgb, #def7e9 55%, white);
+		background-color: color-mix(in srgb, var(--tint-green) 70%, var(--surface));
 	}
 	.sticky-model[data-model-type='sparse'],
 	.param-cell[data-model-type='sparse'] {
-		background-color: color-mix(in srgb, #fff1d4 55%, white);
+		background-color: color-mix(in srgb, var(--tint-amber) 70%, var(--surface));
 	}
 	.sticky-model[data-model-type='router'],
 	.param-cell[data-model-type='router'] {
-		background-color: color-mix(in srgb, #f2e7ff 55%, white);
+		background-color: color-mix(in srgb, var(--tint-purple) 70%, var(--surface));
 	}
 	/* On hover, deepen the tint slightly so the row still has feedback. */
 	tbody tr:hover td.sticky-model[data-model-type],
@@ -582,30 +735,6 @@
 	}
 	.has-tip a:hover {
 		text-decoration-color: var(--link);
-	}
-	/* Model name = org/name (HF-style). Org and slash are muted so the model
-	   identity reads clearly without losing the organization at a glance. */
-	.model-org {
-		color: var(--text-subtle);
-		font-weight: 400;
-	}
-	.model-sep {
-		color: var(--border-strong);
-		margin: 0 1px;
-	}
-	.model-name {
-		font-weight: 600;
-	}
-	.model-link {
-		display: inline-block;
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	th.num,
-	td.num {
-		text-align: right;
-		font-variant-numeric: tabular-nums;
 	}
 	.sort-btn {
 		all: unset;
@@ -625,7 +754,7 @@
 			background 0.12s,
 			color 0.12s;
 	}
-	.sort-btn.num {
+	.sort-btn.tbl-num {
 		justify-content: flex-end;
 	}
 	.sort-btn:hover {
@@ -653,20 +782,6 @@
 		color: var(--primary-strong);
 		opacity: 1;
 	}
-	tbody td {
-		padding: 8px 12px;
-		border-bottom: 1px solid var(--border);
-		white-space: nowrap;
-	}
-	tbody tr:nth-child(even) td {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td {
-		background: var(--row-hover);
-	}
-	.best {
-		font-weight: 700;
-	}
 	.unit {
 		margin-left: 2px;
 		font-size: 0.78em;
@@ -687,44 +802,6 @@
 		min-width: 16px;
 		text-align: right;
 	}
-	.pin-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		background: none;
-		border: 1px solid transparent;
-		border-radius: 6px;
-		color: var(--border-strong);
-		cursor: pointer;
-		padding: 0;
-		transition:
-			color 0.12s,
-			background 0.12s,
-			transform 0.06s;
-	}
-	.pin-btn:hover {
-		color: var(--text-muted);
-		background: var(--surface-muted);
-	}
-	.pin-btn.on {
-		color: var(--primary);
-		background: var(--primary-soft);
-		border-color: color-mix(in srgb, var(--primary) 35%, transparent);
-		transform: rotate(35deg);
-	}
-	.pin-btn:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 1px;
-	}
-	tbody tr.pinned td {
-		background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
-	}
-	tbody tr.pinned + tr:not(.pinned) td {
-		border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
-	}
-
 	/* Combined pin + rank column. */
 	.sticky-left {
 		position: sticky;
@@ -756,7 +833,15 @@
 		left: 72px;
 		background: var(--surface);
 		z-index: 2;
-		min-width: 220px;
+		/* Hold the column to a fixed width window. Long model names wrap
+		   inside the cell (row grows in height) instead of either truncating
+		   or stretching the column. */
+		width: 260px;
+		min-width: 260px;
+		max-width: 260px;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		vertical-align: top;
 	}
 	thead th.sticky-model {
 		background: var(--surface-muted);
