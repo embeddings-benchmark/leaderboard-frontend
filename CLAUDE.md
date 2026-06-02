@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-SvelteKit + TypeScript + Svelte 5 (runes mode) port of the MTEB Gradio leaderboard, deployed as a fully prerendered static site to GitHub Pages at `/leaderboardv2/`. There is **no backend yet** — all data comes from deterministic mock generators in `src/lib/data/`.
+SvelteKit + TypeScript + Svelte 5 (runes mode) port of the MTEB Gradio leaderboard. Deployed two ways:
+
+- **Hugging Face Space** — `Dockerfile` at the repo root clones this branch, builds the static bundle, and serves it via nginx-unprivileged on port 7860. The bundle calls the mteb FastAPI backend (separate Space) over CORS.
+- **GitHub Pages** — `make deploy-build` produces a prerendered static site under `/leaderboardv2/`.
+
+The runtime data source is the **mteb FastAPI service** (`https://github.com/embeddings-benchmark/mteb`, branch `api`, source under `mteb/api/`). Mock data in `src/lib/data/mock*.ts` still exists for offline development but is gated behind `PUBLIC_USE_MOCK=1`.
 
 ## Commands
 
@@ -32,39 +37,51 @@ npx playwright test tests/tab-switch.e2e.ts
 
 Playwright's webServer in `playwright.config.ts` runs `npm run build && npm run preview -- --port 4173` and `reuseExistingServer: true`, so iterating on tests against an already-running preview is fine.
 
+### Env
+
+`src/lib/data/service.ts` reads two `PUBLIC_*` env vars at build time (statically inlined by SvelteKit):
+
+- `PUBLIC_API_URL` — base URL of the mteb FastAPI service. **Required** unless `PUBLIC_USE_MOCK=1`. Set in `.env.local` for dev (`http://localhost:8000`) and as a `Dockerfile` `ENV` for the Space build.
+- `PUBLIC_USE_MOCK=1` — opt-in fallback to the deterministic mock generators when no backend is reachable.
+
+Loaders throw a descriptive error if neither is set so misconfiguration surfaces immediately instead of silently rendering empty tables.
+
 ## High-level architecture
 
-### Seven UI variants, one data layer
+### Routes
 
-The leaderboard ships as seven different routes that all read the same store + mock data. The `ViewSwitcher` pill (centered top of every page, in the root `+layout.svelte`) jumps between them:
+The `/explorer` prefix is gone — every route lives at the site root.
 
 | Route | Purpose |
 |---|---|
-| `/` | Classic: left benchmark sidebar + tabs + right filter sidebar |
-| `/dashboard` | Top bar + benchmark picker + KPI hero + filter drawer |
-| `/explorer` | Multi-page: benchmarks grid → `/explorer/[benchmark]` detail, plus `/explorer/models` and `/explorer/tasks` directories under `explorer/+layout.svelte`'s sub-nav |
-| `/compare` | Pick up to 4 models, side-by-side cards with per-metric winners + radar |
-| `/bento` | At-a-glance mixed-size grid (leader hero, KPI tiles, Pareto chart) |
-| `/spreadsheet` | Full-bleed data grid with sortable headers, pin column, heat-shaded cells, density toggle |
-| `/story` | Long-scroll editorial with sticky TOC and serif body |
+| `/` | Home: benchmark category cards, top-level pitch |
+| `/benchmarks` | Full benchmark catalog |
+| `/benchmark/[name]` | Per-benchmark detail page: hero + tabs (Summary / Performance × Size / Performance × Time / Per task / Per language / Task information) |
+| `/models` + `/models/[name]` | Model index + detail (cards on the index, hero + per-benchmark score table on the detail) |
+| `/tasks` + `/tasks/[name]` | Task index + detail (same shape as models) |
+| `/compare` | Pick up to 4 models, side-by-side metric cards with per-metric winners + radar |
 
-Reusable building blocks (`SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `Tabs`, `FilterDrawer`, `BenchmarkPicker`, etc.) live in `src/lib/components/` and get composed differently in each variant. When adding a variant, copy the import pattern from `/bento` or `/dashboard` (both subscribe to the leaderboard store and call `filters.initFor(summary)` in an `$effect`).
+Reusable building blocks (`SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `Tabs`, `FilterContent`, `FilterSidebar`, `BenchmarkPicker`, `PlotlyChart`, `ThemeToggle`, `MarkdownText`, …) live in `src/lib/components/` and get composed differently per route.
+
+The top bar (root `+layout.svelte`) is a 3-column grid: MTEB brand · Benchmarks/Models/Tasks/Compare nav · GitHub + Documentation + Leaderboard external links + `ThemeToggle`.
 
 ### Data flow
 
 ```
-src/lib/data/mockBenchmarks.ts   ← BENCHMARK_INDEX + BENCHMARK_MENU + COMMON_DOMAINS + MMTEB_LANGUAGES
-src/lib/data/mockSummary.ts      ← MOCK_MODELS + buildMockSummary(name): BenchmarkSummary
-src/lib/data/service.ts          ← thin async wrappers: loadBenchmark / loadSummary
-       ↓
+mteb FastAPI                    src/lib/data/mock*.ts (fallback only)
+     │                                       │
+     └────────────┬──────────────────────────┘
+                  ↓
+        src/lib/data/service.ts   ← loadBenchmarkMenu / loadBenchmark / loadSummary
+                  ↓
 src/lib/stores/leaderboard.svelte.ts  ← reactive selected/benchmark/summary, with inflight cancellation
 src/lib/stores/filters.svelte.ts      ← all filter state + applyFilters(summary)
 src/lib/stores/pinned.svelte.ts       ← Set<string> of pinned model names, shared across every table
-       ↓
-filteredSummary = applyFilters(leaderboard.summary)
+                  ↓
+       filteredSummary = applyFilters(leaderboard.summary)
 ```
 
-The service layer is intentionally an async indirection so swapping in a real backend later only touches `src/lib/data/service.ts`.
+`service.ts` is the only place that branches between live API and mocks — swap backends, change auth, change cache strategy here without touching anything downstream.
 
 ### Stores (Svelte 5 runes singletons)
 
@@ -72,11 +89,19 @@ All three stores under `src/lib/stores/*.svelte.ts` use the same pattern: a fact
 
 - `leaderboard.select(name)` uses an `inflight` counter so quickly switching benchmarks discards stale async results.
 - `filters.initFor(summary)` is **write-only** — it never reads from `state.*` inside the effect that calls it. This avoids a re-fire loop where Svelte's deep-loop guard fires `effect_update_depth_exceeded` and freezes reactivity. If you add fields to the filter state, keep `initFor` write-only.
-- `pinnedModels` is shared — pinning in any table (Classic, PerTask, PerLanguage, Spreadsheet) reflects everywhere. Each model-row table sorts pinned rows to the top in its own `sortedRows = $derived.by(...)`.
+- `pinnedModels` is shared — pinning in any table (SummaryTable, PerTask, PerLanguage) reflects everywhere. Each model-row table sorts pinned rows to the top in its own `sortedRows = $derived.by(...)`.
+
+### Theme system
+
+- `src/app.css` declares per-token light/dark pairs (`--surface-light` / `--surface-dark`, `--text-light` / `--text-dark`, …) and exposes a single live token via `light-dark(var(--X-light), var(--X-dark))`. The browser resolves it based on `color-scheme`, which the `ThemeToggle` pins via `<html data-theme="light"|"dark">`. A short inline script in `app.html` reads `localStorage` before paint to avoid FOUC.
+- The **`--tint-*` palette** (blue / purple / green / orange / amber / pink / azure / teal, each with a `-fg` companion) is the canonical color set for model-type and task-type chips, card top-accent gradients, filter pills, and SummaryTable model-column tints. Always reach for `--tint-X` + `--tint-X-fg` instead of hardcoding hex; the dark variants are pre-tuned for legibility. See app.css for the mapping per category.
+- `@supports not (color: light-dark(white, black))` provides a fallback for Safari ≤17.4.
 
 ### Charts
 
 `src/lib/components/PlotlyChart.svelte` is the only place Plotly is imported, and it does so via `await import('plotly.js-dist-min')` inside `onMount` — keeps Plotly out of the SSR bundle and out of the initial JS. Figure-spec generators live in `src/lib/charts/figures.ts` and return plain `{ data, layout }` for the wrapper to render.
+
+**Theme handling is in the wrapper, not the figure**. `PlotlyChart` resolves `--ink-strong` / `--text` / `--border` / `--surface` via a probe element (because `getPropertyValue('--token')` returns the unresolved `light-dark(...)` expression, which Plotly can't parse), passes them as `font.color` / `tickfont.color` / `gridcolor` / `paper_bgcolor`, and re-renders on theme switch via a `MutationObserver` on `data-theme` plus a `prefers-color-scheme` media listener. Don't hardcode colors in `figures.ts` — leave the slot empty and the wrapper will fill it.
 
 ### Tooltip portal pattern (important)
 
@@ -91,9 +116,9 @@ Don't move the tooltip back inside a `<th>`. If a new table needs the same behav
 ### Static-adapter deployment
 
 - `svelte.config.js` uses `adapter-static` with `fallback: '404.html'` so deep links work as SPA on GitHub Pages.
-- `paths.base` reads `BASE_PATH` at build time; the GitHub Actions workflow (`.github/workflows/deploy.yml`) sets it to `/${{ github.event.repository.name }}`.
+- `paths.base` reads `BASE_PATH` at build time; the GitHub Actions workflow (`.github/workflows/deploy.yml`) sets it to `/${{ github.event.repository.name }}`. The Space `Dockerfile` leaves it empty (root-served).
 - `kit.version.name` is the git short SHA (or `GITHUB_SHA` in CI), polled every 60s. The root layout watches `updated.current` from `$app/state` and forces a full reload on the next navigation (or when the tab is hidden) so a fresh deploy lands without users clearing cache.
-- `kit.prerender.handleMissingId: 'warn'` — Story page's TOC anchors (`#lede`, …) only render after data loads on the client, so they're absent from prerendered HTML. The warn keeps the build from failing.
+- `kit.prerender.handleMissingId: 'warn'` — some pages render in-page anchors only after data loads on the client, so they're absent from prerendered HTML. The warn keeps the build from failing.
 
 ## Svelte 5 conventions in this codebase
 
@@ -105,13 +130,17 @@ Don't move the tooltip back inside a `<th>`. If a new table needs the same behav
 
 ## Style / interaction patterns to reuse
 
-- **Per-model-type palette** (dense / cross-encoder / late-interaction / sparse / router) is repeated across the model-type filter pills, model-card chips, compare-page strips, and the Summary table's Model + Params column tints. When adding a new surface that shows model type, keep the same colors.
-- **Heat-shading on score cells** is `color-mix(in srgb, var(--primary) <pct>%, transparent)` where `<pct>` maps the 0.45–0.75 score range onto 0–55%. The same `heat()` helper is duplicated in `SummaryTable`, `PerTaskTab`, `PerLanguageTab`, and `/spreadsheet`. If you change the curve, update all four.
+- **`--tint-*` palette** is the single source of truth for category color (see Theme system above). Don't introduce parallel hex maps in new components — set `--card-tint` / `--card-accent` from the tint tokens on a parent and read those downstream.
+- **Per-model-type tint** (dense → blue, cross-encoder → orange, late-interaction → green, sparse → amber, router → purple) is mirrored across the model-type filter pills (`FilterContent`), model-card chips, model detail hero, compare-page strips, BenchmarkOverview type rows, and SummaryTable model + params column tints. Keep the mapping consistent.
+- **Per-task-type tint** (Classification → blue, Clustering → orange, PairClassification/MultilabelClassification → green, Reranking/InstructionReranking → amber/orange, Retrieval → purple, STS → pink, BitextMining → azure, Summarization → teal) is mirrored across the task index pills + chips, task detail hero, and per-task-type displays. Keep the mapping consistent.
+- **Heat-shading on score cells** is `color-mix(in srgb, var(--primary) <pct>%, transparent)` where `<pct>` maps the 0.45–0.75 score range onto 0–55%. The same `heat()` helper is duplicated in `SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `routes/models/[name]/+page.svelte`, and `routes/tasks/[name]/+page.svelte`. If you change the curve, update all five.
 - Best-in-column highlight is **bold only** (not orange) — the cell already wears its heat color.
 - The Rank column in `SummaryTable` doubles as the pin cell: pin button + rank number share one `.rank-cell` flex container. Other model-row tables put the pin button in its own 32px sticky column to the left of Model.
 
-## Mock data shape
+## Data shape
 
-- A model is a `ModelMeta` (in `src/lib/types.ts`) with `name`, `displayName`, `org`, `modelType`, params, embedding dim, max tokens, zero-shot %, etc. Display is `org/displayName` (HF style) — search matches against all three of `name`, `displayName`, `org`.
+Types in `src/lib/types.ts` match the FastAPI response schemas one-to-one (pydantic emits camelCase aliases on the backend so the TS types are unchanged).
+
+- A model is a `ModelMeta`: `name`, `displayName`, `org`, `modelType`, params, embedding dim, max tokens, zero-shot %, etc. Display is `org/displayName` (HF style) — search matches against all three of `name`, `displayName`, `org`.
 - A benchmark carries `taskTypes`, `tasks` (array of names), `languages`, `domains`, `modalities`. A summary additionally carries `tasksMeta: TaskMeta[]` (per-task type/languages/domains/modality), which the filter store uses to derive the available choices for the Customize section.
-- `buildMockSummary(benchmarkName)` is deterministic per benchmark (seeded hash) — same input always produces the same scores. Useful when comparing across tabs.
+- `buildMockSummary(benchmarkName)` is deterministic per benchmark (seeded hash) — same input always produces the same scores. Useful for offline UI work and as the basis for snapshot tests.
