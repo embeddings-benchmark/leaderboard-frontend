@@ -15,6 +15,9 @@ test-results/
 playwright-report/
 .playwright-mcp/
 
+# Per-user editor / harness state
+.claude/
+
 # Miscellaneous
 /static/
 *.png

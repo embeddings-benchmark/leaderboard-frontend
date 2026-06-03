@@ -16,8 +16,10 @@
 		"lint:style": "stylelint \"**/*.{css,svelte}\"",
 		"lint:style:fix": "stylelint --fix \"**/*.{css,svelte}\"",
 		"format": "prettier --write .",
+		"test:unit": "vitest run",
+		"test:unit:watch": "vitest",
 		"test:e2e": "playwright install && playwright test",
-		"test": "npm run test:e2e"
+		"test": "npm run test:unit && npm run test:e2e"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
