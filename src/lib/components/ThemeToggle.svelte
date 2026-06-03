@@ -36,18 +36,21 @@
 	function apply(next: Choice) {
 		choice = next;
 		const root = document.documentElement;
+		// DOM updates first — keep them out of the try block so a partitioned
+		// or sandboxed iframe (e.g. HF Spaces) where localStorage throws
+		// SecurityError still flips the theme in-session.
+		if (next === 'system') {
+			root.removeAttribute('data-theme');
+			setMeta('light dark');
+		} else {
+			root.setAttribute('data-theme', next);
+			setMeta(next);
+		}
 		try {
-			if (next === 'system') {
-				localStorage.removeItem('color-scheme');
-				root.removeAttribute('data-theme');
-				setMeta('light dark');
-			} else {
-				localStorage.setItem('color-scheme', next);
-				root.setAttribute('data-theme', next);
-				setMeta(next);
-			}
+			if (next === 'system') localStorage.removeItem('color-scheme');
+			else localStorage.setItem('color-scheme', next);
 		} catch {
-			/* localStorage may throw; the DOM updates still take effect */
+			/* iframe sandbox / private mode — choice won't persist across reloads */
 		}
 	}
 </script>

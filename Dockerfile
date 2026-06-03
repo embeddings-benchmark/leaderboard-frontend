@@ -9,7 +9,7 @@
 # branch, or the backend URL.
 
 # ---------- Stage 1: build the static bundle from a fresh clone ----------
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 
 # Backend URL the prerendered bundle will call. The HF Space hardcodes
 # the production hub URL via these defaults; pass `--build-arg
@@ -23,6 +23,13 @@ ENV PUBLIC_API_URL=${PUBLIC_API_URL} \
 
 RUN apk add --no-cache git
 WORKDIR /src
+# Cache-bust the clone whenever upstream `integration` advances. ADD on
+# an HTTP URL re-runs (and so re-invalidates every layer below) only
+# when the response body changes — the GitHub commits API returns the
+# latest SHA, so a new push automatically busts the cache. Without
+# this, Docker keys the `git clone` layer purely on the command string
+# and reuses a stale /src tree across rebuilds.
+ADD https://api.github.com/repos/embeddings-benchmark/leaderboardv2/commits/integration /tmp/integration-sha
 RUN git clone --depth=1 --branch integration \
         https://github.com/embeddings-benchmark/leaderboardv2.git .
 
