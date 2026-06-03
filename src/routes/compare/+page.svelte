@@ -3,6 +3,7 @@
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { loadBenchmarkMenu, loadModelScores, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
+	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { Data, Layout } from 'plotly.js';
 	import type { Benchmark, BenchmarkSummary, MenuEntry, SummaryRow } from '$lib/types';
 	import { isBenchmark } from '$lib/types';
@@ -803,6 +804,8 @@
 		{/if}
 	</main>
 </div>
+
+<ShareUrlButton />
 
 <style>
 	.app {

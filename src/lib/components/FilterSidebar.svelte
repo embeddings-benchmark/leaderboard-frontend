@@ -37,9 +37,9 @@
 
 <style>
 	.sidebar {
-		flex: 0 0 300px;
-		min-width: 280px;
-		max-width: 340px;
+		flex: 0 0 340px;
+		min-width: 320px;
+		max-width: 380px;
 		/* Pin to the right edge of the page when the viewport is wider
 		   than `.main`'s 1400 px max. Without this the sidebar sits
 		   immediately after `.main` (e.g. at x ≈ 1400 on a 2000 px

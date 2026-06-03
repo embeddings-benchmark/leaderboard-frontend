@@ -110,14 +110,19 @@
 		color: var(--text-muted);
 		font-size: 12px;
 	}
+	/* Horizontal scroll only — page scroll handles the y-axis, matching
+	   SummaryTable / PerTaskTab / PerLanguageTab. Previously this had
+	   a `max-height: 600px` + `overflow-y: auto` that trapped the table
+	   in an internal scrollport so the user couldn't reach the bottom
+	   without an extra inner scrollbar. */
 	.scroll {
 		overflow-x: auto;
-		max-height: 600px;
-		overflow-y: auto;
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		background: var(--surface);
 		box-shadow: var(--shadow-sm);
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior-x: contain;
 	}
 	table {
 		width: 100%;

@@ -8,6 +8,8 @@
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
+	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { slug } from '$lib/format';
 	import {
 		isBenchmark,
@@ -162,7 +164,10 @@
 				<div class="kicker">
 					<span class="type-badge" data-type={task.meta.type}>{task.meta.type}</span>
 					{#each task.meta.modalities ?? [] as m (m)}
-						<span class="badge soft">{m}</span>
+						<span class="badge soft">
+							<ModalityIcon modality={m} size={12} />
+							<span>{m}</span>
+						</span>
 					{/each}
 				</div>
 				<h1>{taskName}</h1>
@@ -291,6 +296,41 @@
 			</div>
 		</section>
 
+		{#if task.meta.isPublic !== false && task.meta.sourceDataset}
+			<!-- Embedded HuggingFace dataset viewer in a collapsible section
+			     so the (heavy) iframe doesn't push the scores below the
+			     fold for users who only came to see the leaderboard.
+			     Closed by default; `loading="lazy"` further defers the
+			     embed fetch until the section is opened and scrolled into
+			     view. Only shown for public datasets — RTEB private
+			     hold-outs and similar are skipped so we don't surface a
+			     404'ing iframe. -->
+			<details class="dataset-preview">
+				<summary>
+					<span class="preview-title">Dataset preview</span>
+					<span class="preview-source">{task.meta.sourceDataset}</span>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+					<a
+						class="ext-link"
+						href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
+						target="_blank"
+						rel="noreferrer"
+						onclick={(e) => e.stopPropagation()}
+					>
+						Open on HuggingFace →
+					</a>
+				</summary>
+				<iframe
+					src="https://huggingface.co/datasets/{task.meta.sourceDataset}/embed/viewer/default/test"
+					title="HuggingFace dataset viewer for {task.meta.sourceDataset}"
+					loading="lazy"
+					frameborder="0"
+					width="100%"
+					height="560"
+				></iframe>
+			</details>
+		{/if}
+
 		<section class="scores">
 			<header class="scores-head">
 				<h2>Model scores</h2>
@@ -314,6 +354,8 @@
 		</section>
 	{/if}
 </div>
+
+<ShareUrlButton />
 
 <style>
 	/* `.page` (1280 px centred, 18/28/56 padding) and `.breadcrumb`
@@ -449,6 +491,9 @@
 		color: var(--tint-teal-fg);
 	}
 	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 		font-size: 10px;
 		padding: 4px 9px;
 		border-radius: 999px;
@@ -635,6 +680,77 @@
 	}
 
 	/* Scores section ------------------------------------------------------- */
+	/* Collapsible HF dataset viewer. Closed state = single pill-ish
+	   summary; open state reveals the iframe. The custom chevron sits
+	   in front of the title and rotates on `[open]`, replacing the
+	   native disclosure marker. */
+	.dataset-preview {
+		margin-top: 18px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		overflow: hidden;
+	}
+	.dataset-preview > summary {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 12px 16px;
+		cursor: pointer;
+		list-style: none;
+		user-select: none;
+		font-size: 14px;
+	}
+	.dataset-preview > summary::-webkit-details-marker {
+		display: none;
+	}
+	.dataset-preview > summary::before {
+		content: '';
+		width: 0;
+		height: 0;
+		border-top: 5px solid transparent;
+		border-bottom: 5px solid transparent;
+		border-left: 6px solid var(--text-muted);
+		transition: transform 0.16s cubic-bezier(0.6, 0.1, 0.2, 1);
+		transform-origin: 25% 50%;
+	}
+	.dataset-preview[open] > summary::before {
+		transform: rotate(90deg);
+	}
+	.dataset-preview > summary:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: -2px;
+		border-radius: 12px;
+	}
+	.preview-title {
+		font-weight: 700;
+		color: var(--ink-strong);
+	}
+	.preview-source {
+		flex: 1;
+		min-width: 0;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.ext-link {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--link);
+		text-decoration: none;
+	}
+	.ext-link:hover {
+		text-decoration: underline;
+	}
+	.dataset-preview iframe {
+		display: block;
+		border: 0;
+		border-top: 1px solid var(--border);
+	}
+
 	.scores {
 		margin-top: 24px;
 	}

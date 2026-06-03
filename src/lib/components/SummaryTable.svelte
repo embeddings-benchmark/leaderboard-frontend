@@ -11,16 +11,23 @@
 		heat,
 		humanizeType,
 		maxOf,
+		minOf,
 		nextSort,
-		sortIcon as sortIconFor
+		sortIcon as sortIconFor,
+		worstPerColumn
 	} from '$lib/format';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import MarkdownText from './MarkdownText.svelte';
 
 	const INFO = {
 		rank: {
 			title: 'Rank (Borda)',
 			text: 'Rank is computed via the Borda count: each task votes for models by their relative performance. The model with the most votes across tasks gets the highest rank. Borda tends to reward consistent breadth over single peaks.'
+		},
+		model: {
+			title: 'Model',
+			text: 'Missing results — the model may not have been run on the tasks in the benchmark. We only display models that have been run on at least one task. To submit results, see the [submitting results guide](https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/).'
 		},
 		zeroShot: {
 			title: 'Zero-shot %',
@@ -28,7 +35,7 @@
 		},
 		totalParams: {
 			title: 'Total parameters',
-			text: 'Total parameter count including embedding weights, in billions. Higher means more CPU/GPU memory required.'
+			text: 'Total parameter count including embedding weights. Higher means more CPU/GPU memory required.'
 		},
 		embedding: {
 			title: 'Embedding dimension',
@@ -55,6 +62,27 @@
 			text: "Average score across the benchmark's private (held-out) task subset — datasets the benchmark keeps closed to discourage training-set contamination. Recomputed live with filters."
 		}
 	} as const;
+
+	// Short explanations for the per-task-type columns. Surfaced on
+	// column-header hover so users skimming the table know what each
+	// score is measuring without leaving the page.
+	const TASK_TYPE_INFO: Record<string, string> = {
+		Classification: 'Classify text into pre-defined labels (sentiment, topic, intent, …).',
+		Clustering:
+			'Group similar texts together without supervision; scored by cluster quality vs gold labels.',
+		PairClassification:
+			'Predict a relation between two texts — e.g. paraphrase yes/no, entailment.',
+		MultilabelClassification: 'Assign one or more labels per text from a fixed vocabulary.',
+		Reranking: 'Re-order a candidate list relative to a query; measures top-K ordering quality.',
+		InstructionReranking:
+			'Rerank candidates according to a free-form natural-language instruction supplied with the query.',
+		Retrieval: 'Find the most relevant documents for a query out of a large corpus.',
+		STS: 'Rate the semantic similarity between two texts on a continuous scale.',
+		BitextMining:
+			'Pair sentences across two languages that carry the same meaning (translation alignment).',
+		Summarization:
+			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.'
+	};
 
 	interface Props {
 		summary: BenchmarkSummary;
@@ -161,8 +189,13 @@
 	let best = $derived(
 		bestPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
 	);
+	let worst = $derived(
+		worstPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
+	);
 	let bestMeanTask = $derived(maxOf(summary.rows.map((r) => r.meanTask)));
+	let worstMeanTask = $derived(minOf(summary.rows.map((r) => r.meanTask)));
 	let bestMeanTaskType = $derived(maxOf(summary.rows.map((r) => r.meanTaskType)));
+	let worstMeanTaskType = $derived(minOf(summary.rows.map((r) => r.meanTaskType)));
 	// Column visibility is declarative — `summary.aggregations` lists exactly
 	// which mean columns belong on this benchmark's leaderboard. Avoids
 	// inferring from the score data (which led to ViDoRe showing an empty
@@ -211,7 +244,9 @@
 		return meanOver(row, privateTaskNames);
 	}
 	let bestMeanPublic = $derived(maxOf(summary.rows.map(liveMeanPublic)));
+	let worstMeanPublic = $derived(minOf(summary.rows.map(liveMeanPublic)));
 	let bestMeanPrivate = $derived(maxOf(summary.rows.map(liveMeanPrivate)));
+	let worstMeanPrivate = $derived(minOf(summary.rows.map(liveMeanPrivate)));
 
 	function isBestScore(row: SummaryRow, taskType: string): boolean {
 		return row.scoresByTaskType[taskType] === best[taskType];
@@ -249,7 +284,26 @@
 		y: 0
 	});
 
+	// Tooltip is `position: fixed; transform: translate(-50%, …)` so x is
+	// the desired *centre*. Clamp it to the viewport with a half-width
+	// margin so the bubble can't spill off either edge — Rank/leftmost
+	// columns previously got the left half cut off; the same logic helps
+	// rightmost task-type columns on narrow screens.
+	const TIP_MAX_WIDTH = 340;
+	const TIP_EDGE = 8;
+	function clampTipX(rawX: number): number {
+		if (typeof window === 'undefined') return rawX;
+		const half = TIP_MAX_WIDTH / 2;
+		const min = TIP_EDGE + half;
+		const max = window.innerWidth - TIP_EDGE - half;
+		// On very narrow viewports (< TIP_MAX_WIDTH) min > max; centre on the
+		// viewport in that case rather than letting min clobber max.
+		if (min > max) return window.innerWidth / 2;
+		return Math.min(max, Math.max(min, rawX));
+	}
+
 	function showTip(e: PointerEvent | FocusEvent) {
+		cancelHide();
 		const cell = e.currentTarget as HTMLElement;
 		const title = cell.dataset.tipTitle ?? '';
 		const text = cell.dataset.tip ?? '';
@@ -261,12 +315,13 @@
 			title,
 			text,
 			rows: [],
-			x: r.left + r.width / 2,
+			x: clampTipX(r.left + r.width / 2),
 			y: r.bottom
 		};
 	}
 
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
+		cancelHide();
 		const cell = e.currentTarget as HTMLElement;
 		const r = cell.getBoundingClientRect();
 		const activeParamsLabel = row.activeParamsB
@@ -278,11 +333,11 @@
 			{ k: 'Zero-shot', v: fmtZeroShot(row.zeroShotPct) },
 			{
 				k: 'Embedding dim',
-				v: row.embeddingDim ? `${row.embeddingDim.toLocaleString()} d` : '—'
+				v: row.embeddingDim ? row.embeddingDim.toLocaleString() : '—'
 			},
 			{
 				k: 'Max tokens',
-				v: row.maxTokens ? `${row.maxTokens.toLocaleString()} tok` : '—'
+				v: row.maxTokens ? row.maxTokens.toLocaleString() : '—'
 			},
 			{ k: 'Released', v: row.model.releaseDate ?? '—' }
 		];
@@ -292,13 +347,32 @@
 			title: row.model.displayName,
 			text: '',
 			rows,
-			x: r.left + r.width / 2,
+			x: clampTipX(r.left + r.width / 2),
 			y: r.bottom
 		};
 	}
 
+	// Hiding is debounced so the user can cross the 6 px gap between the
+	// cell and the portal without the tip vanishing mid-traverse. The
+	// portal's own pointerenter cancels the pending timer; pointerleave
+	// re-arms it.
+	let hideTimer: ReturnType<typeof setTimeout> | null = null;
+	const HIDE_DELAY_MS = 200;
+	function cancelHide() {
+		if (hideTimer !== null) {
+			clearTimeout(hideTimer);
+			hideTimer = null;
+		}
+	}
 	function hideTip() {
-		tipState = { ...tipState, visible: false };
+		cancelHide();
+		hideTimer = setTimeout(() => {
+			tipState = { ...tipState, visible: false };
+			hideTimer = null;
+		}, HIDE_DELAY_MS);
+	}
+	function keepTip() {
+		cancelHide();
 	}
 </script>
 
@@ -322,7 +396,16 @@
 							<span class="ind" class:on={sortKey === 'rank'}>{sortIcon('rank') || '↕'}</span>
 						</button>
 					</th>
-					<th class="sticky-model" aria-sort={ariaSort('model')}>
+					<th
+						class="sticky-model"
+						aria-sort={ariaSort('model')}
+						data-tip-title={INFO.model.title}
+						data-tip={INFO.model.text}
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+					>
 						<button class="sort-btn" onclick={() => clickSort('model')}>
 							<span>Model</span>
 							<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model') || '↕'}</span>
@@ -422,7 +505,17 @@
 					{#if showTaskTypes}
 						{#each sortedTaskTypes as tt (tt)}
 							{@const k = `tt:${tt}` as SortKey}
-							<th class="tbl-num" aria-sort={ariaSort(k)}>
+							{@const desc = TASK_TYPE_INFO[tt]}
+							<th
+								class="tbl-num"
+								aria-sort={ariaSort(k)}
+								data-tip-title={desc ? humanizeType(tt) : ''}
+								data-tip={desc ?? ''}
+								onpointerenter={desc ? showTip : undefined}
+								onpointerleave={desc ? hideTip : undefined}
+								onfocusin={desc ? showTip : undefined}
+								onfocusout={desc ? hideTip : undefined}
+							>
 								<button class="sort-btn tbl-num" onclick={() => clickSort(k)}>
 									<span>{humanizeType(tt)}</span>
 									<span class="ind" class:on={sortKey === k}>{sortIcon(k) || '↕'}</span>
@@ -496,7 +589,7 @@
 							<td
 								class="tbl-num"
 								class:tbl-best={row.meanTask === bestMeanTask}
-								style={heat(row.meanTask, bestMeanTask)}
+								style={heat(row.meanTask, worstMeanTask, bestMeanTask)}
 							>
 								{fmtPct(row.meanTask)}
 							</td>
@@ -505,7 +598,7 @@
 							<td
 								class="tbl-num"
 								class:tbl-best={row.meanTaskType === bestMeanTaskType}
-								style={heat(row.meanTaskType, bestMeanTaskType)}
+								style={heat(row.meanTaskType, worstMeanTaskType, bestMeanTaskType)}
 							>
 								{fmtPct(row.meanTaskType)}
 							</td>
@@ -516,14 +609,14 @@
 							<td
 								class="tbl-num"
 								class:tbl-best={mp != null && mp === bestMeanPublic}
-								style={heat(mp, bestMeanPublic)}
+								style={heat(mp, worstMeanPublic, bestMeanPublic)}
 							>
 								{fmtPct(mp)}
 							</td>
 							<td
 								class="tbl-num"
 								class:tbl-best={mpr != null && mpr === bestMeanPrivate}
-								style={heat(mpr, bestMeanPrivate)}
+								style={heat(mpr, worstMeanPrivate, bestMeanPrivate)}
 							>
 								{fmtPct(mpr)}
 							</td>
@@ -533,7 +626,7 @@
 								<td
 									class="tbl-num"
 									class:tbl-best={isBestScore(row, tt)}
-									style={heat(row.scoresByTaskType[tt], best[tt])}
+									style={heat(row.scoresByTaskType[tt], worst[tt], best[tt])}
 								>
 									{row.scoresByTaskType[tt] !== undefined ? fmtPct(row.scoresByTaskType[tt]) : ''}
 								</td>
@@ -546,10 +639,21 @@
 	</div>
 
 	{#if tipState.visible}
-		<div class="tip-portal" role="tooltip" style:left="{tipState.x}px" style:top="{tipState.y}px">
+		<!-- pointer-events: auto lets the user click any [link](url) we slip
+		     into the col-tip body. The cell's onpointerleave still fires on
+		     exit because the tip is offset 6 px below the cell, so the
+		     cursor crosses through empty space and triggers hideTip(). -->
+		<div
+			class="tip-portal"
+			role="tooltip"
+			style:left="{tipState.x}px"
+			style:top="{tipState.y}px"
+			onpointerenter={keepTip}
+			onpointerleave={hideTip}
+		>
 			{#if tipState.title}<strong class="tip-portal-title">{tipState.title}</strong>{/if}
 			{#if tipState.kind === 'col'}
-				<span class="tip-portal-body">{tipState.text}</span>
+				<span class="tip-portal-body"><MarkdownText text={tipState.text} /></span>
 			{:else}
 				<dl class="tip-portal-dl">
 					{#each tipState.rows as r (r.k)}
@@ -575,13 +679,17 @@
 	   any sticky <th>'s stacking context. position:fixed with JS coordinates. */
 	.tip-portal {
 		position: fixed;
-		transform: translate(-50%, 6px);
+		transform: translate(-50%, 0);
 		min-width: 220px;
 		max-width: 340px;
-		padding: 10px 12px;
+		/* Top padding includes the 6 px visual gap so the hit area is
+		   contiguous with the cell — no dead zone to traverse on the way
+		   to a clickable link inside the tip. */
+		padding: 16px 12px 10px;
 		background: #1f2329;
 		color: #f1f3f5;
 		border-radius: 8px;
+		background-clip: padding-box;
 		font-size: 12px;
 		font-weight: 400;
 		font-family: var(--font-sans);
@@ -592,18 +700,12 @@
 		z-index: 1000;
 		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
 		white-space: normal;
-		pointer-events: none;
+		pointer-events: auto;
 	}
-	.tip-portal::before {
-		content: '';
-		position: absolute;
-		top: -4px;
-		left: 50%;
-		transform: translateX(-50%) rotate(45deg);
-		width: 8px;
-		height: 8px;
-		background: #1f2329;
-	}
+	/* Tip arrow removed: the portal now butts against the cell with no
+	   gap (top padding absorbs the visual breathing room), and a
+	   horizontally-clamped tip wouldn't line up with the cell centre
+	   anyway. */
 	.tip-portal-title {
 		display: block;
 		font-size: 11px;

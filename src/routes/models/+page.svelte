@@ -3,7 +3,10 @@
 	import { loadModels } from '$lib/data/service';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
+	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
+	import ModelTypeIcon from '$lib/components/ModelTypeIcon.svelte';
+	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { ModelMeta } from '$lib/types';
 	import { slug, fmtInt } from '$lib/format';
 
@@ -126,6 +129,11 @@
 					href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_model/"
 					target="_blank"
 					rel="noreferrer">contributor guide</a
+				>. Already have scores? Read the
+				<a
+					href="https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/"
+					target="_blank"
+					rel="noreferrer">submitting results guide</a
 				>.
 			</p>
 		</header>
@@ -178,7 +186,10 @@
 									<span class="org">{m.org}</span><span class="sep">/</span>{m.displayName}
 								</span>
 							</div>
-							<span class="type-chip" data-type={m.modelType}>{m.modelType}</span>
+							<span class="type-chip" data-type={m.modelType}>
+								<ModelTypeIcon type={m.modelType} size={12} />
+								<span>{m.modelType}</span>
+							</span>
 						</div>
 						<dl class="stats">
 							<div>
@@ -209,6 +220,16 @@
 								<span class="badge soft">ST compatible</span>
 							{/if}
 						</div>
+						{#if m.modalities && m.modalities.length > 0}
+							<div class="modality-row" aria-label="Supported modalities">
+								{#each m.modalities as mod (mod)}
+									<span class="mod-chip modality-tint" data-modality={mod} title={mod}>
+										<ModalityIcon modality={mod} size={12} />
+										<span class="mod-label">{mod}</span>
+									</span>
+								{/each}
+							</div>
+						{/if}
 					</a>
 				{/each}
 			</div>
@@ -217,6 +238,8 @@
 
 	<FilterSidebar hideScope flatModel />
 </div>
+
+<ShareUrlButton />
 
 <style>
 	.app {
@@ -349,6 +372,31 @@
 		flex: 1;
 		min-width: 0;
 	}
+	/* Bottom-of-card modality strip: small color-keyed chips that read
+	   "the model can encode <icon> text / image / audio / video". Sits
+	   below the open-weights / instruction-tuned badges so the card
+	   reads top-to-bottom as identity → stats → capability → modality. */
+	.modality-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-top: 6px;
+	}
+	/* Geometry only — per-modality tint comes from `.modality-tint` in
+	   src/app.css, shared with the /models/[name] hero badges. */
+	.mod-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 8px;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		border-radius: 999px;
+	}
+	.mod-label {
+		text-transform: lowercase;
+	}
 	.title {
 		display: block;
 		font-size: 14px;
@@ -404,6 +452,9 @@
 
 	.type-chip {
 		flex: 0 0 auto;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 		font-size: 10px;
 		font-weight: 600;
 		letter-spacing: 0.02em;

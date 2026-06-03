@@ -6,6 +6,9 @@
 	import BenchScoreTable, { type BenchScore } from '$lib/components/BenchScoreTable.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
+	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ModelTypeIcon from '$lib/components/ModelTypeIcon.svelte';
+	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { fmtInt, fmtParamsUnit, fmtParamsValue, slug } from '$lib/format';
 
@@ -149,7 +152,10 @@
 		<section class="hero card" data-type={model.modelType}>
 			<div class="hero-left">
 				<div class="kicker">
-					<span class="type-badge" data-type={model.modelType}>{model.modelType}</span>
+					<span class="type-badge" data-type={model.modelType}>
+						<ModelTypeIcon type={model.modelType} size={12} />
+						<span>{model.modelType}</span>
+					</span>
 					<span class="badge" class:open={model.openWeights}>
 						{model.openWeights ? 'Open weights' : 'Proprietary'}
 					</span>
@@ -159,6 +165,12 @@
 					{#if model.sentenceTransformersCompatible}
 						<span class="badge soft">ST compatible</span>
 					{/if}
+					{#each model.modalities ?? [] as mod (mod)}
+						<span class="badge modality-tint" data-modality={mod} title={mod}>
+							<ModalityIcon modality={mod} size={12} />
+							<span>{mod}</span>
+						</span>
+					{/each}
 				</div>
 				<h1>
 					<span class="org">{model.org}</span><span class="sl">/</span>{model.displayName}
@@ -258,20 +270,65 @@
 						</div>
 					{/if}
 					{#if model.trainingDatasets && model.trainingDatasets.length > 0}
+						{@const PREVIEW = 8}
+						{@const datasets = model.trainingDatasets}
+						{@const previewed = datasets.slice(0, PREVIEW)}
+						{@const hidden = datasets.length - previewed.length}
 						<div class="row">
 							<dt>Trained on</dt>
 							<dd>
-								<span class="chips">
-									{#each model.trainingDatasets as ds (ds)}
-										{#if mtebTaskNames.has(ds)}
-											<a class="chip chip-link" href={resolve('/tasks/[name]', { name: slug(ds) })}
-												>{ds}</a
-											>
-										{:else}
-											<span class="chip">{ds}</span>
-										{/if}
-									{/each}
-								</span>
+								{#if hidden <= 0}
+									<span class="chips">
+										{#each datasets as ds (ds)}
+											{#if mtebTaskNames.has(ds)}
+												<a
+													class="chip chip-link"
+													href={resolve('/tasks/[name]', { name: slug(ds) })}>{ds}</a
+												>
+											{:else}
+												<span class="chip">{ds}</span>
+											{/if}
+										{/each}
+									</span>
+								{:else}
+									<!-- Long lists fold into a <details>. Closed state shows the
+									     first N chips with a "+M more" pill so the reader still
+									     sees a representative sample; opening flips that pill to
+									     "Show fewer" and renders the full set. -->
+									<details class="trained-on">
+										<summary>
+											<span class="chips">
+												{#each previewed as ds (ds)}
+													{#if mtebTaskNames.has(ds)}
+														<a
+															class="chip chip-link"
+															href={resolve('/tasks/[name]', { name: slug(ds) })}
+															onclick={(e) => e.stopPropagation()}
+														>
+															{ds}
+														</a>
+													{:else}
+														<span class="chip">{ds}</span>
+													{/if}
+												{/each}
+												<span class="chip more-toggle more-collapsed">+{hidden} more</span>
+												<span class="chip more-toggle more-expanded">Show fewer</span>
+											</span>
+										</summary>
+										<span class="chips chips-rest">
+											{#each datasets.slice(PREVIEW) as ds (ds)}
+												{#if mtebTaskNames.has(ds)}
+													<a
+														class="chip chip-link"
+														href={resolve('/tasks/[name]', { name: slug(ds) })}>{ds}</a
+													>
+												{:else}
+													<span class="chip">{ds}</span>
+												{/if}
+											{/each}
+										</span>
+									</details>
+								{/if}
 							</dd>
 						</div>
 					{/if}
@@ -339,6 +396,8 @@
 		</section>
 	{/if}
 </div>
+
+<ShareUrlButton />
 
 <style>
 	/* `.page` (1280 px centred, 18/28/56 padding) and `.breadcrumb`
@@ -434,6 +493,9 @@
 		margin-bottom: 12px;
 	}
 	.type-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 		font-size: 11px;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
@@ -462,6 +524,9 @@
 		color: var(--tint-purple-fg);
 	}
 	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 		font-size: 10px;
 		padding: 4px 9px;
 		border-radius: 999px;
@@ -476,6 +541,8 @@
 		background: var(--surface-muted);
 		color: var(--text-muted);
 	}
+	/* `.modality-tint[data-modality='…']` is defined in src/app.css and
+	   shared with the /models index card. Local class kept geometry-only. */
 
 	.hero h1 {
 		font-size: 28px;
@@ -597,6 +664,43 @@
 	}
 	.spec-list .chip-link:hover {
 		background: color-mix(in srgb, var(--link) 10%, var(--surface));
+	}
+	/* Trained-on fold-out: <summary> carries the preview chips + a
+	   pill-styled "+N more" toggle; the matching "Show fewer" pill
+	   becomes visible only while the <details> is open. The native
+	   disclosure triangle is suppressed so the chip row reads as a
+	   single visual unit. */
+	.trained-on summary {
+		list-style: none;
+		cursor: pointer;
+	}
+	.trained-on summary::-webkit-details-marker {
+		display: none;
+	}
+	.trained-on summary:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+		border-radius: 4px;
+	}
+	.trained-on .more-toggle {
+		font-family: var(--font-sans);
+		color: var(--link);
+		border-color: color-mix(in srgb, var(--link) 40%, var(--border));
+		background: color-mix(in srgb, var(--link) 8%, var(--surface));
+		cursor: pointer;
+		user-select: none;
+	}
+	.trained-on .more-expanded {
+		display: none;
+	}
+	.trained-on[open] .more-collapsed {
+		display: none;
+	}
+	.trained-on[open] .more-expanded {
+		display: inline-block;
+	}
+	.trained-on .chips-rest {
+		margin-top: 4px;
 	}
 	.spec-list .model-link {
 		font-family: var(--font-mono);

@@ -26,6 +26,7 @@
 		fmtPct,
 		heat,
 		maxOf,
+		minOf,
 		nextSort,
 		slug,
 		sortIcon as sortIconFor
@@ -82,7 +83,9 @@
 
 	// Heat scales per-column — strongest value gets full tint.
 	let bestMeanTask = $derived(maxOf(rows.map((r) => r.meanTask)));
+	let worstMeanTask = $derived(minOf(rows.map((r) => r.meanTask)));
 	let bestMeanTaskType = $derived(maxOf(rows.map((r) => r.meanTaskType)));
+	let worstMeanTaskType = $derived(minOf(rows.map((r) => r.meanTaskType)));
 
 	function fmtZeroShot(p: number): string {
 		return p === -1 ? '⚠️ NA' : `${p}%`;
@@ -152,8 +155,10 @@
 						<span class="rank-pill" class:top={s.rank === 1}>#{s.rank}</span>
 						<span class="rank-total">/ {s.totalModels}</span>
 					</td>
-					<td class="tbl-num" style={heat(s.meanTask, bestMeanTask)}>{fmtPct(s.meanTask)}</td>
-					<td class="tbl-num" style={heat(s.meanTaskType, bestMeanTaskType)}>
+					<td class="tbl-num" style={heat(s.meanTask, worstMeanTask, bestMeanTask)}
+						>{fmtPct(s.meanTask)}</td
+					>
+					<td class="tbl-num" style={heat(s.meanTaskType, worstMeanTaskType, bestMeanTaskType)}>
 						{fmtPct(s.meanTaskType)}
 					</td>
 					<td class="tbl-num">{fmtZeroShot(s.zeroShotPct)}</td>

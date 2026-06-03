@@ -215,6 +215,35 @@ code {
 	color: var(--text-subtle);
 }
 
+/* Per-modality tint utility. Any element bearing both `.modality-tint`
+   and `data-modality="<text|image|audio|video>"` picks up the canonical
+   per-modality background + foreground from the shared --tint-* palette
+   (so light / dark variants come for free). Consumers own the
+   geometry (padding, border-radius, font-size) — this utility only
+   sets the colour pair, mirroring the way model-type tints work on
+   SummaryTable's sticky columns. Unknown modalities fall through to
+   the neutral surface-muted tint. */
+.modality-tint {
+	background: var(--surface-muted);
+	color: var(--text-muted);
+}
+.modality-tint[data-modality='text'] {
+	background: var(--tint-teal);
+	color: var(--tint-teal-fg);
+}
+.modality-tint[data-modality='image'] {
+	background: var(--tint-blue);
+	color: var(--tint-blue-fg);
+}
+.modality-tint[data-modality='audio'] {
+	background: var(--tint-amber);
+	color: var(--tint-amber-fg);
+}
+.modality-tint[data-modality='video'] {
+	background: var(--tint-purple);
+	color: var(--tint-purple-fg);
+}
+
 /* Hero lead paragraph used by every top-level index hero (/, /tasks,
    /models, /benchmarks). Pages override font-size where they want a
    larger / smaller block. */

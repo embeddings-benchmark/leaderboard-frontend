@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { loadBenchmarkMenu } from '$lib/data/service';
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
-	import { apiUrl, isIconUrl, slug } from '$lib/format';
+	import CopyableId from '$lib/components/CopyableId.svelte';
+	import { apiUrl, fmtCompact, isIconUrl, slug } from '$lib/format';
 
 	let menu = $state<MenuEntry[]>([]);
 	let loading = $state(true);
@@ -64,27 +66,48 @@
 			{/if}
 			<div class="card-titles">
 				<span class="card-name">{b.displayName}</span>
-				{#if b.name !== b.displayName}
-					<code class="card-id" title={b.name}>{b.name}</code>
-				{/if}
+				<CopyableId value={b.name} ariaLabel="Copy benchmark id" />
 			</div>
 		</div>
 		<p class="card-desc"><MarkdownText text={b.description} /></p>
 		<div class="card-foot">
 			{#if b.newVersion && b.newVersion.length > 0}
-				<div class="newer-note" title="A newer version of this benchmark is available">
+				<!-- Whole note is clickable; navigates to the first newer version.
+				     Nested inside the card's outer <a>, so this is a <button>
+				     with stopPropagation to keep the card link from firing too. -->
+				<button
+					type="button"
+					class="newer-note"
+					title="Open {b.newVersion[0]}"
+					onclick={(e) => {
+						e.stopPropagation();
+						e.preventDefault();
+						goto(resolve('/benchmark/[name]', { name: slug(b.newVersion![0]) }));
+					}}
+				>
 					<span class="newer-label">Newer version</span>
 					{#each b.newVersion as nv (nv)}
 						<code class="newer-link">{nv}</code>
 					{/each}
-				</div>
+				</button>
 			{/if}
 			<div class="stats-line">
-				<span><strong>{b.tasks.length}</strong> tasks</span>
+				{#if b.numModels && b.numModels > 0}
+					<span title="{b.numModels} models"><strong>{fmtCompact(b.numModels)}</strong> models</span
+					>
+					<span class="dot">·</span>
+				{/if}
+				<span title="{b.tasks.length} tasks"
+					><strong>{fmtCompact(b.tasks.length)}</strong> tasks</span
+				>
 				<span class="dot">·</span>
-				<span><strong>{b.languages.length}</strong> langs</span>
+				<span title="{b.languages.length} languages"
+					><strong>{fmtCompact(b.languages.length)}</strong> langs</span
+				>
 				<span class="dot">·</span>
-				<span><strong>{b.taskTypes.length}</strong> types</span>
+				<span title="{b.taskTypes.length} task types"
+					><strong>{fmtCompact(b.taskTypes.length)}</strong> types</span
+				>
 			</div>
 			<span class="cta">Open leaderboard →</span>
 		</div>
@@ -258,8 +281,17 @@
 	}
 	.card-head {
 		display: flex;
-		align-items: center;
+		/* Align the icon to the top so it sits next to the display-name
+		   row rather than vertically centring between the name and the
+		   id pill below it. */
+		align-items: flex-start;
 		gap: 10px;
+	}
+	.card-head .card-icon {
+		/* Nudge the 28 px icon down by the difference between line-box
+		   height of the 15 px display name and the icon, so its centre
+		   lines up with the name's baseline-cap region. */
+		margin-top: 1px;
 	}
 	.card-icon {
 		width: 28px;
@@ -279,7 +311,8 @@
 	.card-titles {
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
+		align-items: flex-start;
+		gap: 4px;
 		min-width: 0;
 		flex: 1;
 	}
@@ -287,14 +320,6 @@
 		font-size: 15px;
 		font-weight: 700;
 		letter-spacing: -0.005em;
-	}
-	.card-id {
-		font-family: var(--font-mono);
-		font-size: 11px;
-		color: var(--text-subtle);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 	.card-desc {
 		font-size: 13px;
@@ -324,6 +349,20 @@
 		font-size: 11px;
 		color: var(--primary-strong);
 		align-self: flex-start;
+		cursor: pointer;
+		text-align: left;
+		font-family: inherit;
+		transition:
+			background 0.12s,
+			border-color 0.12s;
+	}
+	.newer-note:hover {
+		background: color-mix(in srgb, var(--primary) 18%, var(--surface));
+		border-color: var(--primary);
+	}
+	.newer-note:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
 	}
 	.newer-label {
 		font-weight: 700;
@@ -342,10 +381,17 @@
 	.stats-line {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		column-gap: 4px;
+		row-gap: 2px;
 		align-items: baseline;
-		font-size: 12px;
+		font-size: 11.5px;
 		color: var(--text-muted);
+	}
+	/* Keep each "<N> label" chunk together — only the separator dots
+	   are allowed to land at line-break candidates, so wrapping (if it
+	   happens on a very narrow viewport) splits cleanly. */
+	.stats-line > span:not(.dot) {
+		white-space: nowrap;
 	}
 	.stats-line strong {
 		color: var(--text);

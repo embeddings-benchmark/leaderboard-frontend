@@ -9,7 +9,8 @@
 		defaultDirFor,
 		heat,
 		nextSort,
-		sortIcon as sortIconFor
+		sortIcon as sortIconFor,
+		worstPerColumn
 	} from '$lib/format';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 
@@ -63,6 +64,7 @@
 	// here keeps it stable as the user filters the task set.
 	let sortedTasks = $derived([...summary.tasks].sort((a, b) => a.localeCompare(b)));
 	let best = $derived(bestPerColumn(sortedTasks, summary.rows, (r, t) => r.scoresByTask[t]));
+	let worst = $derived(worstPerColumn(sortedTasks, summary.rows, (r, t) => r.scoresByTask[t]));
 
 	let sortedRows = $derived.by(() => {
 		let rows = summary.rows;
@@ -175,7 +177,7 @@
 								<td
 									class="tbl-num"
 									class:tbl-best={row.scoresByTask[task] === best[task]}
-									style={heat(row.scoresByTask[task], best[task])}
+									style={heat(row.scoresByTask[task], worst[task], best[task])}
 								>
 									{fmt(row.scoresByTask[task])}
 								</td>

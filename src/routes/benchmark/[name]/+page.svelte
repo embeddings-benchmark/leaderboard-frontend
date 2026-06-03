@@ -8,6 +8,8 @@
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
+	import CopyableId from '$lib/components/CopyableId.svelte';
+	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import { apiUrl, isIconUrl } from '$lib/format';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
@@ -21,7 +23,6 @@
 	import PerTaskTab from '$lib/components/PerTaskTab.svelte';
 	import PerLanguageTab from '$lib/components/PerLanguageTab.svelte';
 	import TaskInfoTab from '$lib/components/TaskInfoTab.svelte';
-	import FAQ from '$lib/components/FAQ.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.name ?? ''));
 	let benchmark = $derived(
@@ -204,10 +205,10 @@
 								<span class="hero-icon hero-icon-text" aria-hidden="true">{benchmark.icon}</span>
 							{/if}
 						{/if}
-						<h1>{benchmark.displayName}</h1>
-						{#if benchmark.name !== benchmark.displayName}
-							<code class="benchmark-id" title={benchmark.name}>{benchmark.name}</code>
-						{/if}
+						<div class="title-text">
+							<h1>{benchmark.displayName}</h1>
+							<CopyableId value={benchmark.name} ariaLabel="Copy benchmark id" />
+						</div>
 					</div>
 					<p class="desc"><MarkdownText text={benchmark.description} /></p>
 					{#if benchmark.reference}
@@ -277,7 +278,6 @@
 					{#if visited.has('summary')}
 						<div class="tab-pane" class:active={activeTab === 'summary'}>
 							<SummaryTable summary={filteredSummary} />
-							<FAQ />
 						</div>
 					{/if}
 					{#if visited.has('perf_size')}
@@ -312,6 +312,8 @@
 
 	<FilterSidebar />
 </div>
+
+<ShareUrlButton />
 
 <style>
 	.app {
@@ -355,10 +357,21 @@
 	}
 	.title-block {
 		display: flex;
-		align-items: center;
+		/* Top-align so the hero icon sits next to the h1's row, not
+		   vertically centred between the h1 and the id pill below it. */
+		align-items: flex-start;
 		flex-wrap: wrap;
 		gap: 10px;
 		margin-bottom: 8px;
+	}
+	/* Stack the display name and the id pill vertically so the pill
+	   sits *under* the name instead of being centred beside it. */
+	.title-text {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+		min-width: 0;
 	}
 	.hero-icon {
 		width: 32px;
@@ -382,17 +395,6 @@
 		line-height: 1.1;
 		margin: 0;
 		color: var(--ink-strong);
-	}
-	.benchmark-id {
-		font-family: var(--font-mono);
-		font-size: 11.5px;
-		font-weight: 500;
-		color: var(--text-muted);
-		padding: 3px 8px 2px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		letter-spacing: 0.01em;
 	}
 	.desc {
 		color: var(--text-muted);

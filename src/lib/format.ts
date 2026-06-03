@@ -57,6 +57,20 @@ export function fmtInt(n: number | null | undefined): string {
 }
 
 /**
+ * Compact integer formatting for dense UI strips: 1234 → "1.2k", 1000000 → "1M".
+ * Falsy values render as ``'0'`` (callers usually guard with a length check
+ * before showing the stat at all). Used by the benchmark cards' stats-line
+ * so massive multilingual benchmarks (1000+ languages, 300+ models) still
+ * fit on one row without forcing the layout to wrap.
+ */
+const COMPACT_FMT = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+export function fmtCompact(n: number | null | undefined): string {
+	if (!n) return '0';
+	if (n < 1000) return n.toString();
+	return COMPACT_FMT.format(n);
+}
+
+/**
  * Split a parameter count (in billions) into a value + unit pair, so
  * tables can right-align the number and left-align the unit. ``0`` →
  * ``("—", "")``; ``≥1`` keeps billions; ``<1`` switches to millions.
@@ -115,17 +129,20 @@ export function hasValue(s: string): boolean {
 
 /**
  * Heat-shading background for a score cell, normalised against the
- * column's maximum. The strongest cell in a column gets ~55 % primary
- * tint; cells scale down linearly toward 0 % at zero. Pass the column
- * max as the second argument (different per column — the previous
- * absolute 0.45–0.75 threshold left columns with low ceilings looking
- * washed out and columns with very high ceilings reading uniformly
- * red). ``null``/``undefined`` score or non-positive max yields an
- * empty string (no inline style).
+ * column's own [min, max] range. The strongest cell in a column gets
+ * ~55 % primary tint; the weakest gets 0 %. Mapping from min instead
+ * of an absolute zero amplifies the difference inside columns where
+ * every score clusters tightly (e.g. all between 0.70 and 0.78) —
+ * before this change those columns rendered as one near-uniform
+ * shade. Pass both bounds; ``null``/``undefined`` score, a non-finite
+ * bound, or a degenerate range (max ≤ min, e.g. one row in the
+ * column) all yield an empty string (no inline style).
  */
-export function heat(score: number | null | undefined, max: number): string {
-	if (score == null || !Number.isFinite(max) || max <= 0) return '';
-	const ratio = Math.max(0, Math.min(1, score / max));
+export function heat(score: number | null | undefined, min: number, max: number): string {
+	if (score == null) return '';
+	if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
+	if (max <= min) return '';
+	const ratio = Math.max(0, Math.min(1, (score - min) / (max - min)));
 	const pct = Math.round(ratio * 55);
 	if (pct === 0) return '';
 	return `background-color: color-mix(in srgb, var(--primary) ${pct}%, transparent);`;
@@ -153,6 +170,17 @@ export function maxOf(vs: readonly (number | null | undefined)[]): number {
 }
 
 /**
+ * Min numeric value in an array that may include ``null`` / ``undefined``.
+ * Returns ``0`` when no numbers are present. The matching ``heat``
+ * helper short-circuits when min ≥ max, so degenerate inputs render
+ * as un-tinted cells.
+ */
+export function minOf(vs: readonly (number | null | undefined)[]): number {
+	const nums = vs.filter((v): v is number => typeof v === 'number');
+	return nums.length === 0 ? 0 : Math.min(...nums);
+}
+
+/**
  * For every key in ``keys``, the max value across ``rows`` looked up
  * via ``getValue``. Used by leaderboard tables to highlight the
  * best-in-column score (per task, per task-type, per language).
@@ -174,6 +202,28 @@ export function bestPerColumn<R, K extends string>(
 		best[k] = max;
 	}
 	return best;
+}
+
+/**
+ * Mirror of ``bestPerColumn`` for the *worst* value in each column.
+ * Used as the lower bound when computing heat-shading against the
+ * column's own [min, max] range. Empty columns yield ``+Infinity``.
+ */
+export function worstPerColumn<R, K extends string>(
+	keys: readonly K[],
+	rows: readonly R[],
+	getValue: (row: R, key: K) => number | undefined
+): Record<string, number> {
+	const worst: Record<string, number> = {};
+	for (const k of keys) {
+		let min = Infinity;
+		for (const r of rows) {
+			const v = getValue(r, k);
+			if (v !== undefined && v < min) min = v;
+		}
+		worst[k] = min;
+	}
+	return worst;
 }
 
 /**

@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { loadBenchmarkMenu } from '$lib/data/service';
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import { env } from '$env/dynamic/public';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
-	import { apiUrl, isIconUrl, slug } from '$lib/format';
+	import CopyableId from '$lib/components/CopyableId.svelte';
+	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import { apiUrl, fmtCompact, isIconUrl, slug } from '$lib/format';
+	import { getParam, updateUrl } from '$lib/url-state';
 
 	// `/benchmarks` returns *every* benchmark, even those not on the curated
 	// menu. We compare against the menu to call out which ones aren't reachable
@@ -16,7 +20,12 @@
 	const menuNames = new SvelteSet<string>();
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let query = $state('');
+	// Hydrate the search query from `?q=` so refresh / share keeps the
+	// filtered view, and mirror every keystroke back to the URL.
+	let query = $state(getParam('q') ?? '');
+	$effect(() => {
+		updateUrl({ q: query.trim() || null });
+	});
 
 	function fillFromMenu(entries: MenuEntry[]) {
 		menuNames.clear();
@@ -51,21 +60,17 @@
 			});
 	});
 
-	let filteredFeatured = $derived.by(() => {
+	// Single unified list: featured (on the curated explorer menu) first,
+	// then non-menu benchmarks (older versions, specialised drops). The
+	// `.card.other` styling still distinguishes them visually so users
+	// can tell which ones are off-menu without a separate section.
+	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		return allBenchmarks.filter(
-			(b) =>
-				menuNames.has(b.name) &&
-				(!q || b.name.toLowerCase().includes(q) || b.displayName.toLowerCase().includes(q))
-		);
-	});
-	let filteredOther = $derived.by(() => {
-		const q = query.trim().toLowerCase();
-		return allBenchmarks.filter(
-			(b) =>
-				!menuNames.has(b.name) &&
-				(!q || b.name.toLowerCase().includes(q) || b.displayName.toLowerCase().includes(q))
-		);
+		const matches = (b: Benchmark) =>
+			!q || b.name.toLowerCase().includes(q) || b.displayName.toLowerCase().includes(q);
+		const featured = allBenchmarks.filter((b) => menuNames.has(b.name) && matches(b));
+		const other = allBenchmarks.filter((b) => !menuNames.has(b.name) && matches(b));
+		return [...featured, ...other];
 	});
 </script>
 
@@ -102,7 +107,7 @@
 			{/if}
 		</div>
 		<span class="count">
-			{filteredFeatured.length + filteredOther.length} / {allBenchmarks.length}
+			{filteredAll.length} / {allBenchmarks.length}
 		</span>
 	</div>
 
@@ -110,42 +115,24 @@
 		<p class="muted">Loading benchmarks…</p>
 	{:else if error}
 		<p class="muted">Failed to load: {error}</p>
+	{:else if filteredAll.length === 0}
+		<p class="muted">No benchmark matches that search.</p>
 	{:else}
-		{#if filteredFeatured.length > 0}
-			<section class="block">
-				<header class="block-head">
-					<h2>On the explorer menu</h2>
-					<span class="count">{filteredFeatured.length}</span>
-				</header>
-				<div class="grid">
-					{#each filteredFeatured as b (b.name)}
-						{@render benchmarkCard(b, false)}
-					{/each}
-				</div>
-			</section>
-		{/if}
-
-		{#if filteredOther.length > 0}
-			<section class="block">
-				<header class="block-head">
-					<h2>Other benchmarks</h2>
-					<span class="count">{filteredOther.length}</span>
-					<span class="hint">
-						— not on the curated explorer menu (older versions or specialised drops). The "Newer
-						version" tag links to the current replacement when there is one.
-					</span>
-				</header>
-				<div class="grid">
-					{#each filteredOther as b (b.name)}
-						{@render benchmarkCard(b, true)}
-					{/each}
-				</div>
-			</section>
-		{/if}
-
-		{#if filteredFeatured.length === 0 && filteredOther.length === 0}
-			<p class="muted">No benchmark matches that search.</p>
-		{/if}
+		<section class="block">
+			<header class="block-head">
+				<h2>Benchmarks</h2>
+				<span class="count">{filteredAll.length}</span>
+				<span class="hint">
+					— faded cards aren't on the curated explorer menu (older versions or specialised drops).
+					The "Newer version" tag links to the current replacement when there is one.
+				</span>
+			</header>
+			<div class="grid">
+				{#each filteredAll as b (b.name)}
+					{@render benchmarkCard(b, !menuNames.has(b.name))}
+				{/each}
+			</div>
+		</section>
 	{/if}
 </div>
 
@@ -161,31 +148,52 @@
 			{/if}
 			<div class="card-titles">
 				<span class="card-name">{b.displayName}</span>
-				{#if b.name !== b.displayName}
-					<code class="card-id" title={b.name}>{b.name}</code>
-				{/if}
+				<CopyableId value={b.name} ariaLabel="Copy benchmark id" />
 			</div>
 		</div>
 		<p class="card-desc"><MarkdownText text={b.description} /></p>
 		<div class="card-foot">
 			{#if b.newVersion && b.newVersion.length > 0}
-				<div class="newer-note" title="A newer version of this benchmark is available">
+				<!-- Whole note is clickable; navigates to the first newer version. -->
+				<button
+					type="button"
+					class="newer-note"
+					title="Open {b.newVersion[0]}"
+					onclick={(e) => {
+						e.stopPropagation();
+						e.preventDefault();
+						goto(resolve('/benchmark/[name]', { name: slug(b.newVersion![0]) }));
+					}}
+				>
 					<span class="newer-label">Newer version</span>
 					{#each b.newVersion as nv (nv)}
 						<code class="newer-link">{nv}</code>
 					{/each}
-				</div>
+				</button>
 			{/if}
 			<div class="stats-line">
-				<span><strong>{b.tasks.length}</strong> tasks</span>
+				{#if b.numModels && b.numModels > 0}
+					<span title="{b.numModels} models"><strong>{fmtCompact(b.numModels)}</strong> models</span
+					>
+					<span class="dot">·</span>
+				{/if}
+				<span title="{b.tasks.length} tasks"
+					><strong>{fmtCompact(b.tasks.length)}</strong> tasks</span
+				>
 				<span class="dot">·</span>
-				<span><strong>{b.languages.length}</strong> langs</span>
+				<span title="{b.languages.length} languages"
+					><strong>{fmtCompact(b.languages.length)}</strong> langs</span
+				>
 				<span class="dot">·</span>
-				<span><strong>{b.taskTypes.length}</strong> types</span>
+				<span title="{b.taskTypes.length} task types"
+					><strong>{fmtCompact(b.taskTypes.length)}</strong> types</span
+				>
 			</div>
 		</div>
 	</a>
 {/snippet}
+
+<ShareUrlButton />
 
 <style>
 	/* Base `.page` (1280 px centred, 18/28/56 padding) is in app.css —
@@ -321,7 +329,9 @@
 	}
 	.card-head {
 		display: flex;
-		align-items: center;
+		/* Top-align the icon so it sits next to the display-name row,
+		   not vertically centred between the name and the id pill. */
+		align-items: flex-start;
 		gap: 10px;
 	}
 	.card-icon {
@@ -331,6 +341,7 @@
 		border-radius: 4px;
 		object-fit: contain;
 		background: var(--surface-muted);
+		margin-top: 1px;
 	}
 	/* Text/emoji icons centered in the same 28px square as the image variant. */
 	.card-icon-text {
@@ -343,21 +354,14 @@
 	.card-titles {
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
+		align-items: flex-start;
+		gap: 4px;
 		min-width: 0;
 		flex: 1;
 	}
 	.card-name {
 		font-size: 15px;
 		font-weight: 700;
-	}
-	.card-id {
-		font-family: var(--font-mono);
-		font-size: 11px;
-		color: var(--text-subtle);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 	.card-foot {
 		margin-top: auto;
@@ -377,6 +381,20 @@
 		font-size: 11px;
 		color: var(--primary-strong);
 		align-self: flex-start;
+		cursor: pointer;
+		text-align: left;
+		font-family: inherit;
+		transition:
+			background 0.12s,
+			border-color 0.12s;
+	}
+	.newer-note:hover {
+		background: color-mix(in srgb, var(--primary) 18%, var(--surface));
+		border-color: var(--primary);
+	}
+	.newer-note:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
 	}
 	.newer-label {
 		font-weight: 700;
@@ -395,10 +413,14 @@
 	.stats-line {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		column-gap: 4px;
+		row-gap: 2px;
 		align-items: baseline;
-		font-size: 12px;
+		font-size: 11.5px;
 		color: var(--text-muted);
+	}
+	.stats-line > span:not(.dot) {
+		white-space: nowrap;
 	}
 	.stats-line strong {
 		color: var(--text);

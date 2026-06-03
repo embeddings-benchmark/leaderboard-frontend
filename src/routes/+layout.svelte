@@ -115,29 +115,33 @@
 				</svg>
 				<span>Documentation</span>
 			</a>
-			<a
-				class="icon-link"
-				href="https://github.com/embeddings-benchmark/leaderboardv2"
-				target="_blank"
-				rel="noreferrer"
-				title="Leaderboard source on GitHub"
-			>
-				<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-					<path
-						fill="currentColor"
-						d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.55 0-.27-.01-1-.02-1.96-3.2.7-3.88-1.54-3.88-1.54-.52-1.34-1.28-1.7-1.28-1.7-1.04-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18.92-.26 1.91-.39 2.89-.39.98 0 1.97.13 2.89.39 2.2-1.5 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.74.8 1.18 1.82 1.18 3.08 0 4.42-2.69 5.39-5.25 5.68.41.35.78 1.05.78 2.11 0 1.52-.01 2.75-.01 3.13 0 .31.21.66.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"
-					/>
-				</svg>
-				<span>Leaderboard</span>
-			</a>
 		</div>
 	</header>
 
 	{@render children()}
+
+	<footer class="page-footer" aria-label="Site footer">
+		<a
+			class="footer-link"
+			href="https://github.com/embeddings-benchmark/leaderboardv2"
+			target="_blank"
+			rel="noreferrer"
+		>
+			<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+				<path
+					fill="currentColor"
+					d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.55 0-.27-.01-1-.02-1.96-3.2.7-3.88-1.54-3.88-1.54-.52-1.34-1.28-1.7-1.28-1.7-1.04-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18.92-.26 1.91-.39 2.89-.39.98 0 1.97.13 2.89.39 2.2-1.5 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.74.8 1.18 1.82 1.18 3.08 0 4.42-2.69 5.39-5.25 5.68.41.35.78 1.05.78 2.11 0 1.52-.01 2.75-.01 3.13 0 .31.21.66.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"
+				/>
+			</svg>
+			<span>Leaderboard source on GitHub</span>
+		</a>
+	</footer>
 </div>
 
 <style>
 	.shell {
+		display: flex;
+		flex-direction: column;
 		min-height: 100vh;
 		/* Light-mode: warm gradient + faint dark-noise grain for "paper" feel.
 		   Dark-mode override below swaps the grain to a light-on-dark tint so
@@ -377,5 +381,28 @@
 		.name {
 			display: none;
 		}
+	}
+
+	.page-footer {
+		/* Push to the bottom of the flex column so short pages still pin
+		   the footer at the viewport floor instead of floating mid-screen. */
+		margin-top: auto;
+		display: flex;
+		justify-content: center;
+		gap: 16px;
+		padding: 18px 28px;
+		border-top: 1px solid var(--border);
+		background: var(--bar-bg);
+		font-size: 12.5px;
+	}
+	.footer-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		text-decoration: none;
+	}
+	.footer-link:hover {
+		color: var(--text);
 	}
 </style>

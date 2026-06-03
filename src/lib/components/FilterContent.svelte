@@ -12,6 +12,8 @@
 	} from '$lib/stores/filters.svelte';
 	import RangeSlider from './RangeSlider.svelte';
 	import { humanizeType } from '$lib/format';
+	import ModelTypeIcon from './ModelTypeIcon.svelte';
+	import ModalityIcon from './ModalityIcon.svelte';
 
 	// Size slider works in log10(M-of-params). Bounds are derived per benchmark
 	// from filters.availableMin/MaxModelSizeM and clamp into the global
@@ -422,7 +424,8 @@
 						onclick={() => filters.toggleInSet('modelTypes', t)}
 						aria-pressed={filters.modelTypes.has(t)}
 					>
-						{t}
+						<ModelTypeIcon type={t} size={12} />
+						<span>{t}</span>
 					</button>
 				{/each}
 			</div>
@@ -453,7 +456,8 @@
 						onclick={() => filters.toggleInSet('modelModalities', m)}
 						aria-pressed={filters.modelModalities.has(m)}
 					>
-						{m}
+						<ModalityIcon modality={m} size={12} />
+						<span>{m}</span>
 					</button>
 				{/each}
 			</div>
@@ -609,7 +613,8 @@
 										onclick={() => filters.toggleInSet('modalities', m)}
 										aria-pressed={filters.modalities.has(m)}
 									>
-										{m}
+										<ModalityIcon modality={m} size={12} />
+										<span>{m}</span>
 									</button>
 								{/each}
 							</div>
@@ -897,9 +902,14 @@
 		border-radius: 8px;
 	}
 	.seg {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 0; /* let the grid track shrink the button below content-box width */
 		padding: 6px 8px;
 		font-size: 12px;
 		font-weight: 600;
+		line-height: 1.25;
 		background: transparent;
 		border: none;
 		border-radius: 6px;
@@ -909,9 +919,11 @@
 			background 0.12s,
 			color 0.12s,
 			box-shadow 0.12s;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		/* Allow long labels ("Instruction-tuned", "Only zero-shot", "Proprietary")
+		   to wrap within their column instead of truncating with an ellipsis. */
+		text-align: center;
+		text-wrap: balance;
+		overflow-wrap: anywhere;
 	}
 	.seg:hover {
 		color: var(--text);

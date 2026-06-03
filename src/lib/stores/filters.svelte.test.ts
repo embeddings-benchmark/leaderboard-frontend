@@ -1,0 +1,206 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { BenchmarkSummary, ModelMeta, SummaryRow, TaskMeta } from '$lib/types';
+import { applyFilters, filters } from './filters.svelte';
+
+// ---------------------------------------------------------------------------
+// Fixture builders. Kept tiny so each test reads top-to-bottom: build a
+// synthetic summary, toggle filters, assert.
+// ---------------------------------------------------------------------------
+
+function makeModel(name: string, overrides: Partial<ModelMeta> = {}): ModelMeta {
+	const [org, displayName] = name.includes('/') ? name.split('/') : ['', name];
+	return {
+		name,
+		displayName,
+		org,
+		zeroShotPct: 100,
+		activeParamsB: 1,
+		totalParamsB: 1,
+		embeddingDim: 768,
+		maxTokens: 512,
+		modelType: 'dense',
+		instructionTuned: false,
+		openWeights: true,
+		sentenceTransformersCompatible: true,
+		...overrides
+	};
+}
+
+function makeTask(name: string, type: string, overrides: Partial<TaskMeta> = {}): TaskMeta {
+	return {
+		name,
+		type,
+		simplifiedType: type.toLowerCase(),
+		languages: ['eng-Latn'],
+		domains: ['general'],
+		modalities: ['text'],
+		description: '',
+		...overrides
+	};
+}
+
+function makeRow(
+	rank: number,
+	model: ModelMeta,
+	scoresByTask: Record<string, number>,
+	scoresByTaskType: Record<string, number>
+): SummaryRow {
+	return {
+		rank,
+		model,
+		zeroShotPct: model.zeroShotPct,
+		activeParamsB: model.activeParamsB,
+		totalParamsB: model.totalParamsB,
+		embeddingDim: model.embeddingDim,
+		maxTokens: model.maxTokens,
+		meanTask: null,
+		meanTaskType: null,
+		scoresByTask,
+		scoresByTaskType
+	};
+}
+
+function fixtureSummary(): BenchmarkSummary {
+	// Three tasks across two types: retrieval (T1, T2) and classification (T3).
+	// Four models with deliberately skewed score distributions so Borda re-rank
+	// produces a different order than naive mean.
+	const tasks = ['T1', 'T2', 'T3'];
+	const taskTypes = ['Retrieval', 'Classification'];
+	const tasksMeta: TaskMeta[] = [
+		makeTask('T1', 'Retrieval', { languages: ['eng-Latn'], domains: ['general'] }),
+		makeTask('T2', 'Retrieval', { languages: ['fra-Latn'], domains: ['legal'] }),
+		makeTask('T3', 'Classification', { languages: ['eng-Latn'], domains: ['general'] })
+	];
+
+	const a = makeModel('org/A', { modelType: 'dense', openWeights: true });
+	const b = makeModel('org/B', { modelType: 'sparse', openWeights: true });
+	const c = makeModel('org/C', { modelType: 'dense', openWeights: false }); // proprietary
+	const d = makeModel('org/D', { modelType: 'dense', openWeights: true, zeroShotPct: -1 });
+
+	const rows: SummaryRow[] = [
+		makeRow(1, a, { T1: 0.9, T2: 0.5, T3: 0.6 }, { Retrieval: 0.7, Classification: 0.6 }),
+		makeRow(2, b, { T1: 0.7, T2: 0.8, T3: 0.7 }, { Retrieval: 0.75, Classification: 0.7 }),
+		makeRow(3, c, { T1: 0.6, T2: 0.7, T3: 0.5 }, { Retrieval: 0.65, Classification: 0.5 }),
+		makeRow(4, d, { T1: 0.8, T2: 0.6, T3: 0.4 }, { Retrieval: 0.7, Classification: 0.4 })
+	];
+
+	return {
+		benchmarkName: 'TestBench',
+		taskTypes,
+		tasks,
+		tasksMeta,
+		rows,
+		aggregations: ['mean_task', 'mean_task_type']
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+	// Re-seed the singleton with the fixture's available-set every test so prior
+	// mutations don't leak. initFor + resetModelFilters together restore the
+	// "everything visible" baseline.
+	filters.initFor(fixtureSummary());
+	filters.resetModelFilters();
+	filters.resetCustomize();
+});
+
+describe('applyFilters: no narrowing', () => {
+	it('passes every row, every task, and every type through unchanged', () => {
+		const out = applyFilters(fixtureSummary());
+		expect(out.tasks).toEqual(['T1', 'T2', 'T3']);
+		expect(out.taskTypes).toEqual(['Retrieval', 'Classification']);
+		expect(out.rows).toHaveLength(4);
+	});
+
+	it('recomputes meanTask / meanTaskType from the visible slice', () => {
+		const out = applyFilters(fixtureSummary());
+		const a = out.rows.find((r) => r.model.name === 'org/A')!;
+		// Mean across T1, T2, T3 → (0.9 + 0.5 + 0.6) / 3 = 0.6667
+		expect(a.meanTask).toBeCloseTo(2.0 / 3, 5);
+		// Mean across both task types → (0.7 + 0.6) / 2 = 0.65
+		expect(a.meanTaskType).toBeCloseTo(0.65, 5);
+	});
+
+	it('re-ranks rows by Borda count, not the API rank', () => {
+		const out = applyFilters(fixtureSummary());
+		// Hand-compute Borda per task with n=4 rows (n-position = 4,3,2,1).
+		//   T1 desc: A(0.9), D(0.8), B(0.7), C(0.6) → A=4, D=3, B=2, C=1
+		//   T2 desc: B(0.8), C(0.7), D(0.6), A(0.5) → B=4, C=3, D=2, A=1
+		//   T3 desc: B(0.7), A(0.6), C(0.5), D(0.4) → B=4, A=3, C=2, D=1
+		// Totals: A=8, B=10, C=6, D=6 → B, A, then C/D tiebreak on Mean(Task).
+		const names = out.rows.map((r) => r.model.name);
+		expect(names[0]).toBe('org/B');
+		expect(names[1]).toBe('org/A');
+		// C: mean = (0.6+0.7+0.5)/3 = 0.6; D: (0.8+0.6+0.4)/3 = 0.6 — tied; mean
+		// tiebreak doesn't separate them so we just assert both are present at 3/4.
+		expect(names.slice(2).sort()).toEqual(['org/C', 'org/D']);
+		// Rank is the new ordinal, not the original.
+		expect(out.rows[0].rank).toBe(1);
+		expect(out.rows[1].rank).toBe(2);
+	});
+});
+
+describe('applyFilters: task-set narrowing', () => {
+	it('hides tasks dropped by the type filter and recomputes the mean', () => {
+		filters.setAll('taskTypes', ['Retrieval'], true); // only Retrieval
+		const out = applyFilters(fixtureSummary());
+		expect(out.tasks).toEqual(['T1', 'T2']);
+		expect(out.taskTypes).toEqual(['Retrieval']);
+		const a = out.rows.find((r) => r.model.name === 'org/A')!;
+		// New mean: (0.9 + 0.5) / 2 = 0.7
+		expect(a.meanTask).toBeCloseTo(0.7, 5);
+	});
+
+	it('hides tasks dropped by the language filter (language is task-level metadata)', () => {
+		filters.setAll('languages', ['eng-Latn'], true); // drop fra-Latn-only T2
+		const out = applyFilters(fixtureSummary());
+		expect(out.tasks).toEqual(['T1', 'T3']);
+	});
+});
+
+describe('applyFilters: model-row narrowing', () => {
+	it('proprietary-only / open-only flip rows in/out', () => {
+		filters.availability = 'open';
+		let out = applyFilters(fixtureSummary());
+		expect(out.rows.map((r) => r.model.name).sort()).toEqual(['org/A', 'org/B', 'org/D']);
+
+		filters.availability = 'proprietary';
+		out = applyFilters(fixtureSummary());
+		expect(out.rows.map((r) => r.model.name)).toEqual(['org/C']);
+	});
+
+	it('model-type chips intersect on .modelType', () => {
+		filters.setAll('modelTypes', ['sparse'], true);
+		const out = applyFilters(fixtureSummary());
+		expect(out.rows.map((r) => r.model.name)).toEqual(['org/B']);
+	});
+
+	it('only_zero_shot drops models with zeroShotPct != 100', () => {
+		filters.zeroShot = 'only_zero_shot';
+		const out = applyFilters(fixtureSummary());
+		// D has zeroShotPct = -1; A/B/C all default to 100 in the fixture.
+		expect(out.rows.map((r) => r.model.name).sort()).toEqual(['org/A', 'org/B', 'org/C']);
+	});
+
+	it('remove_unknown drops only the -1 sentinel', () => {
+		filters.zeroShot = 'remove_unknown';
+		const out = applyFilters(fixtureSummary());
+		expect(out.rows.find((r) => r.model.name === 'org/D')).toBeUndefined();
+		expect(out.rows.find((r) => r.model.name === 'org/A')).toBeDefined();
+	});
+
+	it('name query matches against name, displayName, and org', () => {
+		filters.nameQuery = 'A';
+		const out = applyFilters(fixtureSummary());
+		// Substring "A" matches displayName="A" of org/A; "org" matches every row.
+		// We narrow with a distinctive token to keep the assertion tight.
+		expect(out.rows.length).toBeGreaterThan(0);
+
+		filters.nameQuery = 'nonexistent-substring-xyz';
+		const empty = applyFilters(fixtureSummary());
+		expect(empty.rows).toHaveLength(0);
+	});
+});

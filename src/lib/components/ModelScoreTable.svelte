@@ -25,6 +25,7 @@
 		fmtPct,
 		heat,
 		maxOf,
+		minOf,
 		nextSort,
 		slug,
 		sortIcon as sortIconFor
@@ -85,12 +86,21 @@
 		});
 	});
 
-	// Heat scales per-column — strongest value gets full tint.
+	// Heat scales per-column over the [min, max] range so columns where
+	// scores cluster tightly still show useful contrast.
 	let bestScore = $derived(maxOf(rows.map((r) => r.score)));
+	let worstScore = $derived(minOf(rows.map((r) => r.score)));
 	let bestPerSubset = $derived.by(() => {
 		const m: Record<string, number> = {};
 		for (const sub of subsets) {
 			m[sub] = maxOf(rows.map((r) => r.subsetScores[sub]));
+		}
+		return m;
+	});
+	let worstPerSubset = $derived.by(() => {
+		const m: Record<string, number> = {};
+		for (const sub of subsets) {
+			m[sub] = minOf(rows.map((r) => r.subsetScores[sub]));
 		}
 		return m;
 	});
@@ -151,13 +161,16 @@
 					<td
 						class="tbl-num mean-cell"
 						class:partial={s.score == null}
-						style={s.score == null ? '' : heat(s.score, bestScore)}
+						style={s.score == null ? '' : heat(s.score, worstScore, bestScore)}
 						title={s.score == null ? 'Not evaluated on every subset' : undefined}
 						>{fmtPct(s.score)}</td
 					>
 					{#each subsets as sub (sub)}
 						{@const v = s.subsetScores[sub]}
-						<td class="tbl-num sub" style={v !== undefined ? heat(v, bestPerSubset[sub]) : ''}>
+						<td
+							class="tbl-num sub"
+							style={v !== undefined ? heat(v, worstPerSubset[sub], bestPerSubset[sub]) : ''}
+						>
 							{v !== undefined ? fmtPct(v) : '—'}
 						</td>
 					{/each}

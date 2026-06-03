@@ -22,6 +22,11 @@ export interface Benchmark {
 	// `Benchmark.aggregations` upstream — frontend uses it to hide irrelevant
 	// columns (ViDoRe has no per-type breakdown; RTEB has only Mean (Task)).
 	aggregations: BenchmarkAggregation[];
+	// Distinct models with at least one score on this benchmark. Surfaced on
+	// the catalogue / home benchmark cards so the user can size up coverage
+	// without opening each benchmark. Set by the backend from the cached
+	// per-benchmark frames; `0` means unknown (cache not populated) or empty.
+	numModels?: number;
 }
 
 export type SimplifiedTaskType =
@@ -84,6 +89,9 @@ export interface ModelMeta {
 	instructionTuned: boolean;
 	openWeights: boolean;
 	sentenceTransformersCompatible: boolean;
+	// Modalities the model can encode (e.g. ["text"], ["text", "image"]).
+	// Defaults to ["text"] when the upstream ModelMeta omits the field.
+	modalities?: string[];
 	citation?: string | null;
 	// Extended metadata, all optional. Surfaced on the model detail card.
 	memoryUsageMb?: number | null;

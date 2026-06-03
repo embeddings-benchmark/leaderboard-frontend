@@ -54,27 +54,39 @@
 		return vals.reduce((a, b) => a + b, 0) / vals.length;
 	}
 
-	function bestPerLang(): Record<string, number> {
+	function extremaPerLang(): { best: Record<string, number>; worst: Record<string, number> } {
 		const best: Record<string, number> = {};
+		const worst: Record<string, number> = {};
 		LANGUAGES.forEach((lang, idx) => {
 			let max = -Infinity;
+			let min = Infinity;
 			for (const r of summary.rows) {
 				const v = fakeLangScore(r, idx);
-				if (v != null && v > max) max = v;
+				if (v == null) continue;
+				if (v > max) max = v;
+				if (v < min) min = v;
 			}
 			best[lang] = max;
+			worst[lang] = min;
 		});
-		return best;
+		return { best, worst };
 	}
-	let best = $derived(bestPerLang());
-	let bestMean = $derived.by(() => {
+	let langExtrema = $derived(extremaPerLang());
+	let best = $derived(langExtrema.best);
+	let worst = $derived(langExtrema.worst);
+	let meanExtrema = $derived.by(() => {
 		let max = -Infinity;
+		let min = Infinity;
 		for (const r of summary.rows) {
 			const v = rowMean(r);
-			if (v != null && v > max) max = v;
+			if (v == null) continue;
+			if (v > max) max = v;
+			if (v < min) min = v;
 		}
-		return max;
+		return { max, min };
 	});
+	let bestMean = $derived(meanExtrema.max);
+	let worstMean = $derived(meanExtrema.min);
 
 	type SortKey = 'model' | 'mean' | `lang:${string}`;
 	const initialKey = getParam('s.lang');
@@ -240,7 +252,7 @@
 						<td
 							class="tbl-num"
 							class:tbl-best={mean != null && mean === bestMean}
-							style={heat(mean, bestMean)}
+							style={heat(mean, worstMean, bestMean)}
 						>
 							{fmt(mean)}
 						</td>
@@ -249,7 +261,7 @@
 							<td
 								class="tbl-num"
 								class:tbl-best={score != null && score === best[lang]}
-								style={heat(score, best[lang])}
+								style={heat(score, worst[lang], best[lang])}
 							>
 								{fmt(score)}
 							</td>

@@ -87,6 +87,10 @@ function makeBenchmark(partial: Partial<Benchmark> & { name: string }): Benchmar
 		domains: partial.domains ?? ['Web', 'News', 'Academic'],
 		modalities: partial.modalities ?? ['text'],
 		aggregations: partial.aggregations ?? ['mean_task', 'mean_task_type', 'task_types'],
+		// Deterministic placeholder: a seedless mock won't have real counts,
+		// but a non-zero value lets the catalogue card render the "X models"
+		// stat in offline / Playwright runs.
+		numModels: partial.numModels ?? 24,
 		...partial
 	};
 }

@@ -4,6 +4,8 @@
 	import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
+	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { humanizeType, slug } from '$lib/format';
 
 	interface TaskEntry {
@@ -222,6 +224,11 @@
 				href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_dataset/"
 				target="_blank"
 				rel="noreferrer">contributor guide</a
+			>. Already have model scores? See the
+			<a
+				href="https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/"
+				target="_blank"
+				rel="noreferrer">submitting results guide</a
 			>.
 		</p>
 	</header>
@@ -343,6 +350,7 @@
 									checked={modalityFilter.has(m)}
 									onchange={() => toggleModality(m)}
 								/>
+								<ModalityIcon modality={m} size={12} />
 								<span>{m}</span>
 							</label>
 						{/each}
@@ -402,6 +410,8 @@
 		{/if}
 	{/if}
 </div>
+
+<ShareUrlButton />
 
 <style>
 	/* Base `.page` (1280 px centred, 18/28/56 padding) is in app.css. */
@@ -548,6 +558,7 @@
 	.pill {
 		display: inline-flex;
 		align-items: center;
+		gap: 5px;
 		padding: 5px 11px;
 		font-size: 12px;
 		background: var(--surface);
