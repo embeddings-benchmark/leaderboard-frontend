@@ -19,6 +19,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
+	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import {
 		ariaSort as ariaSortFor,
@@ -92,7 +93,7 @@
 	}
 </script>
 
-<div class="tbl-scroll">
+<div class="tbl-scroll" use:stickyHScroll>
 	<table class="tbl bench-table" use:stickyHead>
 		<thead>
 			<tr>

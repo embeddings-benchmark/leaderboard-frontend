@@ -192,6 +192,25 @@
 		box-shadow: var(--shadow-sm);
 		-webkit-overflow-scrolling: touch;
 		overscroll-behavior-x: contain;
+		/* Persistent slim scrollbar across platforms — see .tbl-scroll
+		   in src/lib/styles/leaderboard-table.css for the rationale. */
+		scrollbar-width: thin;
+		scrollbar-color: var(--border-strong) transparent;
+	}
+	.scroll::-webkit-scrollbar {
+		height: 10px;
+		width: 10px;
+		background: transparent;
+	}
+	.scroll::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.scroll::-webkit-scrollbar-thumb {
+		background: var(--border-strong);
+		border-radius: 6px;
+	}
+	.scroll::-webkit-scrollbar-thumb:hover {
+		background: var(--text-subtle);
 	}
 	table {
 		width: 100%;

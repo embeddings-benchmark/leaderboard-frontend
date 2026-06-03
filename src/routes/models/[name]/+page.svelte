@@ -536,8 +536,8 @@
 		letter-spacing: 0.02em;
 	}
 	.badge.open {
-		background: #def7e9;
-		color: #1c7a4c;
+		background: light-dark(var(--tint-green), #0d2a1c);
+		color: var(--tint-green-fg);
 	}
 	.badge.soft {
 		background: var(--surface-muted);

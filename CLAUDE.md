@@ -54,14 +54,20 @@ The `/explorer` prefix is gone — every route lives at the site root.
 
 | Route                        | Purpose                                                                                                                                 |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                          | Home: benchmark category cards, top-level pitch                                                                                         |
-| `/benchmarks`                | Full benchmark catalog                                                                                                                  |
+| `/`                          | Home: nested category menu of benchmark cards (shared card shell with `/benchmarks`)                                                    |
+| `/benchmarks`                | Full benchmark catalog + right-side sticky sidebar (Modality / Task type / Domain filters)                                              |
 | `/benchmark/[name]`          | Per-benchmark detail page: hero + tabs (Summary / Performance × Size / Performance × Time / Per task / Per language / Task information) |
 | `/models` + `/models/[name]` | Model index + detail (cards on the index, hero + per-benchmark score table on the detail)                                               |
-| `/tasks` + `/tasks/[name]`   | Task index + detail (same shape as models)                                                                                              |
+| `/tasks` + `/tasks/[name]`   | Task index + detail (same shape as models, sidebar mirrors `/benchmarks`)                                                               |
 | `/compare`                   | Pick up to 4 models, side-by-side metric cards with per-metric winners + radar                                                          |
 
-Reusable building blocks (`SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `Tabs`, `FilterContent`, `FilterSidebar`, `BenchmarkPicker`, `PlotlyChart`, `ThemeToggle`, `MarkdownText`, …) live in `src/lib/components/` and get composed differently per route.
+Reusable building blocks under `src/lib/components/`:
+
+- **Tables / charts:** `SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `ModelScoreTable`, `PlotlyChart`, `TaskInfoTab`, `BenchmarkOverview`.
+- **Filters / picking:** `FilterSidebar`, `FilterContent`, `BenchmarkPicker`, `ModelSearchBar`, `MenuGroup`, `RangeSlider`.
+- **Shared toolbar widgets** (used by every overview's `.toolbar`): `SearchInput` (icon + clear button), `SortDirIcon` (lucide `arrow-up-narrow-wide` / `arrow-down-wide-narrow`), and `DownloadButton`.
+- **Floating actions** (rendered once per page, fixed positioning): `ShareUrlButton` (bottom-right, primary-accent pill) copies `window.location.href` with every filter param baked in. `ScrollToTopButton` (bottom-left, same accent treatment) fades in once `window.scrollY > 320`. They bookend the viewport — don't introduce a third floating affordance on either edge.
+- **Theming + misc:** `ThemeToggle`, `MarkdownText`, `CopyableId`, `ModalityIcon`, `ModelTypeIcon`, `Tabs`, `CiteBlock`.
 
 The top bar (root `+layout.svelte`) is a 3-column grid: MTEB brand · Benchmarks/Models/Tasks/Compare nav · GitHub + Documentation + Leaderboard external links + `ThemeToggle`.
 
@@ -72,7 +78,7 @@ mteb FastAPI                    src/lib/data/mock*.ts (fallback only)
      │                                       │
      └────────────┬──────────────────────────┘
                   ↓
-        src/lib/data/service.ts   ← loadBenchmarkMenu / loadBenchmark / loadSummary
+        src/lib/data/service.ts   ← loadBenchmarkMenu / loadBenchmark / loadSummary / loadTasks / loadModelScores
                   ↓
 src/lib/stores/leaderboard.svelte.ts  ← reactive selected/benchmark/summary, with inflight cancellation
 src/lib/stores/filters.svelte.ts      ← all filter state + applyFilters(summary)
@@ -81,7 +87,7 @@ src/lib/stores/pinned.svelte.ts       ← Set<string> of pinned model names, sha
        filteredSummary = applyFilters(leaderboard.summary)
 ```
 
-`service.ts` is the only place that branches between live API and mocks — swap backends, change auth, change cache strategy here without touching anything downstream.
+`service.ts` is the only place that branches between live API and mocks — swap backends, change auth, change cache strategy here without touching anything downstream. `loadSummary` hits the canonical `/benchmarks/{name}/scores` route on the backend (the older `/summary` path is kept as a hidden alias until every deployed bundle is on the new one — don't introduce new callers of it).
 
 ### Stores (Svelte 5 runes singletons)
 
@@ -134,14 +140,35 @@ Don't move the tooltip back inside a `<th>`. If a new table needs the same behav
 - **`--tint-*` palette** is the single source of truth for category color (see Theme system above). Don't introduce parallel hex maps in new components — set `--card-tint` / `--card-accent` from the tint tokens on a parent and read those downstream.
 - **Per-model-type tint** (dense → blue, cross-encoder → orange, late-interaction → green, sparse → amber, router → purple) is mirrored across the model-type filter pills (`FilterContent`), model-card chips, model detail hero, compare-page strips, BenchmarkOverview type rows, and SummaryTable model + params column tints. Keep the mapping consistent.
 - **Per-task-type tint** (Classification → blue, Clustering → orange, PairClassification/MultilabelClassification → green, Reranking/InstructionReranking → amber/orange, Retrieval → purple, STS → pink, BitextMining → azure, Summarization → teal) is mirrored across the task index pills + chips, task detail hero, and per-task-type displays. Keep the mapping consistent.
-- **Heat-shading on score cells** is `color-mix(in srgb, var(--primary) <pct>%, transparent)` where `<pct>` maps the 0.45–0.75 score range onto 0–55%. The same `heat()` helper is duplicated in `SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `routes/models/[name]/+page.svelte`, and `routes/tasks/[name]/+page.svelte`. If you change the curve, update all five.
+- **Per-modality tint** (text → teal, image → blue, audio → amber, video → purple) drives the modality filter pills on `/tasks` + `/benchmarks`, the modality badges on every overview card, and the card top-accent stripe + soft gradient header band on `/` and `/benchmarks` (where each card carries `data-modality={b.modalities[0] ?? 'text'}`). The shared `.modality-tint[data-modality=…]` utility in `app.css` is the single place that maps modality → tint pair.
+- **Heat-shading on score cells** is generated by the shared `heat(score, min, max)` helper in `src/lib/format.ts`: it returns a `background:` style mixing `color-mix(in srgb, var(--heat) <pct>%, transparent)` where `<pct>` maps the score linearly across the per-column `[min, max]` range onto 0–55%. Use `minOf` / `maxOf` (also in `format.ts`) to compute the bounds per column. Don't reintroduce per-table copies of the helper.
 - Best-in-column highlight is **bold only** (not orange) — the cell already wears its heat color.
 - The Rank column in `SummaryTable` doubles as the pin cell: pin button + rank number share one `.rank-cell` flex container. Other model-row tables put the pin button in its own 32px sticky column to the left of Model.
+
+### Overview cards (shared shell)
+
+The benchmark cards on `/` and `/benchmarks` and the task cards on `/tasks` all share one visual shape — keep them in lockstep when changing any of them:
+
+- `.card` is a flex column with `position: relative; overflow: hidden;` and a 3 px `::before` stripe coloured by `--card-accent` (the per-modality / per-simplified-type `*-fg` tint).
+- The top 64 px is a `linear-gradient` from `color-mix(in srgb, var(--tint-X) 55%, var(--surface))` down to `var(--surface)`, so the accent reads as a header tint without bleeding into the stats grid.
+- `.card-head` → `.desc` (2-line clamped) → `.stats` (2×2 grid of `<dt>` label + `<dd>` value) → optional `.newer-note` (only on benchmark cards) → `.badges` (modality pills, pinned to the bottom edge via `margin-top: auto`).
+- Hover lifts the card 1 px, swaps the border to the accent, and tints the `.title` to `--card-accent`.
+
+### Sticky shelves and floating actions
+
+- Every `/benchmarks`, `/models`, `/tasks` toolbar is a `position: sticky` shelf docked at `top: var(--header-offset, 56px)` with `z-index: 5`, `background: var(--bar-bg)`, and a `backdrop-filter: blur(14px) saturate(140%)` — the same translucent treatment as the page header so the two strips read as one shelf. `/benchmark/[name]`'s `.toolbar-row` is intentionally **not** sticky because `SummaryTable`'s sticky thead docks at `top: 0` inside the same scroll context and would visually collide.
+- Two floating actions live at the page edges: `ShareUrlButton` (bottom-right) copies the full URL with every filter param baked in, and `ScrollToTopButton` (bottom-left) fades in once `window.scrollY > 320`. Both use the same accent treatment (`1.5px solid var(--primary)` + soft halo, hover lift). Add them as the last children of any new long-scroll page — they don't need a wrapper.
+
+### Filter "all-on = filter off"
+
+`/tasks` and `/benchmarks` both seed every sidebar filter set (`modalityFilter`, `taskTypeFilter`, `domainFilter`, …) with every available value at load time, so the default state is "everything checked". When applying filters, treat `filter.size === ALL.length` as **no filter applied** and skip the `.some()` check entirely. Without this bypass, rows whose modality / domain / type list is empty silently drop out of the default view (because `[].some(...)` is always false). If you add a new sidebar facet, mirror this pattern — there's a `modalityOff` / `taskTypeOff` / `domainOff` short-circuit in each page's `filteredAll` derived.
 
 ## Data shape
 
 Types in `src/lib/types.ts` match the FastAPI response schemas one-to-one (pydantic emits camelCase aliases on the backend so the TS types are unchanged).
 
-- A model is a `ModelMeta`: `name`, `displayName`, `org`, `modelType`, params, embedding dim, max tokens, zero-shot %, etc. Display is `org/displayName` (HF style) — search matches against all three of `name`, `displayName`, `org`.
-- A benchmark carries `taskTypes`, `tasks` (array of names), `languages`, `domains`, `modalities`. A summary additionally carries `tasksMeta: TaskMeta[]` (per-task type/languages/domains/modality), which the filter store uses to derive the available choices for the Customize section.
+- A model is a `ModelMeta`: `name`, `displayName`, `org`, `modelType`, params, embedding dim, max tokens, zero-shot %, `modalities`, etc. Display is `org/displayName` (HF style) — search matches against all three of `name`, `displayName`, `org`.
+- A benchmark carries `taskTypes`, `tasks` (array of names), `languages`, `domains`, `modalities`, plus `numModels` (distinct model count, overlaid by the backend from the unified results frame — shown on the overview card "Models" stat).
+- A `TaskMeta` carries `type`, `simplifiedType`, `languages`, `domains`, `modalities`, `description`, dataset metadata (`sourceDataset`, `license`, `dateFrom/To`, `annotationsCreators`, `dialect`, `sampleCreation`), and `numModels` (the same per-task distinct-model overlay — drives the "Models evaluated" stat + sort on `/tasks`).
+- A summary additionally carries `tasksMeta: TaskMeta[]` and per-row `trainedOnTasks: string[]` (drives the ⚠️ trained-on warning in `PerTaskTab`).
 - `buildMockSummary(benchmarkName)` is deterministic per benchmark (seeded hash) — same input always produces the same scores. Useful for offline UI work and as the basis for snapshot tests.

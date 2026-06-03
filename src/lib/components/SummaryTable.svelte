@@ -19,6 +19,7 @@
 	} from '$lib/format';
 	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
+	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import ModelTypeIcon from './ModelTypeIcon.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import MarkdownText from './MarkdownText.svelte';
@@ -385,7 +386,7 @@
 </script>
 
 <div class="summary">
-	<div class="tbl-scroll">
+	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl summary-table" use:stickyHead>
 			<thead>
 				<tr>
@@ -578,7 +579,7 @@
 										<path d="M9 10.76V6h6v4.76l3 2.59V17H6v-3.65l3-2.59z" />
 									</svg>
 								</button>
-								<span class="rank-num">{row.rank}</span>
+								<span class="rank-pill">#{row.rank}</span>
 							</div>
 						</td>
 						<td
@@ -776,38 +777,10 @@
 
 	/* Per-row model-type colour-fill is dropped — the icon next to the
 	   model name carries the type signal without painting the full
-	   sticky column. The model name itself and the icon share the same
-	   --tint-*-fg colour per type so they read as one cluster; the org
-	   prefix and slash stay muted so the model name is the visual
-	   anchor. Foregrounds match the filter pills + chip palette. */
-	.type-icon {
-		display: inline-flex;
-		align-items: center;
-		flex-shrink: 0;
-		margin-right: 6px;
-		color: var(--text-subtle);
-		vertical-align: -2px;
-	}
-	[data-model-type='dense'] .type-icon,
-	[data-model-type='dense'] .tbl-model-name {
-		color: var(--tint-blue-fg);
-	}
-	[data-model-type='cross-encoder'] .type-icon,
-	[data-model-type='cross-encoder'] .tbl-model-name {
-		color: var(--tint-orange-fg);
-	}
-	[data-model-type='late-interaction'] .type-icon,
-	[data-model-type='late-interaction'] .tbl-model-name {
-		color: var(--tint-green-fg);
-	}
-	[data-model-type='sparse'] .type-icon,
-	[data-model-type='sparse'] .tbl-model-name {
-		color: var(--tint-amber-fg);
-	}
-	[data-model-type='router'] .type-icon,
-	[data-model-type='router'] .tbl-model-name {
-		color: var(--tint-purple-fg);
-	}
+	   sticky column. The `.type-icon` cluster + per-model-type tint
+	   rules live in src/lib/styles/leaderboard-table.css so every
+	   model-row table (SummaryTable, ModelScoreTable, PerTaskTab,
+	   PerLanguageTab) shares one source of truth. */
 	/* Whole-row hover feedback lives in src/lib/styles/leaderboard-table.css
 	   so PerTaskTab / PerLanguageTab / model + task detail tables all
 	   share the same inset-shadow treatment. */
@@ -890,12 +863,8 @@
 		gap: 8px;
 		padding: 4px 8px;
 	}
-	.rank-num {
-		font-variant-numeric: tabular-nums;
-		font-weight: 600;
-		min-width: 16px;
-		text-align: right;
-	}
+	/* `.rank-pill` lives in src/lib/styles/leaderboard-table.css — shared
+	   with ModelScoreTable so both views render the rank identically. */
 	/* Combined pin + rank column. */
 	.sticky-left {
 		position: sticky;

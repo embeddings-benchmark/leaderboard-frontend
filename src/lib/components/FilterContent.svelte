@@ -742,12 +742,16 @@
 		flex: 1;
 		min-width: 0;
 	}
+	/* Selected-filter chip — sits on the page surface, so use the soft
+	   primary fill (theme-aware via app.css) instead of pure white,
+	   which read as a glaring patch in dark mode. Hover still flips to
+	   the full primary tint as a "clear this filter" affordance. */
 	.active-chip {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
 		padding: 3px 8px 3px 10px;
-		background: #fff;
+		background: var(--primary-soft);
 		border: 1px solid var(--primary);
 		border-radius: 999px;
 		font-size: 11px;
@@ -761,7 +765,7 @@
 	}
 	.active-chip:hover {
 		background: var(--primary);
-		color: #fff;
+		color: var(--surface);
 	}
 	.active-chip .x {
 		font-size: 14px;

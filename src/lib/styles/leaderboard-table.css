@@ -39,6 +39,29 @@
 	   back/forward navigation when the user reaches an edge. */
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior-x: contain;
+	/* Force a persistent, slim horizontal scrollbar on macOS / iOS where
+	   the system default ("only show on tracking" pref) hides the bar
+	   completely between interactions — users had no visual hint that
+	   the table was scrollable. Defining `::-webkit-scrollbar` with an
+	   explicit height switches to classic (always-on) mode, and
+	   `scrollbar-width: thin` does the same job in Firefox. */
+	scrollbar-width: thin;
+	scrollbar-color: var(--border-strong) transparent;
+}
+.tbl-scroll::-webkit-scrollbar {
+	height: 10px;
+	width: 10px;
+	background: transparent;
+}
+.tbl-scroll::-webkit-scrollbar-track {
+	background: transparent;
+}
+.tbl-scroll::-webkit-scrollbar-thumb {
+	background: var(--border-strong);
+	border-radius: 6px;
+}
+.tbl-scroll::-webkit-scrollbar-thumb:hover {
+	background: var(--text-subtle);
 }
 
 .tbl {
@@ -269,4 +292,53 @@
 }
 .tbl-model-name {
 	font-weight: 600;
+}
+
+/* Model-type cluster — the small lucide glyph beside the model name on
+   every model-row table (SummaryTable, ModelScoreTable, PerTaskTab,
+   PerLanguageTab). Icon + name share the same --tint-*-fg per model
+   type so the pair reads as one coloured cluster; the org prefix and
+   slash stay muted so the model name is the visual anchor. The host
+   `<td class="tbl-sticky-col">` carries `data-model-type={…}` and the
+   per-type rules below paint via descendant selectors. */
+.type-icon {
+	display: inline-flex;
+	align-items: center;
+	flex-shrink: 0;
+	margin-right: 6px;
+	color: var(--text-subtle);
+	vertical-align: -2px;
+}
+[data-model-type='dense'] .type-icon,
+[data-model-type='dense'] .tbl-model-name {
+	color: var(--tint-blue-fg);
+}
+[data-model-type='cross-encoder'] .type-icon,
+[data-model-type='cross-encoder'] .tbl-model-name {
+	color: var(--tint-orange-fg);
+}
+[data-model-type='late-interaction'] .type-icon,
+[data-model-type='late-interaction'] .tbl-model-name {
+	color: var(--tint-green-fg);
+}
+[data-model-type='sparse'] .type-icon,
+[data-model-type='sparse'] .tbl-model-name {
+	color: var(--tint-amber-fg);
+}
+[data-model-type='router'] .type-icon,
+[data-model-type='router'] .tbl-model-name {
+	color: var(--tint-purple-fg);
+}
+
+/* Rank pill — shared across SummaryTable and ModelScoreTable so the
+   leaderboard rank reads identically in both views. */
+.rank-pill {
+	display: inline-block;
+	padding: 2px 8px;
+	font-size: 11px;
+	font-weight: 700;
+	border-radius: 999px;
+	background: var(--surface-muted);
+	color: var(--ink-strong);
+	font-variant-numeric: tabular-nums;
 }

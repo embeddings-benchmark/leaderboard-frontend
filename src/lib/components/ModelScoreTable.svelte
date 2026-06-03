@@ -18,6 +18,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
+	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ModelTypeIcon from './ModelTypeIcon.svelte';
 	import {
@@ -107,11 +108,11 @@
 	});
 </script>
 
-<div class="tbl-scroll">
+<div class="tbl-scroll" use:stickyHScroll>
 	<table class="tbl task-table" use:stickyHead>
 		<thead>
 			<tr>
-				<th class="tbl-num" aria-sort={ariaSort('rank')}>
+				<th class="tbl-num sticky-rank" aria-sort={ariaSort('rank')}>
 					<button type="button" class="tbl-sort" onclick={() => clickSort('rank')}>
 						<span>Rank</span>
 						<span class="tbl-sort-ind" class:on={sortKey === 'rank'}>{sortIcon('rank')}</span>
@@ -147,8 +148,8 @@
 		<tbody>
 			{#each sortedRows as s (s.model.name + s.benchmarkName)}
 				<tr>
-					<td class="tbl-num">
-						<span class="rank-pill" class:top={s.rank === 1}>#{s.rank}</span>
+					<td class="tbl-num sticky-rank">
+						<span class="rank-pill">#{s.rank}</span>
 					</td>
 					<td class="sticky" data-model-type={s.model.modelType}>
 						<span class="type-icon" title={s.model.modelType}>
@@ -188,9 +189,35 @@
 	.task-table {
 		width: 100%;
 	}
-	.sticky {
+	/* Two sticky columns: Rank (70 px) pinned to the viewport edge, then
+	   Model (240 px) butted up against it. Without pinning Rank too, the
+	   #N pill scrolled out of view as soon as the user panned right —
+	   leaving anonymous model rows next to the floating sticky scrollbar.
+	   `--rank-w` keeps the Rank width and Model's left offset in sync. */
+	.task-table {
+		--rank-w: 70px;
+	}
+	.sticky-rank {
 		position: sticky;
 		left: 0;
+		background: var(--surface);
+		z-index: 2;
+		min-width: var(--rank-w);
+		width: var(--rank-w);
+	}
+	thead th.sticky-rank {
+		background: var(--surface-muted);
+		z-index: 3;
+	}
+	tbody tr:nth-child(even) td.sticky-rank {
+		background: var(--row-alt);
+	}
+	tbody tr:hover td.sticky-rank {
+		background: var(--row-hover);
+	}
+	.sticky {
+		position: sticky;
+		left: var(--rank-w);
 		background: var(--surface);
 		z-index: 2;
 		min-width: 240px;
@@ -205,14 +232,20 @@
 	tbody tr:hover td.sticky {
 		background: var(--row-hover);
 	}
-	/* Mobile: the 240 px sticky model column hides almost every score
-	   column behind itself on a 375 px viewport. Drop the stickyness
-	   so columns scroll together. */
+	/* Mobile: the sticky pair hides almost every score column behind it
+	   on a 375 px viewport. Drop the stickyness so columns scroll
+	   together. */
 	@media (max-width: 640px) {
 		.sticky,
-		thead th.sticky {
+		.sticky-rank,
+		thead th.sticky,
+		thead th.sticky-rank {
 			position: static;
 			left: auto;
+			min-width: 0;
+			width: auto;
+		}
+		.sticky {
 			min-width: 160px;
 		}
 	}
@@ -223,55 +256,15 @@
 	.task-model-link:hover {
 		color: var(--link);
 	}
-	/* Type icon + model-name colour share the same --tint-*-fg so the
-	   pair reads as one cluster. Matches SummaryTable's treatment so the
-	   model identity carries the same visual cue across views. */
-	.type-icon {
-		display: inline-flex;
-		align-items: center;
-		flex-shrink: 0;
-		margin-right: 6px;
-		color: var(--text-subtle);
-		vertical-align: -2px;
-	}
-	[data-model-type='dense'] .type-icon,
-	[data-model-type='dense'] .tbl-model-name {
-		color: var(--tint-blue-fg);
-	}
-	[data-model-type='cross-encoder'] .type-icon,
-	[data-model-type='cross-encoder'] .tbl-model-name {
-		color: var(--tint-orange-fg);
-	}
-	[data-model-type='late-interaction'] .type-icon,
-	[data-model-type='late-interaction'] .tbl-model-name {
-		color: var(--tint-green-fg);
-	}
-	[data-model-type='sparse'] .type-icon,
-	[data-model-type='sparse'] .tbl-model-name {
-		color: var(--tint-amber-fg);
-	}
-	[data-model-type='router'] .type-icon,
-	[data-model-type='router'] .tbl-model-name {
-		color: var(--tint-purple-fg);
-	}
+	/* `.type-icon` + per-model-type tint rules live in
+	   src/lib/styles/leaderboard-table.css — shared with SummaryTable,
+	   PerTaskTab, and PerLanguageTab. */
 	.mean-cell.partial {
 		color: var(--text-subtle);
 		font-weight: 500;
 	}
-	.rank-pill {
-		display: inline-block;
-		padding: 2px 8px;
-		font-size: 11px;
-		font-weight: 700;
-		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		font-variant-numeric: tabular-nums;
-	}
-	.rank-pill.top {
-		background: var(--primary-soft);
-		color: var(--primary-strong);
-	}
+	/* `.rank-pill` lives in src/lib/styles/leaderboard-table.css — shared
+	   with SummaryTable so both views render the rank identically. */
 	thead th.sub {
 		font-size: 11px;
 		font-weight: 600;

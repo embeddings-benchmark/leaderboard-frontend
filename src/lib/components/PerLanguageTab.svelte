@@ -2,6 +2,7 @@
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import { stickyHead } from '$lib/actions/sticky-head';
+	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { type CsvCell } from '$lib/csv';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import {
@@ -12,6 +13,7 @@
 		sortIcon as sortIconFor
 	} from '$lib/format';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
+	import ModelTypeIcon from './ModelTypeIcon.svelte';
 
 	type Tip = {
 		showFor: (t: HTMLElement, row: SummaryRow) => void;
@@ -169,7 +171,7 @@
 		Example per-language scores for the visible models. Click any column header to sort. Values are
 		simulated until the backend exposes the real per-language breakdown.
 	</p>
-	<div class="tbl-scroll">
+	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl lang-table" use:stickyHead>
 			<thead>
 				<tr>
@@ -228,11 +230,15 @@
 						</td>
 						<td
 							class="tbl-sticky-col"
+							data-model-type={row.model.modelType}
 							onpointerenter={(e) => onCellEnter(e, row)}
 							onpointerleave={onCellLeave}
 							onfocusin={(e) => onCellEnter(e, row)}
 							onfocusout={onCellLeave}
 						>
+							<span class="type-icon" title={row.model.modelType}>
+								<ModelTypeIcon type={row.model.modelType} size={13} />
+							</span>
 							{#if row.model.url}
 								<!-- External model URL (HuggingFace etc.) -->
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->

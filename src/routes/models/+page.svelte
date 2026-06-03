@@ -299,6 +299,15 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
+		/* Reserve room beneath the badges so the modality strip's
+		   `margin-top: auto` actually has slack to push into. Without a
+		   guaranteed minimum height the card collapses to content and
+		   the auto margin resolves to 0, leaving modalities glued to
+		   the badges row. 220 px matches the natural height of a card
+		   with all three optional badges + a 2-modality row, so cards
+		   with fewer badges or modalities just get more breathing
+		   room above the modality strip. */
+		min-height: 220px;
 		position: relative;
 		overflow: hidden;
 		text-decoration: none;
@@ -390,12 +399,15 @@
 	/* Bottom-of-card modality strip: small color-keyed chips that read
 	   "the model can encode <icon> text / image / audio / video". Sits
 	   below the open-weights / instruction-tuned badges so the card
-	   reads top-to-bottom as identity → stats → capability → modality. */
+	   reads top-to-bottom as identity → stats → capability → modality.
+	   `margin-top: auto` pins the strip to the bottom edge of the flex
+	   card so the row aligns across the grid no matter how many soft
+	   badges (Instruction-tuned / ST compatible) the model carries. */
 	.modality-row {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
-		margin-top: 6px;
+		margin-top: auto;
 	}
 	/* Geometry only — per-modality tint comes from `.modality-tint` in
 	   src/app.css, shared with the /models/[name] hero badges. */
@@ -494,9 +506,15 @@
 		font-weight: 600;
 		letter-spacing: 0.02em;
 	}
+	/* Reuse the shared `--tint-green` pair so dark mode picks up the
+	   pre-tuned dark-green variant instead of a washed-out light bg.
+	   Dark mode gets a slightly deeper green than the default
+	   `--tint-green` so the pill reads as a distinct chip against the
+	   `--surface` card body (which itself is in the same green family
+	   territory under the gradient header band). */
 	.badge.open {
-		background: #def7e9;
-		color: #1c7a4c;
+		background: light-dark(var(--tint-green), #0d2a1c);
+		color: var(--tint-green-fg);
 	}
 	.badge.closed {
 		background: var(--surface-muted);
