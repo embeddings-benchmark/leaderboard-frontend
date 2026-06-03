@@ -329,7 +329,19 @@
 		};
 	}
 
+	// True for pointer events that just crossed the cell's outer boundary
+	// (entry/exit). False for internal traversal (cursor moved between
+	// children of the same cell). Lets `pointerover`/`pointerout` — which
+	// Svelte 5 delegates to the document — stand in for `pointerenter`/
+	// `pointerleave`, which would force a per-cell listener.
+	function isBoundaryCross(e: PointerEvent | FocusEvent): boolean {
+		const cell = e.currentTarget as HTMLElement | null;
+		const other = (e as PointerEvent).relatedTarget as Node | null;
+		return !!cell && !(other && cell.contains(other));
+	}
+
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
+		if (!isBoundaryCross(e)) return;
 		cancelHide();
 		const cell = e.currentTarget as HTMLElement;
 		const r = cell.getBoundingClientRect();
@@ -373,7 +385,10 @@
 			hideTimer = null;
 		}
 	}
-	function hideTip() {
+	function hideTip(e?: PointerEvent | FocusEvent) {
+		// `pointerout` fires on every internal traversal; only schedule
+		// the hide when the cursor leaves the cell itself.
+		if (e && !isBoundaryCross(e)) return;
 		cancelHide();
 		hideTimer = setTimeout(() => {
 			tipState = { ...tipState, visible: false };
@@ -585,8 +600,8 @@
 						<td
 							class="sticky-model has-tip"
 							data-model-type={row.model.modelType}
-							onpointerenter={(e) => showModelTip(e, row)}
-							onpointerleave={hideTip}
+							onpointerover={(e) => showModelTip(e, row)}
+							onpointerout={hideTip}
 							onfocusin={(e) => showModelTip(e, row)}
 							onfocusout={hideTip}
 						>

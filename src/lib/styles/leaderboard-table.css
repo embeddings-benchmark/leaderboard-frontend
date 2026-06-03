@@ -26,27 +26,23 @@
 }
 
 .tbl-scroll {
-	/* Horizontal scrollbar appears for wide tables. Browsers coerce overflow-y
-	   to auto whenever overflow-x is non-visible, so this also forms a
-	   scrollport on the y-axis. Sticky thead therefore anchors within this
-	   wrapper rather than the page viewport (see comment on .tbl thead th). */
+	/* `overflow-x: auto` contains wide tables; browsers coerce overflow-y to
+	   auto too, so sticky thead anchors here rather than the page viewport. */
 	overflow-x: auto;
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	background: var(--surface);
 	box-shadow: var(--shadow-sm);
-	/* Momentum scrolling on iOS + don't let a horizontal swipe chain
-	   back/forward navigation when the user reaches an edge. */
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior-x: contain;
-	/* Force a persistent, slim horizontal scrollbar on macOS / iOS where
-	   the system default ("only show on tracking" pref) hides the bar
-	   completely between interactions — users had no visual hint that
-	   the table was scrollable. Defining `::-webkit-scrollbar` with an
-	   explicit height switches to classic (always-on) mode, and
-	   `scrollbar-width: thin` does the same job in Firefox. */
+	/* Persistent slim scrollbar (macOS / iOS hide overlay bars between
+	   interactions). Defining `::-webkit-scrollbar` flips to classic mode. */
 	scrollbar-width: thin;
 	scrollbar-color: var(--border-strong) transparent;
+	/* `contain: layout style` isolates the table's layout/style cost from the
+	   rest of the page — a hover or sort-indicator change inside the table
+	   no longer forces the page to recompute its own layout. */
+	contain: layout style;
 }
 .tbl-scroll::-webkit-scrollbar {
 	height: 10px;
@@ -77,6 +73,13 @@
 }
 .tbl td {
 	padding: 8px 12px;
+}
+/* Heat-shading: cells that carry a `--heat-pct` custom prop (set inline
+   by `heat()` in lib/format.ts) get the shared `color-mix` background.
+   One CSS rule instead of N inline `background-color: color-mix(...)`
+   strings — the browser caches the property lookup. */
+.tbl td[style*='--heat-pct'] {
+	background-color: color-mix(in srgb, var(--heat) var(--heat-pct), transparent);
 }
 .tbl thead th {
 	background: var(--surface-muted);

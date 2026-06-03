@@ -138,6 +138,11 @@ export function hasValue(s: string): boolean {
  * bound, or a degenerate range (max ≤ min, e.g. one row in the
  * column) all yield an empty string (no inline style).
  */
+// Pre-cached `--heat-pct` styles. With ~1500 cells per SummaryTable render
+// this avoids ~1500 string allocations + ~1500 `color-mix()` resolutions
+// per pass — one shared CSS rule in app.css does the mix from `--heat-pct`.
+const HEAT_STYLE_CACHE: string[] = Array.from({ length: 56 }, (_, i) => `--heat-pct:${i}%;`);
+
 export function heat(score: number | null | undefined, min: number, max: number): string {
 	if (score == null) return '';
 	if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
@@ -145,11 +150,7 @@ export function heat(score: number | null | undefined, min: number, max: number)
 	const ratio = Math.max(0, Math.min(1, (score - min) / (max - min)));
 	const pct = Math.round(ratio * 55);
 	if (pct === 0) return '';
-	// `--heat` (defined in app.css) is a lighter, sky-blue source colour
-	// in light mode and the same azure as --primary in dark mode. Using
-	// it instead of --primary keeps action-blue elements vivid while the
-	// dense grid of tinted cells stays calm.
-	return `background-color: color-mix(in srgb, var(--heat) ${pct}%, transparent);`;
+	return HEAT_STYLE_CACHE[pct];
 }
 
 /**

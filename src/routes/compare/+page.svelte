@@ -798,7 +798,12 @@
 				{#if pickedBenchmarks.length === 1 && radarSpec && pickedRows.length >= 1 && primarySummary && primarySummary.taskTypes.length >= 2}
 					<section class="radar-card">
 						<h3>Strengths at a glance</h3>
-						<PlotlyChart data={radarSpec.data} layout={radarSpec.layout} height={400} />
+						<PlotlyChart
+							data={radarSpec.data}
+							layout={radarSpec.layout}
+							height={400}
+							traces={['scatterpolar']}
+						/>
 					</section>
 				{/if}
 			{/if}

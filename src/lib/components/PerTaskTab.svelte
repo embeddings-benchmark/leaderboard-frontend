@@ -22,10 +22,20 @@
 	};
 	let tipPortal = $state<Tip | undefined>(undefined);
 
+	// Filter `pointerover`/`pointerout` to outer boundary crossings only —
+	// Svelte 5 delegates the bubbling pair to the document, so we save a
+	// per-cell listener vs `pointerenter`/`pointerleave`.
+	function isBoundaryCross(e: PointerEvent | FocusEvent): boolean {
+		const cell = e.currentTarget as HTMLElement | null;
+		const other = (e as PointerEvent).relatedTarget as Node | null;
+		return !!cell && !(other && cell.contains(other));
+	}
 	function onCellEnter(e: PointerEvent | FocusEvent, row: SummaryRow) {
+		if (!isBoundaryCross(e)) return;
 		tipPortal?.showFor(e.currentTarget as HTMLElement, row);
 	}
-	function onCellLeave() {
+	function onCellLeave(e?: PointerEvent | FocusEvent) {
+		if (e && !isBoundaryCross(e)) return;
 		tipPortal?.hide();
 	}
 
@@ -203,8 +213,8 @@
 							<td
 								class="tbl-sticky-col"
 								data-model-type={row.model.modelType}
-								onpointerenter={(e) => onCellEnter(e, row)}
-								onpointerleave={onCellLeave}
+								onpointerover={(e) => onCellEnter(e, row)}
+								onpointerout={onCellLeave}
 								onfocusin={(e) => onCellEnter(e, row)}
 								onfocusout={onCellLeave}
 							>

@@ -7,8 +7,13 @@
 		layout?: Partial<Layout>;
 		config?: Partial<Config>;
 		height?: number;
+		/** Which Plotly trace modules to register before drawing. Default
+		 *  `scatter` covers the perf-by-size / perf-by-time figures on
+		 *  /benchmark/[name]; the /compare radar passes `scatterpolar`
+		 *  so we don't bundle polar code into the benchmark route. */
+		traces?: ('scatter' | 'scatterpolar')[];
 	}
-	let { data, layout = {}, config = {}, height = 480 }: Props = $props();
+	let { data, layout = {}, config = {}, height = 480, traces = ['scatter'] }: Props = $props();
 
 	let el: HTMLDivElement;
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,8 +121,20 @@
 	};
 
 	onMount(async () => {
-		const mod = await import('plotly.js-dist-min');
-		Plotly = mod.default ?? mod;
+		// Route-split modular build: each consumer declares which trace
+		// modules it needs. /benchmark/[name] pulls only `scatter` (~1 MB);
+		// /compare adds `scatterpolar` for the radar. Avoids loading polar
+		// code on routes that don't draw a polar plot.
+		const PlotlyMod = await import('plotly.js/lib/core');
+		Plotly = PlotlyMod.default;
+		const traceMods = await Promise.all(
+			traces.map((name) =>
+				name === 'scatterpolar'
+					? import('plotly.js/lib/scatterpolar').then((m) => m.default)
+					: import('plotly.js/lib/scatter').then((m) => m.default)
+			)
+		);
+		Plotly.register(traceMods);
 		mounted = true;
 		await Plotly.newPlot(el, data, buildLayout(), { ...defaultConfig, ...config });
 

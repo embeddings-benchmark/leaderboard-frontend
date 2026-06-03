@@ -585,6 +585,11 @@
 			transform 0.12s ease,
 			border-color 0.12s ease,
 			box-shadow 0.12s ease;
+		/* `content-visibility: auto` lets the browser skip rendering off-screen
+		   cards (1759 entries on the full registry). `contain-intrinsic-size`
+		   reserves placeholder space so the scrollbar geometry stays stable. */
+		content-visibility: auto;
+		contain-intrinsic-size: 280px;
 	}
 	.card:hover {
 		transform: translateY(-1px);

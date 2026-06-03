@@ -160,26 +160,45 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		}
 	}
 
-	const onScroll = () => update();
-	const onWrapperScroll = () => update();
-	const onResize = () => {
-		syncWidths();
-		update();
-	};
+	// rAF-batch every layout-touching path. Scrolling a 9000-px table fires
+	// hundreds of scroll events per second; coalescing to one read+write per
+	// frame keeps the overlay sync from saturating the main thread.
+	let updateRaf = 0;
+	function scheduleUpdate() {
+		if (updateRaf) return;
+		updateRaf = requestAnimationFrame(() => {
+			updateRaf = 0;
+			update();
+		});
+	}
+	let resyncRaf = 0;
+	function scheduleResync() {
+		if (resyncRaf) return;
+		resyncRaf = requestAnimationFrame(() => {
+			resyncRaf = 0;
+			syncWidths();
+			update();
+		});
+	}
+	let contentRaf = 0;
+	function scheduleContent() {
+		if (contentRaf) return;
+		contentRaf = requestAnimationFrame(() => {
+			contentRaf = 0;
+			syncContent();
+		});
+	}
 
-	const ro = new ResizeObserver(() => {
-		syncWidths();
-		update();
-	});
+	const ro = new ResizeObserver(scheduleResync);
 	ro.observe(table);
 	ro.observe(wrapper);
 
-	const mo = new MutationObserver(() => syncContent());
+	const mo = new MutationObserver(scheduleContent);
 	mo.observe(realThead, { childList: true, subtree: true, characterData: true, attributes: true });
 
-	window.addEventListener('scroll', onScroll, { passive: true });
-	wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
-	window.addEventListener('resize', onResize);
+	window.addEventListener('scroll', scheduleUpdate, { passive: true });
+	wrapper.addEventListener('scroll', scheduleUpdate, { passive: true });
+	window.addEventListener('resize', scheduleResync);
 	inner.addEventListener('click', onCloneClick);
 
 	syncWidths();
@@ -187,11 +206,14 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 
 	return {
 		destroy() {
+			if (updateRaf) cancelAnimationFrame(updateRaf);
+			if (resyncRaf) cancelAnimationFrame(resyncRaf);
+			if (contentRaf) cancelAnimationFrame(contentRaf);
 			ro.disconnect();
 			mo.disconnect();
-			window.removeEventListener('scroll', onScroll);
-			wrapper.removeEventListener('scroll', onWrapperScroll);
-			window.removeEventListener('resize', onResize);
+			window.removeEventListener('scroll', scheduleUpdate);
+			wrapper.removeEventListener('scroll', scheduleUpdate);
+			window.removeEventListener('resize', scheduleResync);
 			inner.removeEventListener('click', onCloneClick);
 			overlay.remove();
 		}

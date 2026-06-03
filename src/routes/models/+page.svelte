@@ -281,14 +281,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		/* Reserve room beneath the badges so the modality strip's
-		   `margin-top: auto` actually has slack to push into. Without a
-		   guaranteed minimum height the card collapses to content and
-		   the auto margin resolves to 0, leaving modalities glued to
-		   the badges row. 220 px matches the natural height of a card
-		   with all three optional badges + a 2-modality row, so cards
-		   with fewer badges or modalities just get more breathing
-		   room above the modality strip. */
+		/* `min-height` gives `.modality-row { margin-top: auto }` slack to
+		   push the modalities to the card bottom — without it the column
+		   collapses to content and the auto margin resolves to 0. */
 		min-height: 220px;
 		position: relative;
 		overflow: hidden;
@@ -298,6 +293,10 @@
 			transform 0.12s ease,
 			border-color 0.12s ease,
 			box-shadow 0.12s ease;
+		/* Skip render/paint for off-screen cards (the registry is long); the
+		   `min-height` above doubles as the intrinsic-size placeholder. */
+		content-visibility: auto;
+		contain-intrinsic-size: 220px;
 	}
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));

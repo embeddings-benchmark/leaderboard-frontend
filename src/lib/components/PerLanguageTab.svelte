@@ -21,10 +21,20 @@
 	};
 	let tipPortal = $state<Tip | undefined>(undefined);
 
+	// See SummaryTable / PerTaskTab — using `pointerover`/`pointerout`
+	// (delegated by Svelte 5) avoids per-cell DOM listeners; the boundary
+	// guard makes them behave like `pointerenter`/`pointerleave`.
+	function isBoundaryCross(e: PointerEvent | FocusEvent): boolean {
+		const cell = e.currentTarget as HTMLElement | null;
+		const other = (e as PointerEvent).relatedTarget as Node | null;
+		return !!cell && !(other && cell.contains(other));
+	}
 	function onCellEnter(e: PointerEvent | FocusEvent, row: SummaryRow) {
+		if (!isBoundaryCross(e)) return;
 		tipPortal?.showFor(e.currentTarget as HTMLElement, row);
 	}
-	function onCellLeave() {
+	function onCellLeave(e?: PointerEvent | FocusEvent) {
+		if (e && !isBoundaryCross(e)) return;
 		tipPortal?.hide();
 	}
 
@@ -231,8 +241,8 @@
 						<td
 							class="tbl-sticky-col"
 							data-model-type={row.model.modelType}
-							onpointerenter={(e) => onCellEnter(e, row)}
-							onpointerleave={onCellLeave}
+							onpointerover={(e) => onCellEnter(e, row)}
+							onpointerout={onCellLeave}
 							onfocusin={(e) => onCellEnter(e, row)}
 							onfocusout={onCellLeave}
 						>
