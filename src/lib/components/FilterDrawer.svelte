@@ -39,7 +39,7 @@
 	.backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(15, 23, 42, 0.3);
+		background: rgb(15, 23, 42, 0.3);
 		backdrop-filter: blur(2px);
 		-webkit-backdrop-filter: blur(2px);
 		z-index: 200;
@@ -62,7 +62,7 @@
 		max-width: 92vw;
 		background: var(--surface);
 		border-left: 1px solid var(--border);
-		box-shadow: -8px 0 24px rgba(15, 23, 42, 0.08);
+		box-shadow: -8px 0 24px rgb(15, 23, 42, 0.08);
 		z-index: 201;
 		display: flex;
 		flex-direction: column;

@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { loadBenchmarkMenu } from '$lib/data/service';
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import { env } from '$env/dynamic/public';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
-	import { apiUrl, isIconUrl } from '$lib/format';
+	import { apiUrl, isIconUrl, slug } from '$lib/format';
 
 	// `/benchmarks` returns *every* benchmark, even those not on the curated
 	// menu. We compare against the menu to call out which ones aren't reachable
@@ -12,21 +13,20 @@
 	const API = env.PUBLIC_API_URL?.trim() ?? '';
 
 	let allBenchmarks = $state<Benchmark[]>([]);
-	let menuNames = $state<Set<string>>(new Set());
+	const menuNames = new SvelteSet<string>();
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let query = $state('');
 
-	function collectFromMenu(entries: MenuEntry[]): Set<string> {
-		const names = new Set<string>();
+	function fillFromMenu(entries: MenuEntry[]) {
+		menuNames.clear();
 		const walk = (m: MenuEntry) => {
 			for (const c of m.children) {
-				if (isBenchmark(c)) names.add(c.name);
+				if (isBenchmark(c)) menuNames.add(c.name);
 				else walk(c);
 			}
 		};
 		entries.forEach(walk);
-		return names;
 	}
 
 	async function loadAll(): Promise<Benchmark[]> {
@@ -42,7 +42,7 @@
 		Promise.all([loadAll(), loadBenchmarkMenu()])
 			.then(([list, menu]) => {
 				allBenchmarks = list.sort((a, b) => a.displayName.localeCompare(b.displayName));
-				menuNames = collectFromMenu(menu);
+				fillFromMenu(menu);
 				loading = false;
 			})
 			.catch((e) => {
@@ -67,15 +67,11 @@
 				(!q || b.name.toLowerCase().includes(q) || b.displayName.toLowerCase().includes(q))
 		);
 	});
-
-	function slug(name: string): string {
-		return encodeURIComponent(name);
-	}
 </script>
 
 <div class="page">
 	<nav class="breadcrumb" aria-label="Breadcrumb">
-		<a href="{base}/">Home</a>
+		<a href={resolve('/')}>Home</a>
 		<span class="sep">/</span>
 		<span class="current">All benchmarks</span>
 	</nav>
@@ -83,8 +79,8 @@
 	<header class="hero">
 		<h1>All benchmarks</h1>
 		<p class="lead">
-			Every benchmark registered in mteb — including ones that aren't on the curated explorer
-			menu. Use the search box to find a benchmark by name.
+			Every benchmark registered in mteb — including ones that aren't on the curated explorer menu.
+			Use the search box to find a benchmark by name.
 		</p>
 		<p class="contribute-note">
 			To add your benchmark, follow our
@@ -100,7 +96,9 @@
 		<div class="search">
 			<input type="search" placeholder="Search benchmarks…" bind:value={query} />
 			{#if query}
-				<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear">×</button>
+				<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear"
+					>×</button
+				>
 			{/if}
 		</div>
 		<span class="count">
@@ -133,8 +131,8 @@
 					<h2>Other benchmarks</h2>
 					<span class="count">{filteredOther.length}</span>
 					<span class="hint">
-						— not on the curated explorer menu (older versions or specialised drops). The
-						"Newer version" tag links to the current replacement when there is one.
+						— not on the curated explorer menu (older versions or specialised drops). The "Newer
+						version" tag links to the current replacement when there is one.
 					</span>
 				</header>
 				<div class="grid">
@@ -152,7 +150,7 @@
 </div>
 
 {#snippet benchmarkCard(b: Benchmark, other: boolean)}
-	<a class="card" class:other href="{base}/benchmark/{slug(b.name)}">
+	<a class="card" class:other href={resolve('/benchmark/[name]', { name: slug(b.name) })}>
 		<div class="card-head">
 			{#if b.icon}
 				{#if isIconUrl(b.icon)}
@@ -316,7 +314,7 @@
 	.card:hover {
 		border-color: var(--primary);
 		transform: translateY(-1px);
-		box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+		box-shadow: 0 10px 24px rgb(15, 23, 42, 0.06);
 	}
 	.card.other {
 		background: var(--surface-muted);

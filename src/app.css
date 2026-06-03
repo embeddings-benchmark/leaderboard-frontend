@@ -7,7 +7,7 @@
 	   to either side when needed. */
 	--bg-light: #f6f5f1;
 	--bg-dark: #14161b;
-	--surface-light: #ffffff;
+	--surface-light: #fff;
 	--surface-dark: #1d1f26;
 	--surface-muted-light: #f2f0ea;
 	--surface-muted-dark: #23262e;
@@ -38,12 +38,12 @@
 	--row-alt-dark: #1f2229;
 	--row-hover-light: #efeee8;
 	--row-hover-dark: #2a2d36;
-	--shadow-sm-light: 0 1px 2px rgba(15, 23, 42, 0.04);
-	--shadow-sm-dark: 0 1px 2px rgba(0, 0, 0, 0.4);
+	--shadow-sm-light: 0 1px 2px rgb(15, 23, 42, 0.04);
+	--shadow-sm-dark: 0 1px 2px rgb(0, 0, 0, 0.4);
 	/* Top-bar background — translucent so the page surface peeks through the
 	   blur. Pair per theme rather than mixing the same alpha both ways. */
-	--bar-bg-light: rgba(252, 250, 245, 0.78);
-	--bar-bg-dark: rgba(20, 22, 27, 0.78);
+	--bar-bg-light: rgb(252, 250, 245, 0.78);
+	--bar-bg-dark: rgb(20, 22, 27, 0.78);
 
 	/* Live tokens — chosen by the browser based on the resolved color-scheme
 	   (system preference, or manually pinned via `data-theme`). */

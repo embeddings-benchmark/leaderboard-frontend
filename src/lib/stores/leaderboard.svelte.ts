@@ -26,10 +26,7 @@ function createLeaderboardStore() {
 		state.loading = true;
 		state.error = null;
 		try {
-			const [benchmark, summary] = await Promise.all([
-				loadBenchmark(name),
-				loadSummary(name)
-			]);
+			const [benchmark, summary] = await Promise.all([loadBenchmark(name), loadSummary(name)]);
 			if (id !== inflight) return;
 			state.benchmark = benchmark;
 			state.summary = summary;

@@ -86,7 +86,7 @@
 		line-height: 1.5;
 		text-align: left;
 		z-index: 1000;
-		box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
 		white-space: normal;
 		pointer-events: none;
 	}

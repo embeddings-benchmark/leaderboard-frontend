@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { loadBenchmarkMenu } from '$lib/data/service';
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
-	import { apiUrl, isIconUrl } from '$lib/format';
+	import { apiUrl, isIconUrl, slug } from '$lib/format';
 
 	let menu = $state<MenuEntry[]>([]);
 	let loading = $state(true);
@@ -21,10 +21,6 @@
 			});
 	});
 
-	function slug(name: string): string {
-		return encodeURIComponent(name);
-	}
-
 	function benchmarkCount(entry: MenuEntry): number {
 		let n = 0;
 		for (const c of entry.children) {
@@ -41,7 +37,7 @@
 		<p class="lead">
 			Curated leaderboards across text, image, audio, and video embedding tasks. Browse the menu
 			below or
-			<a class="lead-link" href="{base}/benchmarks">view all benchmarks →</a>
+			<a class="lead-link" href={resolve('/benchmarks')}>view all benchmarks →</a>
 		</p>
 	</header>
 
@@ -57,7 +53,7 @@
 </div>
 
 {#snippet benchmarkCard(b: Benchmark)}
-	<a class="card" href="{base}/benchmark/{slug(b.name)}">
+	<a class="card" href={resolve('/benchmark/[name]', { name: slug(b.name) })}>
 		<div class="card-head">
 			{#if b.icon}
 				{#if isIconUrl(b.icon)}
@@ -258,7 +254,7 @@
 	.card:hover {
 		border-color: var(--primary);
 		transform: translateY(-1px);
-		box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+		box-shadow: 0 10px 24px rgb(15, 23, 42, 0.06);
 	}
 	.card-head {
 		display: flex;

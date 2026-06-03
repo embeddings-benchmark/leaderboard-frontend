@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import type { Benchmark, TaskMeta } from '$lib/types';
+	import { slug } from '$lib/format';
 
 	interface Props {
 		benchmark: Benchmark;
@@ -40,10 +41,6 @@
 			? rows.filter((r) => r.name.toLowerCase().includes(query.toLowerCase().trim()))
 			: rows
 	);
-
-	function slug(name: string): string {
-		return encodeURIComponent(name);
-	}
 </script>
 
 <div class="wrap">
@@ -67,7 +64,9 @@
 				{#each filtered as row (row.name)}
 					<tr>
 						<td>
-							<a class="task-link" href="{base}/tasks/{slug(row.name)}">{row.name}</a>
+							<a class="task-link" href={resolve('/tasks/[name]', { name: slug(row.name) })}
+								>{row.name}</a
+							>
 						</td>
 						<td>{row.type}</td>
 						<td class="wrap-col" title={row.languages}>{row.languages}</td>

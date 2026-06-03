@@ -1,7 +1,19 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
-	import { humanizeType } from '$lib/format';
+	import {
+		ariaSort as ariaSortFor,
+		bestPerColumn,
+		defaultDirFor,
+		fmtParamsUnit,
+		fmtParamsValue,
+		fmtPct,
+		heat,
+		humanizeType,
+		maxOf,
+		nextSort,
+		sortIcon as sortIconFor
+	} from '$lib/format';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { getParam, updateUrl } from '$lib/url-state';
 
@@ -28,7 +40,7 @@
 		},
 		meanTask: {
 			title: 'Mean (Task)',
-			text: 'Naïve average of the model\'s scores across every task in the benchmark. Continuous, simple to read, but tasks with higher score variance pull the mean around.'
+			text: "Naïve average of the model's scores across every task in the benchmark. Continuous, simple to read, but tasks with higher score variance pull the mean around."
 		},
 		meanTaskType: {
 			title: 'Mean (TaskType)',
@@ -75,22 +87,13 @@
 	});
 
 	// Score-like columns default to descending (best first); rank and name default to ascending.
-	function defaultDir(key: SortKey): Dir {
-		return key === 'rank' || key === 'model' ? 'asc' : 'desc';
-	}
+	const ASC_KEYS: readonly SortKey[] = ['rank', 'model'];
+	const defaultDir = (key: SortKey) => defaultDirFor(key, ASC_KEYS);
 
 	function clickSort(key: SortKey) {
-		if (sortKey !== key) {
-			sortKey = key;
-			sortDir = defaultDir(key);
-			return;
-		}
-		// Same column: toggle once, then clear on the third click.
-		if (sortDir === defaultDir(key)) {
-			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		} else {
-			sortKey = null;
-		}
+		const next = nextSort(key, sortKey, sortDir, defaultDir);
+		sortKey = next.key;
+		sortDir = next.dir;
 	}
 
 	function getValue(row: SummaryRow, key: SortKey): { v: number | string; missing: boolean } {
@@ -144,66 +147,22 @@
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
 
-	function fmtPct(score: number | null | undefined): string {
-		if (score == null) return '—';
-		return (score * 100).toFixed(2);
-	}
-	/* Heatmap shade for score cells: stretches the meaningful 0.45–0.75 range
-	   across a 0–55% orange wash so weak scores look pale and strong scores pop. */
-	function heat(score: number | null | undefined): string {
-		if (score == null) return '';
-		const v = Math.max(0, Math.min(1, (score - 0.45) / 0.3));
-		const pct = Math.round(v * 55);
-		if (pct === 0) return '';
-		return `background-color: color-mix(in srgb, var(--primary) ${pct}%, transparent);`;
-	}
 	function fmtZeroShot(pct: number): string {
 		if (pct === -1) return '⚠️ NA';
 		return `${pct.toFixed(0)}%`;
 	}
-	function fmtParamsValue(b: number): string {
-		if (b === 0) return '—';
-		// Models under 1B are shown in millions so the magnitude is obvious at a glance.
-		if (b >= 1) return b.toFixed(1);
-		return (b * 1000).toFixed(0);
-	}
-	function fmtParamsUnit(b: number): string {
-		if (b === 0) return '';
-		return b >= 1 ? 'B' : 'M';
-	}
-	function fmtInt(n: number): string {
-		if (!n) return '—';
-		return n.toLocaleString();
-	}
-	function hasValue(s: string): boolean {
-		return s !== '—' && s !== '⚠️ NA';
-	}
 
-	function bestPerTaskType(): Record<string, number> {
-		const best: Record<string, number> = {};
-		for (const tt of summary.taskTypes) {
-			let max = -Infinity;
-			for (const r of summary.rows) {
-				const v = r.scoresByTaskType[tt];
-				if (v !== undefined && v > max) max = v;
-			}
-			best[tt] = max;
-		}
-		return best;
-	}
-	let best = $derived(bestPerTaskType());
-	let bestMeanTask = $derived(
-		Math.max(
-			...summary.rows.map((r) => r.meanTask).filter((v): v is number => v != null),
-			-Infinity
-		)
+	// Display the per-task-type columns A→Z. The API preserves
+	// benchmark-specific order, but readers scan a wide table faster
+	// when columns are alphabetised (and the mean columns to the left
+	// stay anchored). `localeCompare` keeps "STS" before "Summarization"
+	// regardless of locale, etc.
+	let sortedTaskTypes = $derived([...summary.taskTypes].sort((a, b) => a.localeCompare(b)));
+	let best = $derived(
+		bestPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
 	);
-	let bestMeanTaskType = $derived(
-		Math.max(
-			...summary.rows.map((r) => r.meanTaskType).filter((v): v is number => v != null),
-			-Infinity
-		)
-	);
+	let bestMeanTask = $derived(maxOf(summary.rows.map((r) => r.meanTask)));
+	let bestMeanTaskType = $derived(maxOf(summary.rows.map((r) => r.meanTaskType)));
 	// Column visibility is declarative — `summary.aggregations` lists exactly
 	// which mean columns belong on this benchmark's leaderboard. Avoids
 	// inferring from the score data (which led to ViDoRe showing an empty
@@ -251,32 +210,17 @@
 		if (!showPublicPrivate) return null;
 		return meanOver(row, privateTaskNames);
 	}
-	let bestMeanPublic = $derived(
-		Math.max(
-			...summary.rows.map(liveMeanPublic).filter((v): v is number => v != null),
-			-Infinity
-		)
-	);
-	let bestMeanPrivate = $derived(
-		Math.max(
-			...summary.rows.map(liveMeanPrivate).filter((v): v is number => v != null),
-			-Infinity
-		)
-	);
+	let bestMeanPublic = $derived(maxOf(summary.rows.map(liveMeanPublic)));
+	let bestMeanPrivate = $derived(maxOf(summary.rows.map(liveMeanPrivate)));
 
 	function isBestScore(row: SummaryRow, taskType: string): boolean {
 		return row.scoresByTaskType[taskType] === best[taskType];
 	}
 
-	function sortIcon(key: SortKey): string {
-		if (sortKey !== key) return '';
-		return sortDir === 'asc' ? '↑' : '↓';
-	}
-
-	function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
-		if (sortKey !== key) return 'none';
-		return sortDir === 'asc' ? 'ascending' : 'descending';
-	}
+	// SummaryTable uses '' for inactive sort, not '↕' like the
+	// per-task / per-language tables.
+	const sortIcon = (key: SortKey) => sortIconFor(key, sortKey, sortDir, '');
+	const ariaSort = (key: SortKey) => ariaSortFor(key, sortKey, sortDir);
 
 	// Tooltip portal: we render a single tooltip element at the SummaryTable's
 	// root (outside the <table> + .scroll wrapper) and update its position/content
@@ -359,268 +303,265 @@
 </script>
 
 <div class="summary">
-<div class="tbl-scroll">
-	<table class="tbl summary-table" use:stickyHead>
-		<thead>
-			<tr>
-				<th
-					class="sticky-left rank-head"
-					data-tip-title={INFO.rank.title}
-					data-tip={INFO.rank.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('rank')}
-				>
-					<button class="sort-btn tbl-num" onclick={() => clickSort('rank')}>
-						<span>Rank</span>
-						<span class="ind" class:on={sortKey === 'rank'}>{sortIcon('rank') || '↕'}</span>
-					</button>
-				</th>
-				<th class="sticky-model" aria-sort={ariaSort('model')}>
-					<button class="sort-btn" onclick={() => clickSort('model')}>
-						<span>Model</span>
-						<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model') || '↕'}</span>
-					</button>
-				</th>
-				<th
-					class="tbl-num"
-					data-tip-title={INFO.totalParams.title}
-					data-tip={INFO.totalParams.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('totalParams')}
-				>
-					<button class="sort-btn tbl-num" onclick={() => clickSort('totalParams')}>
-						<span>Total Params</span>
-						<span class="ind" class:on={sortKey === 'totalParams'}
-							>{sortIcon('totalParams') || '↕'}</span
-						>
-					</button>
-				</th>
-				{#if showMeanTask}
-				<th
-					class="tbl-num"
-					data-tip-title={INFO.meanTask.title}
-					data-tip={INFO.meanTask.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('meanTask')}
-				>
-					<button class="sort-btn tbl-num" onclick={() => clickSort('meanTask')}>
-						<span>Mean (Task)</span>
-						<span class="ind" class:on={sortKey === 'meanTask'}
-							>{sortIcon('meanTask') || '↕'}</span
-						>
-					</button>
-				</th>
-				{/if}
-				{#if showMeanTaskType}
-				<th
-					class="tbl-num"
-					data-tip-title={INFO.meanTaskType.title}
-					data-tip={INFO.meanTaskType.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('meanTaskType')}
-				>
-					<button class="sort-btn tbl-num" onclick={() => clickSort('meanTaskType')}>
-						<span>Mean (TaskType)</span>
-						<span class="ind" class:on={sortKey === 'meanTaskType'}
-							>{sortIcon('meanTaskType') || '↕'}</span
-						>
-					</button>
-				</th>
-				{/if}
-				{#if showPublicPrivate}
+	<div class="tbl-scroll">
+		<table class="tbl summary-table" use:stickyHead>
+			<thead>
+				<tr>
 					<th
-						class="tbl-num"
-						data-tip-title={INFO.meanPublic.title}
-						data-tip={INFO.meanPublic.text}
+						class="sticky-left rank-head"
+						data-tip-title={INFO.rank.title}
+						data-tip={INFO.rank.text}
 						onpointerenter={showTip}
 						onpointerleave={hideTip}
 						onfocusin={showTip}
 						onfocusout={hideTip}
-						aria-sort={ariaSort('meanPublic')}
+						aria-sort={ariaSort('rank')}
 					>
-						<button class="sort-btn tbl-num" onclick={() => clickSort('meanPublic')}>
-							<span>Mean (Public)</span>
-							<span class="ind" class:on={sortKey === 'meanPublic'}
-								>{sortIcon('meanPublic') || '↕'}</span
-							>
+						<button class="sort-btn tbl-num" onclick={() => clickSort('rank')}>
+							<span>Rank</span>
+							<span class="ind" class:on={sortKey === 'rank'}>{sortIcon('rank') || '↕'}</span>
+						</button>
+					</th>
+					<th class="sticky-model" aria-sort={ariaSort('model')}>
+						<button class="sort-btn" onclick={() => clickSort('model')}>
+							<span>Model</span>
+							<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model') || '↕'}</span>
 						</button>
 					</th>
 					<th
 						class="tbl-num"
-						data-tip-title={INFO.meanPrivate.title}
-						data-tip={INFO.meanPrivate.text}
+						data-tip-title={INFO.totalParams.title}
+						data-tip={INFO.totalParams.text}
 						onpointerenter={showTip}
 						onpointerleave={hideTip}
 						onfocusin={showTip}
 						onfocusout={hideTip}
-						aria-sort={ariaSort('meanPrivate')}
+						aria-sort={ariaSort('totalParams')}
 					>
-						<button class="sort-btn tbl-num" onclick={() => clickSort('meanPrivate')}>
-							<span>Mean (Private)</span>
-							<span class="ind" class:on={sortKey === 'meanPrivate'}
-								>{sortIcon('meanPrivate') || '↕'}</span
+						<button class="sort-btn tbl-num" onclick={() => clickSort('totalParams')}>
+							<span>Total Params</span>
+							<span class="ind" class:on={sortKey === 'totalParams'}
+								>{sortIcon('totalParams') || '↕'}</span
 							>
 						</button>
 					</th>
-				{/if}
-				{#if showTaskTypes}
-					{#each summary.taskTypes as tt (tt)}
-						{@const k = `tt:${tt}` as SortKey}
-						<th class="tbl-num" aria-sort={ariaSort(k)}>
-							<button class="sort-btn tbl-num" onclick={() => clickSort(k)}>
-								<span>{humanizeType(tt)}</span>
-								<span class="ind" class:on={sortKey === k}>{sortIcon(k) || '↕'}</span>
+					{#if showMeanTask}
+						<th
+							class="tbl-num"
+							data-tip-title={INFO.meanTask.title}
+							data-tip={INFO.meanTask.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={ariaSort('meanTask')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => clickSort('meanTask')}>
+								<span>Mean (Task)</span>
+								<span class="ind" class:on={sortKey === 'meanTask'}
+									>{sortIcon('meanTask') || '↕'}</span
+								>
 							</button>
 						</th>
-					{/each}
-				{/if}
-			</tr>
-		</thead>
-		<tbody>
-			{#each sortedRows as row (row.model.name)}
-				<tr class:pinned={pinnedModels.has(row.model.name)}>
-					<td class="sticky-left">
-						<div class="rank-cell">
-							<button
-								type="button"
-								class="tbl-pin-btn"
-								class:on={pinnedModels.has(row.model.name)}
-								onclick={() => pinnedModels.toggle(row.model.name)}
-								aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-								title={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-							>
-								<svg
-									viewBox="0 0 24 24"
-									width="12"
-									height="12"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2.4"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M12 17v5" />
-									<path d="M9 10.76V6h6v4.76l3 2.59V17H6v-3.65l3-2.59z" />
-								</svg>
-							</button>
-							<span class="rank-num">{row.rank}</span>
-						</div>
-					</td>
-					<td
-						class="sticky-model has-tip"
-						data-model-type={row.model.modelType}
-						onpointerenter={(e) => showModelTip(e, row)}
-						onpointerleave={hideTip}
-						onfocusin={(e) => showModelTip(e, row)}
-						onfocusout={hideTip}
-					>
-						{#if row.model.url}
-							<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
-								<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
-									class="tbl-model-name">{row.model.displayName}</span
-								>
-							</a>
-						{:else}
-							<span class="tbl-model-link">
-								<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
-									class="tbl-model-name">{row.model.displayName}</span
-								>
-							</span>
-						{/if}
-					</td>
-					<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
-						{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
-								class="unit">{fmtParamsUnit(row.totalParamsB)}</span
-							>{/if}
-					</td>
-					{#if showMeanTask}
-						<td
-							class="tbl-num"
-							class:tbl-best={row.meanTask === bestMeanTask}
-							style={heat(row.meanTask)}
-						>
-							{fmtPct(row.meanTask)}
-						</td>
 					{/if}
 					{#if showMeanTaskType}
-						<td
+						<th
 							class="tbl-num"
-							class:tbl-best={row.meanTaskType === bestMeanTaskType}
-							style={heat(row.meanTaskType)}
+							data-tip-title={INFO.meanTaskType.title}
+							data-tip={INFO.meanTaskType.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={ariaSort('meanTaskType')}
 						>
-							{fmtPct(row.meanTaskType)}
-						</td>
+							<button class="sort-btn tbl-num" onclick={() => clickSort('meanTaskType')}>
+								<span>Mean (TaskType)</span>
+								<span class="ind" class:on={sortKey === 'meanTaskType'}
+									>{sortIcon('meanTaskType') || '↕'}</span
+								>
+							</button>
+						</th>
 					{/if}
 					{#if showPublicPrivate}
-						{@const mp = liveMeanPublic(row)}
-						{@const mpr = liveMeanPrivate(row)}
-						<td
+						<th
 							class="tbl-num"
-							class:tbl-best={mp != null && mp === bestMeanPublic}
-							style={heat(mp)}
+							data-tip-title={INFO.meanPublic.title}
+							data-tip={INFO.meanPublic.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={ariaSort('meanPublic')}
 						>
-							{fmtPct(mp)}
-						</td>
-						<td
+							<button class="sort-btn tbl-num" onclick={() => clickSort('meanPublic')}>
+								<span>Mean (Public)</span>
+								<span class="ind" class:on={sortKey === 'meanPublic'}
+									>{sortIcon('meanPublic') || '↕'}</span
+								>
+							</button>
+						</th>
+						<th
 							class="tbl-num"
-							class:tbl-best={mpr != null && mpr === bestMeanPrivate}
-							style={heat(mpr)}
+							data-tip-title={INFO.meanPrivate.title}
+							data-tip={INFO.meanPrivate.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={ariaSort('meanPrivate')}
 						>
-							{fmtPct(mpr)}
-						</td>
+							<button class="sort-btn tbl-num" onclick={() => clickSort('meanPrivate')}>
+								<span>Mean (Private)</span>
+								<span class="ind" class:on={sortKey === 'meanPrivate'}
+									>{sortIcon('meanPrivate') || '↕'}</span
+								>
+							</button>
+						</th>
 					{/if}
 					{#if showTaskTypes}
-						{#each summary.taskTypes as tt (tt)}
-							<td
-								class="tbl-num"
-								class:tbl-best={isBestScore(row, tt)}
-								style={heat(row.scoresByTaskType[tt])}
-							>
-								{row.scoresByTaskType[tt] !== undefined ? fmtPct(row.scoresByTaskType[tt]) : ''}
-							</td>
+						{#each sortedTaskTypes as tt (tt)}
+							{@const k = `tt:${tt}` as SortKey}
+							<th class="tbl-num" aria-sort={ariaSort(k)}>
+								<button class="sort-btn tbl-num" onclick={() => clickSort(k)}>
+									<span>{humanizeType(tt)}</span>
+									<span class="ind" class:on={sortKey === k}>{sortIcon(k) || '↕'}</span>
+								</button>
+							</th>
 						{/each}
 					{/if}
 				</tr>
-			{/each}
-		</tbody>
-	</table>
-</div>
-
-{#if tipState.visible}
-	<div
-		class="tip-portal"
-		role="tooltip"
-		style:left="{tipState.x}px"
-		style:top="{tipState.y}px"
-	>
-		{#if tipState.title}<strong class="tip-portal-title">{tipState.title}</strong>{/if}
-		{#if tipState.kind === 'col'}
-			<span class="tip-portal-body">{tipState.text}</span>
-		{:else}
-			<dl class="tip-portal-dl">
-				{#each tipState.rows as r (r.k)}
-					<div>
-						<dt>{r.k}</dt>
-						<dd>{r.v}</dd>
-					</div>
+			</thead>
+			<tbody>
+				{#each sortedRows as row (row.model.name)}
+					<tr class:pinned={pinnedModels.has(row.model.name)}>
+						<td class="sticky-left">
+							<div class="rank-cell">
+								<button
+									type="button"
+									class="tbl-pin-btn"
+									class:on={pinnedModels.has(row.model.name)}
+									onclick={() => pinnedModels.toggle(row.model.name)}
+									aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
+									title={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
+								>
+									<svg
+										viewBox="0 0 24 24"
+										width="12"
+										height="12"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2.4"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M12 17v5" />
+										<path d="M9 10.76V6h6v4.76l3 2.59V17H6v-3.65l3-2.59z" />
+									</svg>
+								</button>
+								<span class="rank-num">{row.rank}</span>
+							</div>
+						</td>
+						<td
+							class="sticky-model has-tip"
+							data-model-type={row.model.modelType}
+							onpointerenter={(e) => showModelTip(e, row)}
+							onpointerleave={hideTip}
+							onfocusin={(e) => showModelTip(e, row)}
+							onfocusout={hideTip}
+						>
+							{#if row.model.url}
+								<!-- External model URL (HuggingFace etc.) -->
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+								<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
+									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
+										>/</span
+									><span class="tbl-model-name">{row.model.displayName}</span>
+								</a>
+							{:else}
+								<span class="tbl-model-link">
+									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
+										>/</span
+									><span class="tbl-model-name">{row.model.displayName}</span>
+								</span>
+							{/if}
+						</td>
+						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
+							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
+									class="unit">{fmtParamsUnit(row.totalParamsB)}</span
+								>{/if}
+						</td>
+						{#if showMeanTask}
+							<td
+								class="tbl-num"
+								class:tbl-best={row.meanTask === bestMeanTask}
+								style={heat(row.meanTask, bestMeanTask)}
+							>
+								{fmtPct(row.meanTask)}
+							</td>
+						{/if}
+						{#if showMeanTaskType}
+							<td
+								class="tbl-num"
+								class:tbl-best={row.meanTaskType === bestMeanTaskType}
+								style={heat(row.meanTaskType, bestMeanTaskType)}
+							>
+								{fmtPct(row.meanTaskType)}
+							</td>
+						{/if}
+						{#if showPublicPrivate}
+							{@const mp = liveMeanPublic(row)}
+							{@const mpr = liveMeanPrivate(row)}
+							<td
+								class="tbl-num"
+								class:tbl-best={mp != null && mp === bestMeanPublic}
+								style={heat(mp, bestMeanPublic)}
+							>
+								{fmtPct(mp)}
+							</td>
+							<td
+								class="tbl-num"
+								class:tbl-best={mpr != null && mpr === bestMeanPrivate}
+								style={heat(mpr, bestMeanPrivate)}
+							>
+								{fmtPct(mpr)}
+							</td>
+						{/if}
+						{#if showTaskTypes}
+							{#each sortedTaskTypes as tt (tt)}
+								<td
+									class="tbl-num"
+									class:tbl-best={isBestScore(row, tt)}
+									style={heat(row.scoresByTaskType[tt], best[tt])}
+								>
+									{row.scoresByTaskType[tt] !== undefined ? fmtPct(row.scoresByTaskType[tt]) : ''}
+								</td>
+							{/each}
+						{/if}
+					</tr>
 				{/each}
-			</dl>
-		{/if}
+			</tbody>
+		</table>
 	</div>
-{/if}
+
+	{#if tipState.visible}
+		<div class="tip-portal" role="tooltip" style:left="{tipState.x}px" style:top="{tipState.y}px">
+			{#if tipState.title}<strong class="tip-portal-title">{tipState.title}</strong>{/if}
+			{#if tipState.kind === 'col'}
+				<span class="tip-portal-body">{tipState.text}</span>
+			{:else}
+				<dl class="tip-portal-dl">
+					{#each tipState.rows as r (r.k)}
+						<div>
+							<dt>{r.k}</dt>
+							<dd>{r.v}</dd>
+						</div>
+					{/each}
+				</dl>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -649,7 +590,7 @@
 		line-height: 1.5;
 		text-align: left;
 		z-index: 1000;
-		box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
 		white-space: normal;
 		pointer-events: none;
 	}

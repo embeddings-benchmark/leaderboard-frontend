@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { loadModel, loadModelScores, loadTasks } from '$lib/data/service';
-	import { stickyHead } from '$lib/actions/sticky-head';
 	import type { ModelMeta, ModelScores } from '$lib/types';
+	import BenchScoreTable, { type BenchScore } from '$lib/components/BenchScoreTable.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
-	import { getParam, updateUrl } from '$lib/url-state';
+	import { fmtInt, fmtParamsUnit, fmtParamsValue, slug } from '$lib/format';
 
 	let modelName = $derived(decodeURIComponent(page.params.name ?? ''));
 
@@ -58,18 +58,6 @@
 			});
 	});
 
-	interface BenchScore {
-		benchmarkName: string;
-		benchmarkDisplay: string;
-		rank: number;
-		meanTask: number | null;
-		meanTaskType: number | null;
-		zeroShotPct: number;
-		totalModels: number;
-		taskTypeScores: Record<string, number>;
-		taskTypes: string[];
-	}
-
 	let rawRows = $derived.by<BenchScore[]>(() => {
 		if (!payload) return [];
 		return payload.rows.map((r) => ({
@@ -79,9 +67,7 @@
 			meanTask: r.meanTask,
 			meanTaskType: r.meanTaskType,
 			zeroShotPct: r.zeroShotPct,
-			totalModels: r.totalModels,
-			taskTypeScores: r.scoresByTaskType,
-			taskTypes: r.taskTypes
+			totalModels: r.totalModels
 		}));
 	});
 
@@ -107,89 +93,19 @@
 			});
 	});
 
-
-	type SortKey = 'benchmark' | 'rank' | 'meanTask' | 'meanTaskType' | 'zeroShot';
-	const initialKey = getParam('s.bench');
-	const initialDir = getParam('d.bench');
-	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
-	let sortDir = $state<'asc' | 'desc'>(initialDir === 'desc' ? 'desc' : 'asc');
-	$effect(() => {
-		updateUrl({
-			's.bench': sortKey,
-			'd.bench': sortKey ? sortDir : null
-		});
-	});
-
-	function defaultDir(k: SortKey): 'asc' | 'desc' {
-		return k === 'benchmark' || k === 'rank' ? 'asc' : 'desc';
-	}
-	function clickSort(k: SortKey) {
-		if (sortKey !== k) {
-			sortKey = k;
-			sortDir = defaultDir(k);
-			return;
-		}
-		if (sortDir === defaultDir(k)) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		else sortKey = null;
-	}
-	function sortIcon(k: SortKey): string {
-		if (sortKey !== k) return '↕';
-		return sortDir === 'asc' ? '↑' : '↓';
-	}
-	function ariaSort(k: SortKey): 'ascending' | 'descending' | 'none' {
-		if (sortKey !== k) return 'none';
-		return sortDir === 'asc' ? 'ascending' : 'descending';
-	}
-
-	let scoresByBenchmark = $derived.by<BenchScore[]>(() => {
-		if (!sortKey) return rawRows;
-		const dir = sortDir === 'asc' ? 1 : -1;
-		const k = sortKey;
-		return [...rawRows].sort((a, b) => {
-			if (k === 'benchmark') {
-				return a.benchmarkDisplay.toLowerCase().localeCompare(b.benchmarkDisplay.toLowerCase()) * dir;
-			}
-			if (k === 'rank') return (a.rank - b.rank) * dir;
-			if (k === 'zeroShot') return (a.zeroShotPct - b.zeroShotPct) * dir;
-			// Mean(Task) / Mean(TaskType) — push nulls to the bottom regardless of dir.
-			const va = k === 'meanTask' ? a.meanTask : a.meanTaskType;
-			const vb = k === 'meanTask' ? b.meanTask : b.meanTaskType;
-			if (va == null && vb == null) return 0;
-			if (va == null) return 1;
-			if (vb == null) return -1;
-			return (va - vb) * dir;
-		});
-	});
-
-	function fmtParamsValue(b: number): string {
-		if (b === 0) return '—';
-		if (b >= 1) return b.toFixed(1);
-		return (b * 1000).toFixed(0);
-	}
-	function fmtParamsUnit(b: number): string {
-		if (b === 0) return '';
-		return b >= 1 ? 'B' : 'M';
-	}
-	function fmtInt(n: number): string {
-		return n ? n.toLocaleString() : '—';
-	}
 	function fmtMemoryMb(mb: number | null | undefined): string {
 		if (mb == null || mb <= 0) return '—';
 		// Use GB once we cross 1024 MB so the number stays short.
 		if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
 		return `${Math.round(mb)} MB`;
 	}
-	function fmtPct(s: number | null | undefined): string {
-		if (s == null) return '—';
-		return (s * 100).toFixed(2);
+	function compareHref(modelName: string, seed: BenchScore | null): string {
+		// Local URL builder, not held by $state — plain URLSearchParams is correct.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const params = new URLSearchParams({ model: modelName });
+		if (seed) params.set('benchmark', seed.benchmarkName);
+		return `${resolve('/compare')}?${params.toString()}`;
 	}
-	function fmtZeroShot(p: number): string {
-		return p === -1 ? '⚠️ NA' : `${p}%`;
-	}
-	function slug(name: string): string {
-		return encodeURIComponent(name);
-	}
-
 	function buildCsv() {
 		const headers = [
 			'Benchmark',
@@ -200,7 +116,7 @@
 			'Zero-shot'
 		];
 		const pct = (v: number | null | undefined) => (v == null ? null : (v * 100).toFixed(2));
-		const rows: CsvCell[][] = scoresByBenchmark.map((s) => [
+		const rows: CsvCell[][] = rawRows.map((s) => [
 			s.benchmarkName,
 			s.rank,
 			s.totalModels,
@@ -210,22 +126,13 @@
 		]);
 		return { headers, rows };
 	}
-
-	// Heat shade reused from the leaderboard tables.
-	function heat(score: number | null | undefined): string {
-		if (score == null) return '';
-		const v = Math.max(0, Math.min(1, (score - 0.45) / 0.3));
-		const pct = Math.round(v * 55);
-		if (pct === 0) return '';
-		return `background-color: color-mix(in srgb, var(--primary) ${pct}%, transparent);`;
-	}
 </script>
 
 <div class="page">
 	<nav class="breadcrumb" aria-label="Breadcrumb">
-		<a href="{base}/">Home</a>
+		<a href={resolve('/')}>Home</a>
 		<span class="sep">/</span>
-		<a href="{base}/models">Models</a>
+		<a href={resolve('/models')}>Models</a>
 		<span class="sep">/</span>
 		<span class="current">{model?.displayName ?? modelName}</span>
 	</nav>
@@ -236,7 +143,7 @@
 		<section class="empty card">
 			<h1>Unknown model</h1>
 			<p>{metaError ?? `No model named “${modelName}” found.`}</p>
-			<a class="back" href="{base}/models">← All models</a>
+			<a class="back" href={resolve('/models')}>← All models</a>
 		</section>
 	{:else}
 		<section class="hero card" data-type={model.modelType}>
@@ -257,12 +164,9 @@
 					<span class="org">{model.org}</span><span class="sl">/</span>{model.displayName}
 				</h1>
 				<div class="links">
-					<a
-						class="ref muted"
-						href="{base}/compare?model={encodeURIComponent(model.name)}{bestBenchmark
-							? `&benchmark=${encodeURIComponent(bestBenchmark.benchmarkName)}`
-							: ''}"
-					>
+					<!-- href returned by compareHref(), which uses resolve('/compare') internally -->
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+					<a class="ref muted" href={compareHref(model.name, bestBenchmark)}>
 						Compare with another model →
 					</a>
 				</div>
@@ -271,6 +175,8 @@
 						<dt>Model page</dt>
 						<dd>
 							{#if model.url}
+								<!-- External model URL (HuggingFace etc.) -->
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 								<a href={model.url} target="_blank" rel="noreferrer">{model.url}</a>
 							{:else}
 								<span class="muted-dd">—</span>
@@ -283,83 +189,93 @@
 							<dd>{model.license}</dd>
 						</div>
 					{/if}
-						{#if model.publicTrainingCode}
-							<div class="row">
-								<dt>Training code</dt>
-								<dd>
-									{#if /^https?:\/\//.test(model.publicTrainingCode)}
-										<a href={model.publicTrainingCode} target="_blank" rel="noreferrer"
-											>{model.publicTrainingCode}</a
-										>
-									{:else}
-										{model.publicTrainingCode}
-									{/if}
-								</dd>
-							</div>
-						{/if}
-						{#if model.publicTrainingData}
-							<div class="row">
-								<dt>Training data</dt>
-								<dd>
-									{#if /^https?:\/\//.test(model.publicTrainingData)}
-										<a href={model.publicTrainingData} target="_blank" rel="noreferrer"
-											>{model.publicTrainingData}</a
-										>
-									{:else}
-										{model.publicTrainingData}
-									{/if}
-								</dd>
-							</div>
-						{/if}
-						{#if model.adaptedFrom}
-							<div class="row">
-								<dt>Adapted from</dt>
-								<dd>
-									<a class="model-link" href="{base}/models/{slug(model.adaptedFrom)}"
-										>{model.adaptedFrom}</a
+					{#if model.publicTrainingCode}
+						<div class="row">
+							<dt>Training code</dt>
+							<dd>
+								{#if /^https?:\/\//.test(model.publicTrainingCode)}
+									<!-- External training-code URL -->
+									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+									<a href={model.publicTrainingCode} target="_blank" rel="noreferrer"
+										>{model.publicTrainingCode}</a
 									>
-								</dd>
-							</div>
-						{/if}
-						{#if model.supersededBy}
-							<div class="row">
-								<dt>Superseded by</dt>
-								<dd>
-									<a class="model-link" href="{base}/models/{slug(model.supersededBy)}"
-										>{model.supersededBy}</a
-									>
-								</dd>
-							</div>
-						{/if}
-						{#if model.extraRequirementsGroups && model.extraRequirementsGroups.length > 0}
-							<div class="row">
-								<dt>Extras</dt>
-								<dd>
-									<span class="chips">
-										{#each model.extraRequirementsGroups as group (group)}
-											<code class="chip">{group}</code>
-										{/each}
-									</span>
+								{:else}
+									{model.publicTrainingCode}
+								{/if}
 							</dd>
-							</div>
-						{/if}
-						{#if model.trainingDatasets && model.trainingDatasets.length > 0}
-							<div class="row">
-								<dt>Trained on</dt>
-								<dd>
-									<span class="chips">
-										{#each model.trainingDatasets as ds (ds)}
-											{#if mtebTaskNames.has(ds)}
-												<a class="chip chip-link" href="{base}/tasks/{slug(ds)}">{ds}</a>
-											{:else}
-												<span class="chip">{ds}</span>
-											{/if}
-										{/each}
-									</span>
-								</dd>
-							</div>
-						{/if}
-					</dl>
+						</div>
+					{/if}
+					{#if model.publicTrainingData}
+						<div class="row">
+							<dt>Training data</dt>
+							<dd>
+								{#if /^https?:\/\//.test(model.publicTrainingData)}
+									<!-- External training-data URL -->
+									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+									<a href={model.publicTrainingData} target="_blank" rel="noreferrer"
+										>{model.publicTrainingData}</a
+									>
+								{:else}
+									{model.publicTrainingData}
+								{/if}
+							</dd>
+						</div>
+					{/if}
+					{#if model.adaptedFrom}
+						<div class="row">
+							<dt>Adapted from</dt>
+							<dd>
+								<a
+									class="model-link"
+									href={resolve('/models/[name]', { name: slug(model.adaptedFrom) })}
+									>{model.adaptedFrom}</a
+								>
+							</dd>
+						</div>
+					{/if}
+					{#if model.supersededBy}
+						<div class="row">
+							<dt>Superseded by</dt>
+							<dd>
+								<a
+									class="model-link"
+									href={resolve('/models/[name]', { name: slug(model.supersededBy) })}
+									>{model.supersededBy}</a
+								>
+							</dd>
+						</div>
+					{/if}
+					{#if model.extraRequirementsGroups && model.extraRequirementsGroups.length > 0}
+						<div class="row">
+							<dt>Extras</dt>
+							<dd>
+								<span class="chips">
+									{#each model.extraRequirementsGroups as group (group)}
+										<code class="chip">{group}</code>
+									{/each}
+								</span>
+							</dd>
+						</div>
+					{/if}
+					{#if model.trainingDatasets && model.trainingDatasets.length > 0}
+						<div class="row">
+							<dt>Trained on</dt>
+							<dd>
+								<span class="chips">
+									{#each model.trainingDatasets as ds (ds)}
+										{#if mtebTaskNames.has(ds)}
+											<a class="chip chip-link" href={resolve('/tasks/[name]', { name: slug(ds) })}
+												>{ds}</a
+											>
+										{:else}
+											<span class="chip">{ds}</span>
+										{/if}
+									{/each}
+								</span>
+							</dd>
+						</div>
+					{/if}
+				</dl>
 				<CiteBlock kind="model" citation={model.citation} />
 			</div>
 			<div class="kpis">
@@ -403,98 +319,22 @@
 				<h2>Benchmark scores</h2>
 				<span class="muted">
 					{#if loadingScores}Loading…
-					{:else}{scoresByBenchmark.length} benchmark{scoresByBenchmark.length === 1 ? '' : 's'}{/if}
+					{:else}{rawRows.length} benchmark{rawRows.length === 1 ? '' : 's'}{/if}
 				</span>
-				{#if scoresByBenchmark.length > 0}
-					<DownloadButton
-						filename="{sanitizeFilename(model.name)}_benchmarks"
-						build={buildCsv}
-					/>
+				{#if rawRows.length > 0}
+					<DownloadButton filename="{sanitizeFilename(model.name)}_benchmarks" build={buildCsv} />
 				{/if}
 			</header>
 			{#if loadingScores}
-				<p class="muted">Walking every benchmark for this model — first hit can take a while on cold cache…</p>
+				<p class="muted">
+					Walking every benchmark for this model — first hit can take a while on cold cache…
+				</p>
 			{:else if scoresError}
 				<p class="muted">Failed to load scores: {scoresError}</p>
-			{:else if scoresByBenchmark.length === 0}
+			{:else if rawRows.length === 0}
 				<p class="muted">This model has no scores yet.</p>
 			{:else}
-				<div class="tbl-scroll">
-					<table class="tbl bench-table" use:stickyHead>
-						<thead>
-							<tr>
-								<th class="sticky" aria-sort={ariaSort('benchmark')}>
-									<button
-										type="button"
-										class="tbl-sort tbl-sort-left"
-										onclick={() => clickSort('benchmark')}
-									>
-										<span>Benchmark</span>
-										<span class="tbl-sort-ind" class:on={sortKey === 'benchmark'}
-											>{sortIcon('benchmark')}</span
-										>
-									</button>
-								</th>
-								<th class="tbl-num" aria-sort={ariaSort('rank')}>
-									<button type="button" class="tbl-sort" onclick={() => clickSort('rank')}>
-										<span>Rank</span>
-										<span class="tbl-sort-ind" class:on={sortKey === 'rank'}
-											>{sortIcon('rank')}</span
-										>
-									</button>
-								</th>
-								<th class="tbl-num" aria-sort={ariaSort('meanTask')}>
-									<button type="button" class="tbl-sort" onclick={() => clickSort('meanTask')}>
-										<span>Mean (Task)</span>
-										<span class="tbl-sort-ind" class:on={sortKey === 'meanTask'}
-											>{sortIcon('meanTask')}</span
-										>
-									</button>
-								</th>
-								<th class="tbl-num" aria-sort={ariaSort('meanTaskType')}>
-									<button
-										type="button"
-										class="tbl-sort"
-										onclick={() => clickSort('meanTaskType')}
-									>
-										<span>Mean (TaskType)</span>
-										<span class="tbl-sort-ind" class:on={sortKey === 'meanTaskType'}
-											>{sortIcon('meanTaskType')}</span
-										>
-									</button>
-								</th>
-								<th class="tbl-num" aria-sort={ariaSort('zeroShot')}>
-									<button type="button" class="tbl-sort" onclick={() => clickSort('zeroShot')}>
-										<span>Zero-shot</span>
-										<span class="tbl-sort-ind" class:on={sortKey === 'zeroShot'}
-											>{sortIcon('zeroShot')}</span
-										>
-									</button>
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each scoresByBenchmark as s (s.benchmarkName)}
-								<tr>
-									<td class="sticky">
-										<a class="bench-link" href="{base}/benchmark/{slug(s.benchmarkName)}">
-											{s.benchmarkDisplay}
-										</a>
-									</td>
-									<td class="tbl-num">
-										<span class="rank-pill" class:top={s.rank === 1}>
-											#{s.rank}
-										</span>
-										<span class="rank-total">/ {s.totalModels}</span>
-									</td>
-									<td class="tbl-num" style={heat(s.meanTask)}>{fmtPct(s.meanTask)}</td>
-									<td class="tbl-num" style={heat(s.meanTaskType)}>{fmtPct(s.meanTaskType)}</td>
-									<td class="tbl-num">{fmtZeroShot(s.zeroShotPct)}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
+				<BenchScoreTable rows={rawRows} />
 			{/if}
 		</section>
 	{/if}
@@ -508,7 +348,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 14px;
-		box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+		box-shadow: 0 1px 3px rgb(15, 23, 42, 0.04);
 	}
 
 	/* Hero ----------------------------------------------------------------- */
@@ -539,27 +379,47 @@
 	.hero[data-type='dense'] {
 		--accent: var(--tint-blue-fg);
 		--hero-tint: var(--tint-blue);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%, var(--surface) 200px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
+			var(--surface) 200px
+		);
 	}
 	.hero[data-type='cross-encoder'] {
 		--accent: var(--tint-orange-fg);
 		--hero-tint: var(--tint-orange);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%, var(--surface) 200px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
+			var(--surface) 200px
+		);
 	}
 	.hero[data-type='late-interaction'] {
 		--accent: var(--tint-green-fg);
 		--hero-tint: var(--tint-green);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%, var(--surface) 200px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
+			var(--surface) 200px
+		);
 	}
 	.hero[data-type='sparse'] {
 		--accent: var(--tint-amber-fg);
 		--hero-tint: var(--tint-amber);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%, var(--surface) 200px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
+			var(--surface) 200px
+		);
 	}
 	.hero[data-type='router'] {
 		--accent: var(--tint-purple-fg);
 		--hero-tint: var(--tint-purple);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%, var(--surface) 200px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
+			var(--surface) 200px
+		);
 	}
 	@media (max-width: 1000px) {
 		.hero {
@@ -774,66 +634,7 @@
 	.muted {
 		font-size: 13px;
 	}
-	/* Stretch this table to the full content column. */
-	.bench-table {
-		width: 100%;
-	}
-	.sticky {
-		position: sticky;
-		left: 0;
-		background: var(--surface);
-		z-index: 2;
-		min-width: 240px;
-	}
-	thead th.sticky {
-		background: var(--surface-muted);
-		z-index: 3;
-	}
-	tbody tr:nth-child(even) td.sticky {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td.sticky {
-		background: var(--row-hover);
-	}
-	/* Mobile: a 240 px sticky first column eats most of a 375 px
-	   viewport, leaving the actual score columns unreachable. Drop
-	   the stickyness so every column flows inside the horizontal
-	   scroll container together. */
-	@media (max-width: 640px) {
-		.sticky,
-		thead th.sticky {
-			position: static;
-			left: auto;
-			min-width: 160px;
-		}
-	}
-	.bench-link {
-		font-weight: 600;
-		color: var(--text);
-		text-decoration: none;
-	}
-	.bench-link:hover {
-		color: var(--link);
-	}
-	.rank-pill {
-		display: inline-block;
-		padding: 2px 8px;
-		font-size: 11px;
-		font-weight: 700;
-		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		font-variant-numeric: tabular-nums;
-	}
-	.rank-pill.top {
-		background: var(--primary-soft);
-		color: var(--primary-strong);
-	}
-	.rank-total {
-		color: var(--text-subtle);
-		font-size: 11px;
-		margin-left: 4px;
-	}
+	/* Table-specific styles live in src/lib/components/BenchScoreTable.svelte. */
 
 	.empty {
 		padding: 48px 28px;

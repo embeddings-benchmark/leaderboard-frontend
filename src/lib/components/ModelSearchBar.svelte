@@ -25,11 +25,7 @@
 			<circle cx="11" cy="11" r="7" />
 			<path d="m20 20-3.5-3.5" />
 		</svg>
-		<input
-			type="search"
-			placeholder="Search models by name…"
-			bind:value={filters.nameQuery}
-		/>
+		<input type="search" placeholder="Search models by name…" bind:value={filters.nameQuery} />
 		{#if filters.nameQuery}
 			<button
 				type="button"

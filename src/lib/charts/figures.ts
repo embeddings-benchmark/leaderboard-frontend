@@ -101,8 +101,7 @@ export function performanceOverTimePlot(
 				!!r.model.releaseDate && r.meanTask != null
 		)
 		.sort(
-			(a, b) =>
-				new Date(a.model.releaseDate!).getTime() - new Date(b.model.releaseDate!).getTime()
+			(a, b) => new Date(a.model.releaseDate!).getTime() - new Date(b.model.releaseDate!).getTime()
 		);
 
 	const dates = points.map((r) => r.model.releaseDate!);
@@ -207,4 +206,3 @@ export function radarPlot(summary: BenchmarkSummary): PlotSpec {
 
 	return { data: traces, layout };
 }
-

@@ -1,4 +1,5 @@
 import { untrack } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 
 import type { BenchmarkSummary, ModelType, TaskMeta } from '$lib/types';
 import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
@@ -38,14 +39,14 @@ interface FiltersState {
 	availability: Availability;
 	instructions: InstructionMode;
 	sentenceTransformersOnly: boolean;
-	modelTypes: Set<string>;
-	modelModalities: Set<string>;
+	modelTypes: SvelteSet<string>;
+	modelModalities: SvelteSet<string>;
 	// customize-benchmark filters
-	taskTypes: Set<string>;
-	domains: Set<string>;
-	modalities: Set<string>;
-	languages: Set<string>;
-	tasks: Set<string>;
+	taskTypes: SvelteSet<string>;
+	domains: SvelteSet<string>;
+	modalities: SvelteSet<string>;
+	languages: SvelteSet<string>;
+	tasks: SvelteSet<string>;
 	// available choices (per benchmark)
 	availableTaskTypes: string[];
 	availableDomains: string[];
@@ -68,13 +69,13 @@ function defaultState(): FiltersState {
 		availability: 'both',
 		instructions: 'both',
 		sentenceTransformersOnly: false,
-		modelTypes: new Set<string>(MODEL_TYPES),
-		modelModalities: new Set<string>(MODEL_MODALITIES),
-		taskTypes: new Set(),
-		domains: new Set(),
-		modalities: new Set(),
-		languages: new Set(),
-		tasks: new Set(),
+		modelTypes: new SvelteSet<string>(MODEL_TYPES),
+		modelModalities: new SvelteSet<string>(MODEL_MODALITIES),
+		taskTypes: new SvelteSet(),
+		domains: new SvelteSet(),
+		modalities: new SvelteSet(),
+		languages: new SvelteSet(),
+		tasks: new SvelteSet(),
 		availableTaskTypes: [],
 		availableDomains: [],
 		availableModalities: [],
@@ -91,9 +92,12 @@ function createFilters() {
 	function initFor(summary: BenchmarkSummary | null) {
 		if (!summary) return;
 
+		// Local accumulators — not held by $state, so plain Set is correct.
+		/* eslint-disable svelte/prefer-svelte-reactivity */
 		const domains = new Set<string>();
 		const modalities = new Set<string>();
 		const languages = new Set<string>();
+		/* eslint-enable svelte/prefer-svelte-reactivity */
 		for (const t of summary.tasksMeta) {
 			for (const d of t.domains ?? []) domains.add(d);
 			for (const m of t.modalities ?? []) modalities.add(m);
@@ -134,11 +138,11 @@ function createFilters() {
 		state.availableLanguages = sortedLanguages;
 		state.availableMinModelSizeM = niceLow;
 		state.availableMaxModelSizeM = niceHigh;
-		state.taskTypes = new Set(summary.taskTypes);
-		state.domains = new Set(sortedDomains);
-		state.modalities = new Set(sortedModalities);
-		state.languages = new Set(sortedLanguages);
-		state.tasks = new Set(summary.tasks);
+		state.taskTypes = new SvelteSet(summary.taskTypes);
+		state.domains = new SvelteSet(sortedDomains);
+		state.modalities = new SvelteSet(sortedModalities);
+		state.languages = new SvelteSet(sortedLanguages);
+		state.tasks = new SvelteSet(summary.tasks);
 		// Reset the chosen range to the new bounds so switching benchmarks
 		// doesn't leave the slider stuck at an invisible position.
 		state.minModelSizeM = niceLow;
@@ -174,20 +178,21 @@ function createFilters() {
 			state.instructions = inst;
 		}
 		const zs = p.get('zs');
-		if (zs === 'allow_all' || zs === 'remove_unknown' || zs === 'only_zero_shot') state.zeroShot = zs;
+		if (zs === 'allow_all' || zs === 'remove_unknown' || zs === 'only_zero_shot')
+			state.zeroShot = zs;
 		if (p.get('st') === '1') state.sentenceTransformersOnly = true;
 		const mt = p.get('mtypes');
-		if (mt !== null) state.modelTypes = new Set(decodeSet(mt));
+		if (mt !== null) state.modelTypes = new SvelteSet(decodeSet(mt));
 		const mm = p.get('mmods');
-		if (mm !== null) state.modelModalities = new Set(decodeSet(mm));
+		if (mm !== null) state.modelModalities = new SvelteSet(decodeSet(mm));
 		const tt = p.get('tt');
-		if (tt !== null) state.taskTypes = new Set(decodeSet(tt));
+		if (tt !== null) state.taskTypes = new SvelteSet(decodeSet(tt));
 		const lang = p.get('lang');
-		if (lang !== null) state.languages = new Set(decodeSet(lang));
+		if (lang !== null) state.languages = new SvelteSet(decodeSet(lang));
 		const dom = p.get('dom');
-		if (dom !== null) state.domains = new Set(decodeSet(dom));
+		if (dom !== null) state.domains = new SvelteSet(decodeSet(dom));
 		const mods = p.get('mods');
-		if (mods !== null) state.modalities = new Set(decodeSet(mods));
+		if (mods !== null) state.modalities = new SvelteSet(decodeSet(mods));
 	}
 
 	// Writes the current filter state back to the URL. Each set field only
@@ -207,8 +212,7 @@ function createFilters() {
 				inst: state.instructions !== 'both' ? state.instructions : null,
 				zs: state.zeroShot !== 'allow_all' ? state.zeroShot : null,
 				st: state.sentenceTransformersOnly ? '1' : null,
-				mtypes:
-					state.modelTypes.size === MODEL_TYPES.length ? null : encodeSet(state.modelTypes),
+				mtypes: state.modelTypes.size === MODEL_TYPES.length ? null : encodeSet(state.modelTypes),
 				mmods:
 					state.modelModalities.size === MODEL_MODALITIES.length
 						? null
@@ -221,8 +225,7 @@ function createFilters() {
 					state.languages.size === state.availableLanguages.length
 						? null
 						: encodeSet(state.languages),
-				dom:
-					state.domains.size === state.availableDomains.length ? null : encodeSet(state.domains),
+				dom: state.domains.size === state.availableDomains.length ? null : encodeSet(state.domains),
 				mods:
 					state.modalities.size === state.availableModalities.length
 						? null
@@ -259,17 +262,17 @@ function createFilters() {
 		state.availability = 'both';
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
-		state.modelTypes = new Set<string>(MODEL_TYPES);
-		state.modelModalities = new Set<string>(MODEL_MODALITIES);
+		state.modelTypes = new SvelteSet<string>(MODEL_TYPES);
+		state.modelModalities = new SvelteSet<string>(MODEL_MODALITIES);
 		sync();
 	}
 
 	function resetCustomize() {
-		state.taskTypes = new Set(state.availableTaskTypes);
-		state.domains = new Set(state.availableDomains);
-		state.modalities = new Set(state.availableModalities);
-		state.languages = new Set(state.availableLanguages);
-		state.tasks = new Set(state.availableTasks.map((t) => t.name));
+		state.taskTypes = new SvelteSet(state.availableTaskTypes);
+		state.domains = new SvelteSet(state.availableDomains);
+		state.modalities = new SvelteSet(state.availableModalities);
+		state.languages = new SvelteSet(state.availableLanguages);
+		state.tasks = new SvelteSet(state.availableTasks.map((t) => t.name));
 		sync();
 	}
 
@@ -283,15 +286,16 @@ function createFilters() {
 		| 'modelModalities';
 
 	function toggleInSet(key: SetKey, name: string) {
-		const next = new Set(state[key]);
-		if (next.has(name)) next.delete(name);
-		else next.add(name);
-		state[key] = next;
+		const s = state[key];
+		if (s.has(name)) s.delete(name);
+		else s.add(name);
 		sync();
 	}
 
 	function setAll(key: SetKey, values: readonly string[], checked: boolean) {
-		state[key] = checked ? new Set(values) : new Set();
+		const s = state[key];
+		s.clear();
+		if (checked) for (const v of values) s.add(v);
 		sync();
 	}
 
@@ -417,12 +421,16 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	const visibleTasks = summary.tasksMeta.filter((t) => {
 		if (!fullTypes && !filters.taskTypes.has(t.type)) return false;
 		if (!fullDomains && !t.domains.some((d) => filters.domains.has(d))) return false;
-		if (!fullModalities && !(t.modalities ?? []).some((m) => filters.modalities.has(m))) return false;
+		if (!fullModalities && !(t.modalities ?? []).some((m) => filters.modalities.has(m)))
+			return false;
 		if (!fullLanguages && !t.languages.some((l) => filters.languages.has(l))) return false;
 		if (!fullTasks && !filters.tasks.has(t.name)) return false;
 		return true;
 	});
+	// Local lookups in a pure transformation — plain Set is correct here.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const visibleTaskNames = new Set(visibleTasks.map((t) => t.name));
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const visibleTaskTypes = Array.from(new Set(visibleTasks.map((t) => t.type)));
 	// Preserve the original task-type ordering.
 	const taskTypesOut = summary.taskTypes.filter((t) => visibleTaskTypes.includes(t));
@@ -505,6 +513,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// reflects the filtered subset. A naive sort by Mean(Task) would
 	// over-promote single-task specialists; Borda points (per task:
 	// (n - position)) cancel that bias the same way the backend does.
+	// Local accumulator in a pure transformation — plain Map is correct here.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const bordaPoints = new Map<string, number>();
 	for (const taskName of taskNamesOut) {
 		const ranked = rows

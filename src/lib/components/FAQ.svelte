@@ -8,13 +8,12 @@
 		<h4>Why is a model missing or not showing up?</h4>
 		<ul>
 			<li>
-				<strong>Filter setting</strong> — it's being filtered out by your current filters (e.g.
-				zero-shot only, model size, model type). Open the Filters panel and check the active chips
-				at the top.
+				<strong>Filter setting</strong> — it's being filtered out by your current filters (e.g. zero-shot
+				only, model size, model type). Open the Filters panel and check the active chips at the top.
 			</li>
 			<li>
-				<strong>Missing results</strong> — the model may not have been run on the tasks in the
-				benchmark. We only display models that have been run on at least one task.
+				<strong>Missing results</strong> — the model may not have been run on the tasks in the benchmark.
+				We only display models that have been run on at least one task.
 			</li>
 			<li>
 				<strong>Missing metadata</strong> — we only show models with metadata in
@@ -30,8 +29,8 @@
 		</ul>
 
 		<p class="note">
-			<strong>Hover any column header's (i)</strong> for the definition of Rank, Mean (Task), Mean
-			(TaskType), Zero-shot, parameters, embedding dimension, and max tokens.
+			<strong>Hover any column header's (i)</strong> for the definition of Rank, Mean (Task), Mean (TaskType),
+			Zero-shot, parameters, embedding dimension, and max tokens.
 		</p>
 	</div>
 </details>

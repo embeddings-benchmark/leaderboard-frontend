@@ -163,9 +163,7 @@ export async function loadTaskScores(name: string): Promise<TaskScores> {
 		rows.forEach((r, i) => (r.rank = i + 1));
 		return { task: meta, benchmarks: [summary.benchmarkName], subsets: [], rows };
 	}
-	return enrichTaskScores(
-		await http<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`)
-	);
+	return enrichTaskScores(await http<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`));
 }
 
 export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[]> {
@@ -173,9 +171,7 @@ export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[
 		if (!USE_MOCK) throw noApiError('loadModels');
 		return buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.map((r) => r.model);
 	}
-	const out = await http<ModelMeta[]>(
-		`/models${buildQuery(filters as Record<string, unknown>)}`
-	);
+	const out = await http<ModelMeta[]>(`/models${buildQuery(filters as Record<string, unknown>)}`);
 	for (const m of out) fillOrgAndDisplay(m);
 	return out;
 }
@@ -216,9 +212,7 @@ export async function loadModelScores(name: string): Promise<ModelScores> {
 			]
 		};
 	}
-	return enrichModelScores(
-		await http<ModelScores>(`/models/${encodeURIComponent(name)}/scores`)
-	);
+	return enrichModelScores(await http<ModelScores>(`/models/${encodeURIComponent(name)}/scores`));
 }
 
 export { DEFAULT_BENCHMARK_NAME };

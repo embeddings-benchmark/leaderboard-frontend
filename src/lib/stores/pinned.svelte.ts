@@ -1,4 +1,5 @@
 import { untrack } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 
 import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
 
@@ -9,7 +10,7 @@ function createPinned() {
 	// exact set the URL describes. Done eagerly at module init since the store
 	// is a singleton — by the time any component imports it, the set is set.
 	const initial = decodeSet(readParams().get('pin'));
-	let value = $state(new Set<string>(initial));
+	const value = new SvelteSet<string>(initial);
 
 	return {
 		get value() {
@@ -22,29 +23,23 @@ function createPinned() {
 			return value.has(name);
 		},
 		toggle(name: string) {
-			const next = new Set(value);
-			if (next.has(name)) next.delete(name);
-			else next.add(name);
-			value = next;
+			if (value.has(name)) value.delete(name);
+			else value.add(name);
 			sync();
 		},
 		add(name: string) {
 			if (value.has(name)) return;
-			const next = new Set(value);
-			next.add(name);
-			value = next;
+			value.add(name);
 			sync();
 		},
 		remove(name: string) {
 			if (!value.has(name)) return;
-			const next = new Set(value);
-			next.delete(name);
-			value = next;
+			value.delete(name);
 			sync();
 		},
 		clear() {
 			if (value.size === 0) return;
-			value = new Set();
+			value.clear();
 			sync();
 		}
 	};

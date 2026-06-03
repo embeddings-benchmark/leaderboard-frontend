@@ -1,6 +1,6 @@
 /* Shared chrome for leaderboard tables (SummaryTable, PerTaskTab, PerLanguageTab).
    Component-specific rules — model-type tinted cells, ranked-pin combo cells,
-   per-language fake score colorings — stay in their own <style> blocks.
+   per-language fake score colorings — stay in their own \3c style> blocks.
 
    Usage: opt in via classes (no element-selector magic). A typical row looks like:
      <div class="tbl-scroll">
@@ -207,7 +207,7 @@
 }
 
 /* Left-sticky Model column (PerTaskTab + PerLanguageTab use this directly;
-   SummaryTable overrides per-model-type tints in its own <style>). */
+   SummaryTable overrides per-model-type tints in its own \3c style>). */
 .tbl-sticky-col {
 	position: sticky;
 	left: 32px;

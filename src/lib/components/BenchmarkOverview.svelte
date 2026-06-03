@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { performanceOverTimePlot } from '$lib/charts/figures';
+	import { fmtPct } from '$lib/format';
 	import PlotlyChart from './PlotlyChart.svelte';
 
 	interface Props {
@@ -29,9 +30,7 @@
 	let newest = $derived.by(() => {
 		return [...summary.rows]
 			.filter((r) => r.model.releaseDate)
-			.sort((a, b) =>
-				(b.model.releaseDate ?? '').localeCompare(a.model.releaseDate ?? '')
-			)
+			.sort((a, b) => (b.model.releaseDate ?? '').localeCompare(a.model.releaseDate ?? ''))
 			.slice(0, 5);
 	});
 
@@ -43,6 +42,8 @@
 		return '8B+';
 	}
 	let bySizeClass = $derived.by(() => {
+		// Local bucket in a pure derived — plain Map is correct.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const buckets = new Map<string, SummaryRow[]>();
 		for (const r of summary.rows) {
 			const cls = sizeClass(r.totalParamsB);
@@ -53,17 +54,14 @@
 			.filter((k) => buckets.has(k))
 			.map((k) => {
 				const grp = buckets.get(k)!;
-				const top = grp.reduce((a, b) => ((a.meanTask ?? -Infinity) >= (b.meanTask ?? -Infinity) ? a : b));
+				const top = grp.reduce((a, b) =>
+					(a.meanTask ?? -Infinity) >= (b.meanTask ?? -Infinity) ? a : b
+				);
 				return { label: k, top, count: grp.length };
 			});
 	});
 
 	let timeSpec = $derived(performanceOverTimePlot(summary));
-
-	function fmtPct(v: number | null | undefined): string {
-		if (v == null) return '—';
-		return (v * 100).toFixed(2);
-	}
 </script>
 
 <div class="overview">

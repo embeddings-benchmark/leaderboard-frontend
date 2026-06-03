@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { loadBenchmarkMenu, loadModelScores, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
@@ -28,8 +28,10 @@
 	const RADAR_COLORS = ['#EE4266', '#00a6ed', '#ECA72C', '#3CBBB1'];
 
 	let ALL_BENCHMARKS = $state<Benchmark[]>([]);
+	// Local derived lookup, not held in $state — plain Map is correct.
+
 	let benchIndex = $derived(new Map(ALL_BENCHMARKS.map((b) => [b.name, b])));
-	let summaryCache = $state<Map<string, BenchmarkSummary>>(new Map());
+	const summaryCache = new SvelteMap<string, BenchmarkSummary>();
 
 	$effect(() => {
 		loadBenchmarkMenu().then((menu) => {
@@ -94,9 +96,7 @@
 		untrack(() => {
 			for (const name of missing) {
 				loadSummary(name).then((s) => {
-					const next = new Map(summaryCache);
-					next.set(name, s);
-					summaryCache = next;
+					summaryCache.set(name, s);
 				});
 			}
 		});
@@ -225,6 +225,8 @@
 	// the first benchmark that supplies its scores.
 	type TaskCandidate = { name: string; type: string; benchmark: string };
 	let availableTasks = $derived.by<TaskCandidate[]>(() => {
+		// Local dedup in a pure derived — plain Map is correct.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const seen = new Map<string, TaskCandidate>();
 		for (const s of benchSummaries) {
 			for (const meta of s.tasksMeta) {
@@ -237,6 +239,8 @@
 
 	// Union of task types across picked benchmarks, preserving first-seen order.
 	let unionTaskTypes = $derived.by<string[]>(() => {
+		// Local dedup in a pure derived — plain Set is correct.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const seen = new Set<string>();
 		const list: string[] = [];
 		for (const s of benchSummaries) {
@@ -354,7 +358,11 @@
 			dir: 'min',
 			valueOf: (r) => (r.totalParamsB === 0 ? null : r.totalParamsB),
 			format: (r) =>
-				r.totalParamsB === 0 ? '—' : r.totalParamsB >= 1 ? r.totalParamsB.toFixed(1) : r.totalParamsB.toFixed(3)
+				r.totalParamsB === 0
+					? '—'
+					: r.totalParamsB >= 1
+						? r.totalParamsB.toFixed(1)
+						: r.totalParamsB.toFixed(3)
 		},
 		{
 			key: 'embed',
@@ -377,15 +385,6 @@
 		if (valid.length === 0) return values.map(() => false);
 		const best = dir === 'max' ? Math.max(...valid) : Math.min(...valid);
 		return values.map((v) => v === best);
-	}
-
-	function bestTaskTypeValue(taskType: string): number {
-		let m = -Infinity;
-		for (const r of pickedRows) {
-			const v = r.scoresByTaskType[taskType];
-			if (v !== undefined && v > m) m = v;
-		}
-		return m;
 	}
 
 	// Radar plot uses the primary (first picked) benchmark's task types.
@@ -634,9 +633,7 @@
 				<div class="meta">
 					<span>{picked.length} / {MAX_PICKED}</span>
 					{#if picked.length > 0}
-						<button type="button" class="clear-all" onclick={() => (picked = [])}>
-							Clear
-						</button>
+						<button type="button" class="clear-all" onclick={() => (picked = [])}> Clear </button>
 					{/if}
 				</div>
 			</section>
@@ -657,6 +654,8 @@
 						<div class="cell head model-head" style:--c={modelColor(i)}>
 							<div class="model-rank">#{r.rank}</div>
 							{#if r.model.url}
+								<!-- External model URL (HuggingFace etc.) -->
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 								<a class="model-name" href={r.model.url} target="_blank" rel="noreferrer">
 									{r.model.displayName}
 								</a>
@@ -963,7 +962,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+		box-shadow: 0 16px 36px rgb(15, 23, 42, 0.16);
 		z-index: 30;
 		display: flex;
 		flex-direction: column;

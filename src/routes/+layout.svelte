@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { page, updated } from '$app/state';
-	import { base } from '$app/paths';
+	import { base, resolve } from '$app/paths';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	let { children } = $props();
@@ -48,10 +48,10 @@
 		return false;
 	}
 	const NAV = [
-		{ label: 'Benchmarks', href: '/', match: isBenchmarkRoute },
-		{ label: 'Models', href: '/models', match: (p: string) => p.startsWith('/models') },
-		{ label: 'Tasks', href: '/tasks', match: (p: string) => p.startsWith('/tasks') },
-		{ label: 'Compare', href: '/compare', match: (p: string) => p.startsWith('/compare') }
+		{ label: 'Benchmarks', href: resolve('/'), match: isBenchmarkRoute },
+		{ label: 'Models', href: resolve('/models'), match: (p: string) => p.startsWith('/models') },
+		{ label: 'Tasks', href: resolve('/tasks'), match: (p: string) => p.startsWith('/tasks') },
+		{ label: 'Compare', href: resolve('/compare'), match: (p: string) => p.startsWith('/compare') }
 	];
 </script>
 
@@ -62,17 +62,13 @@
 
 <div class="shell">
 	<header class="bar">
-		<a class="brand" href="{base}/">
+		<a class="brand" href={resolve('/')}>
 			<img class="brand-icon" src="{base}/dots-icon.png" alt="" />
 			<span class="name">MTEB</span>
 		</a>
 		<nav class="subnav" aria-label="Sections">
 			{#each NAV as item (item.href)}
-				<a
-					href="{base}{item.href}"
-					class:active={item.match(path)}
-					data-sveltekit-preload-data="hover"
-				>
+				<a href={item.href} class:active={item.match(path)} data-sveltekit-preload-data="hover">
 					<span>{item.label}</span>
 				</a>
 			{/each}
@@ -147,7 +143,7 @@
 		   Dark-mode override below swaps the grain to a light-on-dark tint so
 		   it stays subtle without disappearing or muddying. */
 		background:
-			linear-gradient(180deg, rgba(255, 247, 240, 0.6) 0%, transparent 320px),
+			linear-gradient(180deg, rgb(255, 247, 240, 0.6) 0%, transparent 320px),
 			url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
 			var(--bg);
 	}

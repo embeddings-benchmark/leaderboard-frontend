@@ -88,23 +88,24 @@
 					...(ya.title ?? {})
 				}
 			},
-			polar: polar.radialaxis || polar.angularaxis
-				? {
-						...polar,
-						radialaxis: {
-							gridcolor: c.grid,
-							linecolor: 'rgba(0,0,0,0)',
-							tickfont: { color: c.muted },
-							...(polar.radialaxis ?? {})
-						},
-						angularaxis: {
-							gridcolor: c.grid,
-							linecolor: 'rgba(0,0,0,0)',
-							tickfont: { color: c.muted },
-							...(polar.angularaxis ?? {})
+			polar:
+				polar.radialaxis || polar.angularaxis
+					? {
+							...polar,
+							radialaxis: {
+								gridcolor: c.grid,
+								linecolor: 'rgba(0,0,0,0)',
+								tickfont: { color: c.muted },
+								...(polar.radialaxis ?? {})
+							},
+							angularaxis: {
+								gridcolor: c.grid,
+								linecolor: 'rgba(0,0,0,0)',
+								tickfont: { color: c.muted },
+								...(polar.angularaxis ?? {})
+							}
 						}
-					}
-				: layout.polar
+					: layout.polar
 		};
 	}
 
@@ -122,7 +123,9 @@
 
 		// React to manual toggle (writes `data-theme` on <html>) and to OS
 		// preference changes (no attribute set — plain media-query flip).
-		const mo = new MutationObserver(() => Plotly?.react(el, data, buildLayout(), { ...defaultConfig, ...config }));
+		const mo = new MutationObserver(() =>
+			Plotly?.react(el, data, buildLayout(), { ...defaultConfig, ...config })
+		);
 		mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 		const mq = window.matchMedia('(prefers-color-scheme: dark)');

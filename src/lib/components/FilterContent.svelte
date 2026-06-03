@@ -135,10 +135,7 @@
 		if (filters.zeroShot !== 'allow_all') {
 			list.push({
 				key: 'zs',
-				label:
-					filters.zeroShot === 'only_zero_shot'
-						? 'Only zero-shot'
-						: 'Hide unknown zero-shot',
+				label: filters.zeroShot === 'only_zero_shot' ? 'Only zero-shot' : 'Hide unknown zero-shot',
 				clear: () => (filters.zeroShot = 'allow_all')
 			});
 		}
@@ -146,9 +143,7 @@
 			list.push({
 				key: 'inst',
 				label:
-					filters.instructions === 'only_instruction'
-						? 'Instruction-tuned'
-						: 'Non-instruction',
+					filters.instructions === 'only_instruction' ? 'Instruction-tuned' : 'Non-instruction',
 				clear: () => (filters.instructions = 'both')
 			});
 		}
@@ -271,10 +266,7 @@
 			filters.languages.size !== filters.availableLanguages.length
 		)
 			n++;
-		if (
-			filters.availableTasks.length > 0 &&
-			filters.tasks.size !== filters.availableTasks.length
-		)
+		if (filters.availableTasks.length > 0 && filters.tasks.size !== filters.availableTasks.length)
 			n++;
 		return n;
 	});
@@ -319,153 +311,153 @@
 	{#snippet modelGroups()}
 		<div class="group">
 			<div class="group-label">Availability</div>
-					<div class="segmented" role="radiogroup" aria-label="Availability">
-						{#each AVAILABILITY_OPTS as opt (opt.value)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={filters.availability === opt.value}
-								class="seg"
-								class:on={filters.availability === opt.value}
-								onclick={() => (filters.availability = opt.value)}
-							>
-								{opt.label}
-							</button>
-						{/each}
-					</div>
-				</div>
+			<div class="segmented" role="radiogroup" aria-label="Availability">
+				{#each AVAILABILITY_OPTS as opt (opt.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={filters.availability === opt.value}
+						class="seg"
+						class:on={filters.availability === opt.value}
+						onclick={() => (filters.availability = opt.value)}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		</div>
 
-				<div class="group">
-					<div class="group-label">Zero-shot</div>
-					<div class="segmented" role="radiogroup" aria-label="Zero-shot">
-						{#each ZERO_SHOT_OPTS as opt (opt.value)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={filters.zeroShot === opt.value}
-								class="seg"
-								class:on={filters.zeroShot === opt.value}
-								onclick={() => (filters.zeroShot = opt.value)}
-							>
-								{opt.label}
-							</button>
-						{/each}
-					</div>
-				</div>
+		<div class="group">
+			<div class="group-label">Zero-shot</div>
+			<div class="segmented" role="radiogroup" aria-label="Zero-shot">
+				{#each ZERO_SHOT_OPTS as opt (opt.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={filters.zeroShot === opt.value}
+						class="seg"
+						class:on={filters.zeroShot === opt.value}
+						onclick={() => (filters.zeroShot = opt.value)}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		</div>
 
-				<div class="group">
-					<div class="group-label">
-						Model size
-						<span class="muted-inline">
-							{formatParams(filters.minModelSizeM)} – {formatParams(filters.maxModelSizeM)}
-						</span>
-					</div>
-					<RangeSlider
-						min={sizeLogMin}
-						max={sizeLogMax}
-						step={0.05}
-						valueMin={paramsToLog(filters.minModelSizeM)}
-						valueMax={paramsToLog(filters.maxModelSizeM)}
-						onMinChange={(v) => (filters.minModelSizeM = logToParams(v))}
-						onMaxChange={(v) => (filters.maxModelSizeM = logToParams(v))}
-						format={formatLog}
-						ticks={sizeTicks}
-					/>
-				</div>
+		<div class="group">
+			<div class="group-label">
+				Model size
+				<span class="muted-inline">
+					{formatParams(filters.minModelSizeM)} – {formatParams(filters.maxModelSizeM)}
+				</span>
+			</div>
+			<RangeSlider
+				min={sizeLogMin}
+				max={sizeLogMax}
+				step={0.05}
+				valueMin={paramsToLog(filters.minModelSizeM)}
+				valueMax={paramsToLog(filters.maxModelSizeM)}
+				onMinChange={(v) => (filters.minModelSizeM = logToParams(v))}
+				onMaxChange={(v) => (filters.maxModelSizeM = logToParams(v))}
+				format={formatLog}
+				ticks={sizeTicks}
+			/>
+		</div>
 
-				<div class="group">
-					<div class="group-label">Instructions</div>
-					<div class="segmented" role="radiogroup" aria-label="Instructions">
-						{#each INSTRUCTION_OPTS as opt (opt.value)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={filters.instructions === opt.value}
-								class="seg"
-								class:on={filters.instructions === opt.value}
-								onclick={() => (filters.instructions = opt.value)}
-							>
-								{opt.label}
-							</button>
-						{/each}
-					</div>
-				</div>
+		<div class="group">
+			<div class="group-label">Instructions</div>
+			<div class="segmented" role="radiogroup" aria-label="Instructions">
+				{#each INSTRUCTION_OPTS as opt (opt.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={filters.instructions === opt.value}
+						class="seg"
+						class:on={filters.instructions === opt.value}
+						onclick={() => (filters.instructions = opt.value)}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		</div>
 
-				<div class="group">
-					<label class="switch">
-						<input
-							type="checkbox"
-							checked={filters.sentenceTransformersOnly}
-							onchange={(e) =>
-								(filters.sentenceTransformersOnly = (e.currentTarget as HTMLInputElement).checked)}
-						/>
-						<span class="switch-track"><span class="switch-knob"></span></span>
-						<span class="switch-label">Sentence-Transformers compatible only</span>
-					</label>
-				</div>
+		<div class="group">
+			<label class="switch">
+				<input
+					type="checkbox"
+					checked={filters.sentenceTransformersOnly}
+					onchange={(e) =>
+						(filters.sentenceTransformersOnly = (e.currentTarget as HTMLInputElement).checked)}
+				/>
+				<span class="switch-track"><span class="switch-knob"></span></span>
+				<span class="switch-label">Sentence-Transformers compatible only</span>
+			</label>
+		</div>
 
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label">Model type</span>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'modelTypes',
-									MODEL_TYPES,
-									filters.modelTypes.size !== MODEL_TYPES.length
-								)}
-						>
-							{filters.modelTypes.size === MODEL_TYPES.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each MODEL_TYPES as t (t)}
-							<button
-								type="button"
-								class="pill model-type-pill"
-								data-type={t}
-								class:on={filters.modelTypes.has(t)}
-								onclick={() => filters.toggleInSet('modelTypes', t)}
-								aria-pressed={filters.modelTypes.has(t)}
-							>
-								{t}
-							</button>
-						{/each}
-					</div>
-				</div>
+		<div class="group">
+			<div class="group-header">
+				<span class="group-label">Model type</span>
+				<button
+					type="button"
+					class="link-btn"
+					onclick={() =>
+						filters.setAll(
+							'modelTypes',
+							MODEL_TYPES,
+							filters.modelTypes.size !== MODEL_TYPES.length
+						)}
+				>
+					{filters.modelTypes.size === MODEL_TYPES.length ? 'Clear' : 'All'}
+				</button>
+			</div>
+			<div class="pills">
+				{#each MODEL_TYPES as t (t)}
+					<button
+						type="button"
+						class="pill model-type-pill"
+						data-type={t}
+						class:on={filters.modelTypes.has(t)}
+						onclick={() => filters.toggleInSet('modelTypes', t)}
+						aria-pressed={filters.modelTypes.has(t)}
+					>
+						{t}
+					</button>
+				{/each}
+			</div>
+		</div>
 
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label">Modality</span>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'modelModalities',
-									MODEL_MODALITIES,
-									filters.modelModalities.size !== MODEL_MODALITIES.length
-								)}
-						>
-							{filters.modelModalities.size === MODEL_MODALITIES.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each MODEL_MODALITIES as m (m)}
-							<button
-								type="button"
-								class="pill"
-								class:on={filters.modelModalities.has(m)}
-								onclick={() => filters.toggleInSet('modelModalities', m)}
-								aria-pressed={filters.modelModalities.has(m)}
-							>
-								{m}
-							</button>
-						{/each}
-					</div>
-				</div>
+		<div class="group">
+			<div class="group-header">
+				<span class="group-label">Modality</span>
+				<button
+					type="button"
+					class="link-btn"
+					onclick={() =>
+						filters.setAll(
+							'modelModalities',
+							MODEL_MODALITIES,
+							filters.modelModalities.size !== MODEL_MODALITIES.length
+						)}
+				>
+					{filters.modelModalities.size === MODEL_MODALITIES.length ? 'Clear' : 'All'}
+				</button>
+			</div>
+			<div class="pills">
+				{#each MODEL_MODALITIES as m (m)}
+					<button
+						type="button"
+						class="pill"
+						class:on={filters.modelModalities.has(m)}
+						onclick={() => filters.toggleInSet('modelModalities', m)}
+						aria-pressed={filters.modelModalities.has(m)}
+					>
+						{m}
+					</button>
+				{/each}
+			</div>
+		</div>
 	{/snippet}
 
 	{#if flatModel}
@@ -498,101 +490,28 @@
 	{/if}
 
 	{#if !hideScope}
-	<section class="block">
-		<button
-			type="button"
-			class="block-head"
-			onclick={() => (scopeOpen = !scopeOpen)}
-			aria-expanded={scopeOpen}
-		>
-			<span class="block-title">Benchmark scope</span>
-			{#if activeScopeCount > 0}
-				<span class="count-pill">{activeScopeCount}</span>
-			{/if}
-			<span class="chev" class:open={scopeOpen}>›</span>
-		</button>
+		<section class="block">
+			<button
+				type="button"
+				class="block-head"
+				onclick={() => (scopeOpen = !scopeOpen)}
+				aria-expanded={scopeOpen}
+			>
+				<span class="block-title">Benchmark scope</span>
+				{#if activeScopeCount > 0}
+					<span class="count-pill">{activeScopeCount}</span>
+				{/if}
+				<span class="chev" class:open={scopeOpen}>›</span>
+			</button>
 
-		{#if scopeOpen}
-			<div class="block-body">
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Task type
-							<span class="muted-inline"
-								>{filters.taskTypes.size}/{filters.availableTaskTypes.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'taskTypes',
-									filters.availableTaskTypes,
-									filters.taskTypes.size !== filters.availableTaskTypes.length
-								)}
-						>
-							{filters.taskTypes.size === filters.availableTaskTypes.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each filters.availableTaskTypes as tt (tt)}
-							<button
-								type="button"
-								class="pill"
-								class:on={filters.taskTypes.has(tt)}
-								onclick={() => filters.toggleInSet('taskTypes', tt)}
-								aria-pressed={filters.taskTypes.has(tt)}
-							>
-								{humanizeType(tt)}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Domain
-							<span class="muted-inline"
-								>{filters.domains.size}/{filters.availableDomains.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'domains',
-									filters.availableDomains,
-									filters.domains.size !== filters.availableDomains.length
-								)}
-						>
-							{filters.domains.size === filters.availableDomains.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each filters.availableDomains as d (d)}
-							<button
-								type="button"
-								class="pill"
-								class:on={filters.domains.has(d)}
-								onclick={() => filters.toggleInSet('domains', d)}
-								aria-pressed={filters.domains.has(d)}
-							>
-								{d}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				{#if filters.availableModalities.length > 0}
+			{#if scopeOpen}
+				<div class="block-body">
 					<div class="group">
 						<div class="group-header">
 							<span class="group-label"
-								>Modality
+								>Task type
 								<span class="muted-inline"
-									>{filters.modalities.size}/{filters.availableModalities.length}</span
+									>{filters.taskTypes.size}/{filters.availableTaskTypes.length}</span
 								></span
 							>
 							<button
@@ -600,122 +519,195 @@
 								class="link-btn"
 								onclick={() =>
 									filters.setAll(
-										'modalities',
-										filters.availableModalities,
-										filters.modalities.size !== filters.availableModalities.length
+										'taskTypes',
+										filters.availableTaskTypes,
+										filters.taskTypes.size !== filters.availableTaskTypes.length
 									)}
 							>
-								{filters.modalities.size === filters.availableModalities.length ? 'Clear' : 'All'}
+								{filters.taskTypes.size === filters.availableTaskTypes.length ? 'Clear' : 'All'}
 							</button>
 						</div>
 						<div class="pills">
-							{#each filters.availableModalities as m (m)}
+							{#each filters.availableTaskTypes as tt (tt)}
 								<button
 									type="button"
 									class="pill"
-									class:on={filters.modalities.has(m)}
-									onclick={() => filters.toggleInSet('modalities', m)}
-									aria-pressed={filters.modalities.has(m)}
+									class:on={filters.taskTypes.has(tt)}
+									onclick={() => filters.toggleInSet('taskTypes', tt)}
+									aria-pressed={filters.taskTypes.has(tt)}
 								>
-									{m}
+									{humanizeType(tt)}
 								</button>
 							{/each}
 						</div>
 					</div>
-				{/if}
 
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Languages
-							<span class="muted-inline"
-								>{filters.languages.size}/{filters.availableLanguages.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'languages',
-									filters.availableLanguages,
-									filters.languages.size !== filters.availableLanguages.length
-								)}
-						>
-							{filters.languages.size === filters.availableLanguages.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="search"
-						placeholder="Search languages…"
-						bind:value={langQuery}
-					/>
-					<div class="pills scroll-y">
-						{#each filteredLanguages as l (l)}
+					<div class="group">
+						<div class="group-header">
+							<span class="group-label"
+								>Domain
+								<span class="muted-inline"
+									>{filters.domains.size}/{filters.availableDomains.length}</span
+								></span
+							>
 							<button
 								type="button"
-								class="pill"
-								class:on={filters.languages.has(l)}
-								onclick={() => filters.toggleInSet('languages', l)}
-								aria-pressed={filters.languages.has(l)}
+								class="link-btn"
+								onclick={() =>
+									filters.setAll(
+										'domains',
+										filters.availableDomains,
+										filters.domains.size !== filters.availableDomains.length
+									)}
 							>
-								{l}
+								{filters.domains.size === filters.availableDomains.length ? 'Clear' : 'All'}
 							</button>
-						{/each}
-						{#if filteredLanguages.length === 0}
-							<p class="muted">No matches.</p>
-						{/if}
+						</div>
+						<div class="pills">
+							{#each filters.availableDomains as d (d)}
+								<button
+									type="button"
+									class="pill"
+									class:on={filters.domains.has(d)}
+									onclick={() => filters.toggleInSet('domains', d)}
+									aria-pressed={filters.domains.has(d)}
+								>
+									{d}
+								</button>
+							{/each}
+						</div>
 					</div>
-				</div>
 
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Tasks
-							<span class="muted-inline"
-								>{filters.tasks.size}/{filters.availableTasks.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'tasks',
-									filters.availableTasks.map((t) => t.name),
-									filters.tasks.size !== filters.availableTasks.length
-								)}
-						>
-							{filters.tasks.size === filters.availableTasks.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="search"
-						placeholder="Search tasks…"
-						bind:value={taskQuery}
-					/>
-					<div class="pills scroll-y">
-						{#each filteredTasks as name (name)}
+					{#if filters.availableModalities.length > 0}
+						<div class="group">
+							<div class="group-header">
+								<span class="group-label"
+									>Modality
+									<span class="muted-inline"
+										>{filters.modalities.size}/{filters.availableModalities.length}</span
+									></span
+								>
+								<button
+									type="button"
+									class="link-btn"
+									onclick={() =>
+										filters.setAll(
+											'modalities',
+											filters.availableModalities,
+											filters.modalities.size !== filters.availableModalities.length
+										)}
+								>
+									{filters.modalities.size === filters.availableModalities.length ? 'Clear' : 'All'}
+								</button>
+							</div>
+							<div class="pills">
+								{#each filters.availableModalities as m (m)}
+									<button
+										type="button"
+										class="pill"
+										class:on={filters.modalities.has(m)}
+										onclick={() => filters.toggleInSet('modalities', m)}
+										aria-pressed={filters.modalities.has(m)}
+									>
+										{m}
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<div class="group">
+						<div class="group-header">
+							<span class="group-label"
+								>Languages
+								<span class="muted-inline"
+									>{filters.languages.size}/{filters.availableLanguages.length}</span
+								></span
+							>
 							<button
 								type="button"
-								class="pill"
-								class:on={filters.tasks.has(name)}
-								onclick={() => filters.toggleInSet('tasks', name)}
-								aria-pressed={filters.tasks.has(name)}
+								class="link-btn"
+								onclick={() =>
+									filters.setAll(
+										'languages',
+										filters.availableLanguages,
+										filters.languages.size !== filters.availableLanguages.length
+									)}
 							>
-								<span class="ellipsis" title={name}>{name}</span>
+								{filters.languages.size === filters.availableLanguages.length ? 'Clear' : 'All'}
 							</button>
-						{/each}
-						{#if filteredTasks.length === 0}
-							<p class="muted">No matches.</p>
-						{/if}
+						</div>
+						<input
+							type="search"
+							class="search"
+							placeholder="Search languages…"
+							bind:value={langQuery}
+						/>
+						<div class="pills scroll-y">
+							{#each filteredLanguages as l (l)}
+								<button
+									type="button"
+									class="pill"
+									class:on={filters.languages.has(l)}
+									onclick={() => filters.toggleInSet('languages', l)}
+									aria-pressed={filters.languages.has(l)}
+								>
+									{l}
+								</button>
+							{/each}
+							{#if filteredLanguages.length === 0}
+								<p class="muted">No matches.</p>
+							{/if}
+						</div>
+					</div>
+
+					<div class="group">
+						<div class="group-header">
+							<span class="group-label"
+								>Tasks
+								<span class="muted-inline"
+									>{filters.tasks.size}/{filters.availableTasks.length}</span
+								></span
+							>
+							<button
+								type="button"
+								class="link-btn"
+								onclick={() =>
+									filters.setAll(
+										'tasks',
+										filters.availableTasks.map((t) => t.name),
+										filters.tasks.size !== filters.availableTasks.length
+									)}
+							>
+								{filters.tasks.size === filters.availableTasks.length ? 'Clear' : 'All'}
+							</button>
+						</div>
+						<input
+							type="search"
+							class="search"
+							placeholder="Search tasks…"
+							bind:value={taskQuery}
+						/>
+						<div class="pills scroll-y">
+							{#each filteredTasks as name (name)}
+								<button
+									type="button"
+									class="pill"
+									class:on={filters.tasks.has(name)}
+									onclick={() => filters.toggleInSet('tasks', name)}
+									aria-pressed={filters.tasks.has(name)}
+								>
+									<span class="ellipsis" title={name}>{name}</span>
+								</button>
+							{/each}
+							{#if filteredTasks.length === 0}
+								<p class="muted">No matches.</p>
+							{/if}
+						</div>
 					</div>
 				</div>
-			</div>
-		{/if}
-	</section>
+			{/if}
+		</section>
 	{/if}
 </div>
 
@@ -927,7 +919,7 @@
 	.seg.on {
 		background: var(--surface);
 		color: var(--text);
-		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+		box-shadow: 0 1px 2px rgb(15, 23, 42, 0.08);
 	}
 
 	/* Multi-select pills ------------------------------------------------------ */
@@ -1047,7 +1039,7 @@
 		height: 16px;
 		background: #fff;
 		border-radius: 50%;
-		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.2);
+		box-shadow: 0 1px 2px rgb(15, 23, 42, 0.2);
 		transition: transform 0.16s;
 	}
 	.switch input:checked + .switch-track {

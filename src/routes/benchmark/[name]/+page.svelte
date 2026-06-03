@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
@@ -27,13 +28,7 @@
 		leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null
 	);
 
-	type TabId =
-		| 'summary'
-		| 'perf_size'
-		| 'perf_time'
-		| 'perf_task'
-		| 'perf_language'
-		| 'task_info';
+	type TabId = 'summary' | 'perf_size' | 'perf_time' | 'perf_task' | 'perf_language' | 'task_info';
 	const TABS: { id: TabId; label: string }[] = [
 		{ id: 'summary', label: 'Summary' },
 		{ id: 'perf_size', label: 'Performance per Model Size' },
@@ -43,6 +38,7 @@
 		{ id: 'task_info', label: 'Task information' }
 	];
 	// Hydrate active tab from `?tab=` for shareable deep links.
+
 	const TAB_IDS = new Set(TABS.map((t) => t.id));
 	const initialTab = getParam('tab');
 	let activeTab = $state<TabId>(
@@ -59,20 +55,16 @@
 	// 308 rows × dozens of task columns) take ~400ms to mount cold; flipping
 	// CSS display is ~1ms, so this trades a one-time cost per tab for near-
 	// instant switches forever after.
-	let visited = $state<Set<TabId>>(new Set());
+	const visited = new SvelteSet<TabId>();
 	$effect(() => {
-		if (!visited.has(activeTab)) {
-			visited = new Set(visited).add(activeTab);
-		}
+		if (!visited.has(activeTab)) visited.add(activeTab);
 	});
 
 	// Bound to the live PerLanguageTab instance so the page-level toolbar
 	// can call its `buildCsv()` for the Download CSV button — keeps the
 	// download next to the search bar like the other tabs, instead of
 	// PerLanguageTab rendering its own button on a separate row.
-	let perLanguageTab = $state<{ buildCsv: () => ReturnType<typeof buildPerTaskCsv> } | null>(
-		null
-	);
+	let perLanguageTab = $state<{ buildCsv: () => ReturnType<typeof buildPerTaskCsv> } | null>(null);
 
 	$effect(() => {
 		if (!benchmarkName) return;
@@ -119,9 +111,7 @@
 		const showType = aggs.has('mean_task_type');
 		const showPP = aggs.has('public_private');
 		const showTT = aggs.has('task_types');
-		const publicNames = new Set(
-			s.tasksMeta.filter((t) => t.isPublic !== false).map((t) => t.name)
-		);
+		const publicNames = new Set(s.tasksMeta.filter((t) => t.isPublic !== false).map((t) => t.name));
 		const privateNames = new Set(
 			s.tasksMeta.filter((t) => t.isPublic === false).map((t) => t.name)
 		);
@@ -162,9 +152,7 @@
 			row.maxTokens,
 			...(showTask ? [pct(row.meanTask)] : []),
 			...(showType ? [pct(row.meanTaskType)] : []),
-			...(showPP
-				? [pct(meanOver(row, publicNames)), pct(meanOver(row, privateNames))]
-				: []),
+			...(showPP ? [pct(meanOver(row, publicNames)), pct(meanOver(row, privateNames))] : []),
 			...(showTT ? s.taskTypes.map((tt) => pct(row.scoresByTaskType[tt])) : [])
 		]);
 		return { headers, rows };
@@ -186,7 +174,7 @@
 <div class="app">
 	<main class="main">
 		<nav class="breadcrumb" aria-label="Breadcrumb">
-			<a href="{base}/">Home</a>
+			<a href={resolve('/')}>Home</a>
 			<span class="sep">/</span>
 			<span class="current">{benchmark?.displayName ?? benchmarkName}</span>
 		</nav>
@@ -197,13 +185,13 @@
 			<section class="empty card">
 				<h1>Couldn't load benchmark</h1>
 				<p>{leaderboard.error}</p>
-				<a class="back" href="{base}/">← Back home</a>
+				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else if !benchmark}
 			<section class="empty card">
 				<h1>Unknown benchmark</h1>
 				<p>No benchmark named “{benchmarkName}”.</p>
-				<a class="back" href="{base}/">← Back home</a>
+				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else}
 			<section class="hero card">
@@ -223,6 +211,8 @@
 					</div>
 					<p class="desc"><MarkdownText text={benchmark.description} /></p>
 					{#if benchmark.reference}
+						<!-- External paper URL -->
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 						<a class="ref" href={benchmark.reference} target="_blank" rel="noreferrer">
 							Reference paper →
 						</a>
@@ -345,7 +335,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 14px;
-		box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+		box-shadow: 0 1px 3px rgb(15, 23, 42, 0.04);
 	}
 	.hero {
 		display: grid;

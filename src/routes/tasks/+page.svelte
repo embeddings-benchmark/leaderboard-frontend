@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
-	import { humanizeType } from '$lib/format';
+	import { humanizeType, slug } from '$lib/format';
 
 	interface TaskEntry {
 		name: string;
@@ -52,6 +53,8 @@
 				// computed from the menu's per-benchmark `tasks` arrays.
 				const [menu, tasks] = await Promise.all([loadBenchmarkMenu(), loadTasks()]);
 				const allBenches = collectBenchmarks(menu);
+				// Local accumulator for benchmark membership — plain Map is correct.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const occurrences = new Map<string, string[]>();
 				for (const b of allBenches) {
 					for (const t of b.tasks) {
@@ -85,13 +88,12 @@
 					...SIMPLIFIED_TYPES.filter((t) => presentSet.has(t)),
 					...[...presentSet].filter((t) => !SIMPLIFIED_TYPES.includes(t as never)).sort()
 				];
+
 				MODALITIES = Array.from(new Set(entries.flatMap((t) => t.modalities))).sort();
-				FULL_TYPES_PRESENT = Array.from(
-					new Set(entries.map((t) => t.type).filter(Boolean))
-				).sort();
-				typeFilter = new Set(SIMPLIFIED_PRESENT);
-				fullTypeFilter = new Set(FULL_TYPES_PRESENT);
-				modalityFilter = new Set(MODALITIES);
+				FULL_TYPES_PRESENT = Array.from(new Set(entries.map((t) => t.type).filter(Boolean))).sort();
+				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
+				for (const v of FULL_TYPES_PRESENT) fullTypeFilter.add(v);
+				for (const v of MODALITIES) modalityFilter.add(v);
 				loadingData = false;
 			} catch (e) {
 				loadError = e instanceof Error ? e.message : String(e);
@@ -116,9 +118,9 @@
 	};
 
 	let query = $state('');
-	let typeFilter = $state<Set<string>>(new Set());
-	let fullTypeFilter = $state<Set<string>>(new Set());
-	let modalityFilter = $state<Set<string>>(new Set());
+	const typeFilter = new SvelteSet<string>();
+	const fullTypeFilter = new SvelteSet<string>();
+	const modalityFilter = new SvelteSet<string>();
 	let sort = $state<SortId>('name');
 	let sortDir = $state<SortDir>(NATURAL_DIR.name);
 
@@ -131,34 +133,24 @@
 	}
 
 	function toggleType(t: string) {
-		const next = new Set(typeFilter);
-		if (next.has(t)) next.delete(t);
-		else next.add(t);
-		typeFilter = next;
+		if (typeFilter.has(t)) typeFilter.delete(t);
+		else typeFilter.add(t);
 	}
 	function toggleFullType(t: string) {
-		const next = new Set(fullTypeFilter);
-		if (next.has(t)) next.delete(t);
-		else next.add(t);
-		fullTypeFilter = next;
+		if (fullTypeFilter.has(t)) fullTypeFilter.delete(t);
+		else fullTypeFilter.add(t);
 	}
 	function toggleModality(m: string) {
-		const next = new Set(modalityFilter);
-		if (next.has(m)) next.delete(m);
-		else next.add(m);
-		modalityFilter = next;
+		if (modalityFilter.has(m)) modalityFilter.delete(m);
+		else modalityFilter.add(m);
 	}
 	function toggleAllTypes() {
-		typeFilter =
-			typeFilter.size === SIMPLIFIED_PRESENT.length
-				? new Set()
-				: new Set(SIMPLIFIED_PRESENT);
+		if (typeFilter.size === SIMPLIFIED_PRESENT.length) typeFilter.clear();
+		else for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
 	}
 	function toggleAllFullTypes() {
-		fullTypeFilter =
-			fullTypeFilter.size === FULL_TYPES_PRESENT.length
-				? new Set()
-				: new Set(FULL_TYPES_PRESENT);
+		if (fullTypeFilter.size === FULL_TYPES_PRESENT.length) fullTypeFilter.clear();
+		else for (const v of FULL_TYPES_PRESENT) fullTypeFilter.add(v);
 	}
 	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
 	let allFullTypes = $derived(fullTypeFilter.size === FULL_TYPES_PRESENT.length);
@@ -170,13 +162,9 @@
 	let showAllFullTypes = $state(false);
 	const FULL_TYPES_PREVIEW = 6;
 	let visibleFullTypes = $derived(
-		showAllFullTypes
-			? FULL_TYPES_PRESENT
-			: FULL_TYPES_PRESENT.slice(0, FULL_TYPES_PREVIEW)
+		showAllFullTypes ? FULL_TYPES_PRESENT : FULL_TYPES_PRESENT.slice(0, FULL_TYPES_PREVIEW)
 	);
-	let hiddenFullTypeCount = $derived(
-		Math.max(0, FULL_TYPES_PRESENT.length - FULL_TYPES_PREVIEW)
-	);
+	let hiddenFullTypeCount = $derived(Math.max(0, FULL_TYPES_PRESENT.length - FULL_TYPES_PREVIEW));
 
 	// Rank within the curated palette so the "Type" sort groups cards by
 	// colour bucket (retrieval first, then classification, …).
@@ -193,7 +181,8 @@
 			if (q && !t.name.toLowerCase().includes(q)) return false;
 			if (typeFilter.size > 0 && !typeFilter.has(t.simplifiedType)) return false;
 			if (fullTypeFilter.size > 0 && !fullTypeFilter.has(t.type)) return false;
-			if (modalityFilter.size > 0 && !(t.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
+			if (modalityFilter.size > 0 && !(t.modalities ?? []).some((m) => modalityFilter.has(m)))
+				return false;
 			return true;
 		});
 		// Comparator always computes "ascending" cmp; sortDir flips at the end.
@@ -218,14 +207,6 @@
 		});
 		return list;
 	});
-
-	function fmtList(items: string[], max = 3): string {
-		if (items.length <= max) return items.join(', ');
-		return items.slice(0, max).join(', ') + `, +${items.length - max}`;
-	}
-	function slug(name: string): string {
-		return encodeURIComponent(name);
-	}
 </script>
 
 <div class="page">
@@ -250,170 +231,175 @@
 	{:else if loadError}
 		<p class="empty">Failed to load tasks: {loadError}</p>
 	{:else}
-	<div class="toolbar">
-		<div class="row search-row">
-			<div class="search">
-				<svg
-					viewBox="0 0 24 24"
-					width="14"
-					height="14"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<circle cx="11" cy="11" r="7" />
-					<path d="m20 20-3.5-3.5" />
-				</svg>
-				<input type="search" placeholder="Search tasks by name…" bind:value={query} />
-				{#if query}
-					<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear">×</button>
-				{/if}
-			</div>
-			<div class="sort">
-				<label for="sort-select">Sort by</label>
-				<select
-					id="sort-select"
-					value={sort}
-					onchange={(e) => onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
-				>
-					{#each SORTS as s (s.id)}
-						<option value={s.id}>{s.label}</option>
-					{/each}
-				</select>
-				<button
-					type="button"
-					class="dir-btn"
-					onclick={toggleSortDir}
-					aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
-					title={sortDir === 'asc' ? 'Ascending (click for descending)' : 'Descending (click for ascending)'}
-				>
-					{sortDir === 'asc' ? '↑' : '↓'}
-				</button>
-			</div>
-			<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
-		</div>
-
-		<div class="row filter-row">
-			<div class="group">
-				<div class="group-head">
-					<span class="group-label">Type</span>
-					<button type="button" class="link-btn" onclick={toggleAllTypes}>
-						{allTypes ? 'Clear' : 'All'}
-					</button>
-				</div>
-				<div class="pills">
-					{#each SIMPLIFIED_PRESENT as t (t)}
-						<label class="pill type-pill" data-stype={t}>
-							<input
-								type="checkbox"
-								checked={typeFilter.has(t)}
-								onchange={() => toggleType(t)}
-							/>
-							<span>{t}</span>
-						</label>
-					{/each}
-				</div>
-			</div>
-
-			<div class="group">
-				<div class="group-head">
-					<span class="group-label">Task type</span>
-					<button type="button" class="link-btn" onclick={toggleAllFullTypes}>
-						{allFullTypes ? 'Clear' : 'All'}
-					</button>
-				</div>
-				<div class="pills scroll">
-					{#each visibleFullTypes as t (t)}
-						<label class="pill type-fill" data-type={t}>
-							<input
-								type="checkbox"
-								checked={fullTypeFilter.has(t)}
-								onchange={() => toggleFullType(t)}
-							/>
-							<span>{humanizeType(t)}</span>
-						</label>
-					{/each}
-					{#if hiddenFullTypeCount > 0}
-						<button
-							type="button"
-							class="pill more-btn"
-							onclick={() => (showAllFullTypes = !showAllFullTypes)}
-							aria-expanded={showAllFullTypes}
+		<div class="toolbar">
+			<div class="row search-row">
+				<div class="search">
+					<svg
+						viewBox="0 0 24 24"
+						width="14"
+						height="14"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="11" cy="11" r="7" />
+						<path d="m20 20-3.5-3.5" />
+					</svg>
+					<input type="search" placeholder="Search tasks by name…" bind:value={query} />
+					{#if query}
+						<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear"
+							>×</button
 						>
-							{showAllFullTypes ? 'Show less' : `+${hiddenFullTypeCount} more`}
+					{/if}
+				</div>
+				<div class="sort">
+					<label for="sort-select">Sort by</label>
+					<select
+						id="sort-select"
+						value={sort}
+						onchange={(e) =>
+							onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
+					>
+						{#each SORTS as s (s.id)}
+							<option value={s.id}>{s.label}</option>
+						{/each}
+					</select>
+					<button
+						type="button"
+						class="dir-btn"
+						onclick={toggleSortDir}
+						aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+						title={sortDir === 'asc'
+							? 'Ascending (click for descending)'
+							: 'Descending (click for ascending)'}
+					>
+						{sortDir === 'asc' ? '↑' : '↓'}
+					</button>
+				</div>
+				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
+			</div>
+
+			<div class="row filter-row">
+				<div class="group">
+					<div class="group-head">
+						<span class="group-label">Type</span>
+						<button type="button" class="link-btn" onclick={toggleAllTypes}>
+							{allTypes ? 'Clear' : 'All'}
 						</button>
-					{/if}
+					</div>
+					<div class="pills">
+						{#each SIMPLIFIED_PRESENT as t (t)}
+							<label class="pill type-pill" data-stype={t}>
+								<input type="checkbox" checked={typeFilter.has(t)} onchange={() => toggleType(t)} />
+								<span>{t}</span>
+							</label>
+						{/each}
+					</div>
 				</div>
-			</div>
 
-			<div class="group">
-				<div class="group-head">
-					<span class="group-label">Modality</span>
+				<div class="group">
+					<div class="group-head">
+						<span class="group-label">Task type</span>
+						<button type="button" class="link-btn" onclick={toggleAllFullTypes}>
+							{allFullTypes ? 'Clear' : 'All'}
+						</button>
+					</div>
+					<div class="pills scroll">
+						{#each visibleFullTypes as t (t)}
+							<label class="pill type-fill" data-type={t}>
+								<input
+									type="checkbox"
+									checked={fullTypeFilter.has(t)}
+									onchange={() => toggleFullType(t)}
+								/>
+								<span>{humanizeType(t)}</span>
+							</label>
+						{/each}
+						{#if hiddenFullTypeCount > 0}
+							<button
+								type="button"
+								class="pill more-btn"
+								onclick={() => (showAllFullTypes = !showAllFullTypes)}
+								aria-expanded={showAllFullTypes}
+							>
+								{showAllFullTypes ? 'Show less' : `+${hiddenFullTypeCount} more`}
+							</button>
+						{/if}
+					</div>
 				</div>
-				<div class="pills">
-					{#each MODALITIES as m (m)}
-						<label class="pill modality-fill" data-modality={m}>
-							<input
-								type="checkbox"
-								checked={modalityFilter.has(m)}
-								onchange={() => toggleModality(m)}
-							/>
-							<span>{m}</span>
-						</label>
-					{/each}
+
+				<div class="group">
+					<div class="group-head">
+						<span class="group-label">Modality</span>
+					</div>
+					<div class="pills">
+						{#each MODALITIES as m (m)}
+							<label class="pill modality-fill" data-modality={m}>
+								<input
+									type="checkbox"
+									checked={modalityFilter.has(m)}
+									onchange={() => toggleModality(m)}
+								/>
+								<span>{m}</span>
+							</label>
+						{/each}
+					</div>
 				</div>
 			</div>
 		</div>
-	</div>
 
-	{#if filtered.length === 0}
-		<p class="empty">No tasks match those filters.</p>
-	{:else}
-		<div class="grid" data-loaded>
-			{#each filtered as t (t.name)}
-				<a class="card" href="{base}/tasks/{slug(t.name)}" data-stype={t.simplifiedType}>
-					<div class="card-head">
-						<span class="title" title={t.name}>{t.name}</span>
-					</div>
-					<p class="desc"><MarkdownText text={t.description} /></p>
-					<dl class="stats">
-						<div>
-							<dt>Benchmarks</dt>
-							<dd>{t.benchmarks.length}</dd>
+		{#if filtered.length === 0}
+			<p class="empty">No tasks match those filters.</p>
+		{:else}
+			<div class="grid" data-loaded>
+				{#each filtered as t (t.name)}
+					<a
+						class="card"
+						href={resolve('/tasks/[name]', { name: slug(t.name) })}
+						data-stype={t.simplifiedType}
+					>
+						<div class="card-head">
+							<span class="title" title={t.name}>{t.name}</span>
 						</div>
-						<div>
-							<dt>Languages</dt>
-							<dd>{t.languages.length}</dd>
+						<p class="desc"><MarkdownText text={t.description} /></p>
+						<dl class="stats">
+							<div>
+								<dt>Benchmarks</dt>
+								<dd>{t.benchmarks.length}</dd>
+							</div>
+							<div>
+								<dt>Languages</dt>
+								<dd>{t.languages.length}</dd>
+							</div>
+							<div>
+								<dt>Domains</dt>
+								<dd>{t.domains.length}</dd>
+							</div>
+							<div>
+								<dt>{t.modalities.length === 1 ? 'Modality' : 'Modalities'}</dt>
+								<dd class="modality">{t.modalities.join(', ') || '—'}</dd>
+							</div>
+						</dl>
+						{#if t.domains.length > 0}
+							<div class="badges">
+								{#each t.domains.slice(0, 3) as d (d)}
+									<span class="badge soft">{d}</span>
+								{/each}
+								{#if t.domains.length > 3}
+									<span class="badge soft muted">+{t.domains.length - 3}</span>
+								{/if}
+							</div>
+						{/if}
+						<div class="card-foot">
+							<span class="type-chip" data-type={t.type} title={t.type}>{t.type}</span>
 						</div>
-						<div>
-							<dt>Domains</dt>
-							<dd>{t.domains.length}</dd>
-						</div>
-						<div>
-							<dt>{t.modalities.length === 1 ? 'Modality' : 'Modalities'}</dt>
-							<dd class="modality">{t.modalities.join(', ') || '—'}</dd>
-						</div>
-					</dl>
-					{#if t.domains.length > 0}
-						<div class="badges">
-							{#each t.domains.slice(0, 3) as d (d)}
-								<span class="badge soft">{d}</span>
-							{/each}
-							{#if t.domains.length > 3}
-								<span class="badge soft muted">+{t.domains.length - 3}</span>
-							{/if}
-						</div>
-					{/if}
-					<div class="card-foot">
-						<span class="type-chip" data-type={t.type} title={t.type}>{t.type}</span>
-					</div>
-				</a>
-			{/each}
-		</div>
-	{/if}
+					</a>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -707,7 +693,7 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+		box-shadow: 0 8px 22px rgb(15, 23, 42, 0.08);
 	}
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));
@@ -727,23 +713,43 @@
 	   subtle wash in light mode and barely-there in dark. */
 	.card[data-stype='retrieval'] {
 		--card-accent: var(--tint-purple-fg);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-stype='classification'] {
 		--card-accent: var(--tint-blue-fg);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-stype='pair-classification'] {
 		--card-accent: var(--tint-green-fg);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-stype='clustering'] {
 		--card-accent: var(--tint-orange-fg);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-stype='semantic-similarity'] {
 		--card-accent: var(--tint-pink-fg);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-pink) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-pink) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card:hover {
 		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));

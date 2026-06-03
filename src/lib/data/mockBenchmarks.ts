@@ -249,14 +249,7 @@ export const BENCHMARK_MENU: MenuEntry[] = [
 			},
 			{
 				name: 'Language-specific',
-				children: [
-					MTEB_EUROPE,
-					MTEB_INDIC,
-					MTEB_SCAND,
-					MTEB_CMN,
-					MTEB_DEU,
-					MTEB_FRA
-				]
+				children: [MTEB_EUROPE, MTEB_INDIC, MTEB_SCAND, MTEB_CMN, MTEB_DEU, MTEB_FRA]
 			},
 			{
 				name: 'Miscellaneous',
@@ -273,24 +266,11 @@ export const BENCHMARK_MENU: MenuEntry[] = [
 			{
 				name: 'Image',
 				open: true,
-				children: [
-					VIDORE_V3,
-					JINA_VDR,
-					{ name: 'Other', children: [VIDORE_V1V2] }
-				]
+				children: [VIDORE_V3, JINA_VDR, { name: 'Other', children: [VIDORE_V1V2] }]
 			},
 			{
 				name: 'Domain-Specific',
-				children: [
-					RTEB_FIN,
-					RTEB_LAW,
-					RTEB_CODE,
-					COIR,
-					RTEB_HEALTH,
-					FOLLOW_IR,
-					LONG_EMBED,
-					BRIGHT
-				]
+				children: [RTEB_FIN, RTEB_LAW, RTEB_CODE, COIR, RTEB_HEALTH, FOLLOW_IR, LONG_EMBED, BRIGHT]
 			},
 			{
 				name: 'Language-specific',

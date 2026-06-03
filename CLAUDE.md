@@ -52,14 +52,14 @@ Loaders throw a descriptive error if neither is set so misconfiguration surfaces
 
 The `/explorer` prefix is gone — every route lives at the site root.
 
-| Route | Purpose |
-|---|---|
-| `/` | Home: benchmark category cards, top-level pitch |
-| `/benchmarks` | Full benchmark catalog |
-| `/benchmark/[name]` | Per-benchmark detail page: hero + tabs (Summary / Performance × Size / Performance × Time / Per task / Per language / Task information) |
-| `/models` + `/models/[name]` | Model index + detail (cards on the index, hero + per-benchmark score table on the detail) |
-| `/tasks` + `/tasks/[name]` | Task index + detail (same shape as models) |
-| `/compare` | Pick up to 4 models, side-by-side metric cards with per-metric winners + radar |
+| Route                        | Purpose                                                                                                                                 |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                          | Home: benchmark category cards, top-level pitch                                                                                         |
+| `/benchmarks`                | Full benchmark catalog                                                                                                                  |
+| `/benchmark/[name]`          | Per-benchmark detail page: hero + tabs (Summary / Performance × Size / Performance × Time / Per task / Per language / Task information) |
+| `/models` + `/models/[name]` | Model index + detail (cards on the index, hero + per-benchmark score table on the detail)                                               |
+| `/tasks` + `/tasks/[name]`   | Task index + detail (same shape as models)                                                                                              |
+| `/compare`                   | Pick up to 4 models, side-by-side metric cards with per-metric winners + radar                                                          |
 
 Reusable building blocks (`SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `Tabs`, `FilterContent`, `FilterSidebar`, `BenchmarkPicker`, `PlotlyChart`, `ThemeToggle`, `MarkdownText`, …) live in `src/lib/components/` and get composed differently per route.
 
@@ -108,6 +108,7 @@ All three stores under `src/lib/stores/*.svelte.ts` use the same pattern: a fact
 The dark column-header tooltip in `SummaryTable` is NOT a child of the `<th>`. It's mounted at the root of the `.summary` wrapper, sibling to the `.scroll` container. Each `<th>` carries `data-tip-title` / `data-tip` attributes and `pointerenter`/`pointerleave`/`focusin`/`focusout` handlers that update a single `tipState` object; the portal element is positioned via `position: fixed` with JS-set `left`/`top` from the cell's `getBoundingClientRect()`.
 
 This shape is deliberate. Reasons:
+
 - The `.scroll` wrapper has `overflow: auto`, which would clip an absolutely-positioned tooltip on the leftmost columns.
 - The `<th>` is `position: sticky` and establishes its own stacking context; a `position: fixed` descendant cannot escape it, so the neighboring sticky Model column with a higher `z-index` would paint over the left edge of any tip that crossed under it.
 

@@ -5,5 +5,18 @@ yarn.lock
 bun.lock
 bun.lockb
 
+# Build & generated
+build/
+.svelte-kit/
+node_modules/
+
+# Test artefacts
+test-results/
+playwright-report/
+.playwright-mcp/
+
 # Miscellaneous
 /static/
+*.png
+*.jpg
+*.svg

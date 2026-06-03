@@ -46,7 +46,10 @@
 		position: sticky;
 		top: 0;
 		overflow-y: auto;
-		transition: flex-basis 0.18s ease, min-width 0.18s ease, max-width 0.18s ease;
+		transition:
+			flex-basis 0.18s ease,
+			min-width 0.18s ease,
+			max-width 0.18s ease;
 	}
 	.sidebar.collapsed {
 		flex: 0 0 44px;

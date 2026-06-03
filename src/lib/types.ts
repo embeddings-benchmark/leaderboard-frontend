@@ -1,8 +1,4 @@
-export type BenchmarkAggregation =
-	| 'mean_task'
-	| 'mean_task_type'
-	| 'task_types'
-	| 'public_private';
+export type BenchmarkAggregation = 'mean_task' | 'mean_task_type' | 'task_types' | 'public_private';
 
 export interface Benchmark {
 	name: string;
@@ -71,12 +67,7 @@ export function isBenchmark(item: MenuEntry | Benchmark): item is Benchmark {
 	return 'displayName' in item;
 }
 
-export type ModelType =
-	| 'dense'
-	| 'cross-encoder'
-	| 'late-interaction'
-	| 'sparse'
-	| 'router';
+export type ModelType = 'dense' | 'cross-encoder' | 'late-interaction' | 'sparse' | 'router';
 
 export interface ModelMeta {
 	name: string;

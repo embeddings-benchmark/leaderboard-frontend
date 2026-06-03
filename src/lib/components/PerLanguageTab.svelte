@@ -4,6 +4,13 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { type CsvCell } from '$lib/csv';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import {
+		ariaSort as ariaSortFor,
+		defaultDirFor,
+		heat as heatBase,
+		nextSort,
+		sortIcon as sortIconFor
+	} from '$lib/format';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 
 	type Tip = {
@@ -81,26 +88,15 @@
 		});
 	});
 
-	function defaultDir(k: SortKey): 'asc' | 'desc' {
-		return k === 'model' ? 'asc' : 'desc';
-	}
+	const ASC_KEYS: readonly SortKey[] = ['model'];
+	const defaultDir = (k: SortKey) => defaultDirFor(k, ASC_KEYS);
 	function clickSort(k: SortKey) {
-		if (sortKey !== k) {
-			sortKey = k;
-			sortDir = defaultDir(k);
-			return;
-		}
-		if (sortDir === defaultDir(k)) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		else sortKey = null;
+		const next = nextSort(k, sortKey, sortDir, defaultDir);
+		sortKey = next.key;
+		sortDir = next.dir;
 	}
-	function sortIcon(k: SortKey): string {
-		if (sortKey !== k) return '↕';
-		return sortDir === 'asc' ? '↑' : '↓';
-	}
-	function ariaSort(k: SortKey): 'ascending' | 'descending' | 'none' {
-		if (sortKey !== k) return 'none';
-		return sortDir === 'asc' ? 'ascending' : 'descending';
-	}
+	const sortIcon = (k: SortKey) => sortIconFor(k, sortKey, sortDir);
+	const ariaSort = (k: SortKey) => ariaSortFor(k, sortKey, sortDir);
 
 	let sortedRows = $derived.by(() => {
 		let rows = summary.rows;
@@ -113,8 +109,10 @@
 						a.model.displayName.toLowerCase().localeCompare(b.model.displayName.toLowerCase()) * dir
 					);
 				}
-				const va: number | null = key === 'mean' ? rowMean(a) : fakeLangScore(a, LANGUAGES.indexOf(key.slice(5)));
-				const vb: number | null = key === 'mean' ? rowMean(b) : fakeLangScore(b, LANGUAGES.indexOf(key.slice(5)));
+				const va: number | null =
+					key === 'mean' ? rowMean(a) : fakeLangScore(a, LANGUAGES.indexOf(key.slice(5)));
+				const vb: number | null =
+					key === 'mean' ? rowMean(b) : fakeLangScore(b, LANGUAGES.indexOf(key.slice(5)));
 				// Push nulls to the bottom regardless of direction.
 				if (va == null && vb == null) return 0;
 				if (va == null) return 1;
@@ -148,21 +146,16 @@
 		return { headers, rows };
 	}
 
-	function heat(score: number | null | undefined): string {
-		if (score == null) return '';
-		// Score is 0..99 here; normalize and shape with the same 0.45–0.75 curve.
-		const normalized = score / 100;
-		const v = Math.max(0, Math.min(1, (normalized - 0.45) / 0.3));
-		const pct = Math.round(v * 55);
-		if (pct === 0) return '';
-		return `background-color: color-mix(in srgb, var(--primary) ${pct}%, transparent);`;
-	}
+	// Heat scales per-column: the strongest mean / per-language cell
+	// gets full tint, others shade down proportionally. Both score and
+	// `max` are on the same 0–100 scale so ratio works directly.
+	const heat = heatBase;
 </script>
 
 <div class="wrap">
 	<p class="muted head-note">
-		Example per-language scores for the visible models. Click any column header to sort.
-		Values are simulated until the backend exposes the real per-language breakdown.
+		Example per-language scores for the visible models. Click any column header to sort. Values are
+		simulated until the backend exposes the real per-language breakdown.
 	</p>
 	<div class="tbl-scroll">
 		<table class="tbl lang-table" use:stickyHead>
@@ -229,23 +222,25 @@
 							onfocusout={onCellLeave}
 						>
 							{#if row.model.url}
+								<!-- External model URL (HuggingFace etc.) -->
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 								<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
-									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
-										class="tbl-model-name">{row.model.displayName}</span
-									>
+									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
+										>/</span
+									><span class="tbl-model-name">{row.model.displayName}</span>
 								</a>
 							{:else}
 								<span class="tbl-model-link">
-									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
-										class="tbl-model-name">{row.model.displayName}</span
-									>
+									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
+										>/</span
+									><span class="tbl-model-name">{row.model.displayName}</span>
 								</span>
 							{/if}
 						</td>
 						<td
 							class="tbl-num"
 							class:tbl-best={mean != null && mean === bestMean}
-							style={heat(mean)}
+							style={heat(mean, bestMean)}
 						>
 							{fmt(mean)}
 						</td>
@@ -254,7 +249,7 @@
 							<td
 								class="tbl-num"
 								class:tbl-best={score != null && score === best[lang]}
-								style={heat(score)}
+								style={heat(score, best[lang])}
 							>
 								{fmt(score)}
 							</td>

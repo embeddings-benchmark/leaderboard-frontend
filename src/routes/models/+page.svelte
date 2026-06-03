@@ -1,14 +1,11 @@
 <script lang="ts">
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { loadModels } from '$lib/data/service';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import type { ModelMeta } from '$lib/types';
-
-	function slug(name: string): string {
-		return encodeURIComponent(name);
-	}
+	import { slug, fmtInt } from '$lib/format';
 
 	let ALL_MODELS = $state<ModelMeta[]>([]);
 	let loadingData = $state(true);
@@ -112,9 +109,6 @@
 		if (!b) return '—';
 		return b >= 1 ? `${b.toFixed(1)}B` : `${(b * 1000).toFixed(0)}M`;
 	}
-	function fmtInt(n: number): string {
-		return n ? n.toLocaleString() : '—';
-	}
 </script>
 
 <div class="app">
@@ -123,8 +117,8 @@
 			<h1>Models</h1>
 			<p class="lead">
 				Every model in the leaderboard with its architecture type, parameter count, embedding
-				dimension, max context, and release date. Filters here share state with the leaderboard
-				on every benchmark detail page.
+				dimension, max context, and release date. Filters here share state with the leaderboard on
+				every benchmark detail page.
 			</p>
 			<p class="contribute-note">
 				To add your model, follow our
@@ -154,7 +148,9 @@
 					class="dir-btn"
 					onclick={toggleSortDir}
 					aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
-					title={sortDir === 'asc' ? 'Ascending (click for descending)' : 'Descending (click for ascending)'}
+					title={sortDir === 'asc'
+						? 'Ascending (click for descending)'
+						: 'Descending (click for ascending)'}
 				>
 					{sortDir === 'asc' ? '↑' : '↓'}
 				</button>
@@ -172,7 +168,7 @@
 				{#each filtered as m (m.name)}
 					<a
 						class="card"
-						href="{base}/models/{slug(m.name)}"
+						href={resolve('/models/[name]', { name: slug(m.name) })}
 						data-type={m.modelType}
 						title={m.modelType}
 					>
@@ -280,7 +276,7 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+		box-shadow: 0 8px 22px rgb(15, 23, 42, 0.08);
 	}
 	.card::before {
 		content: '';
@@ -297,27 +293,47 @@
 	.card[data-type='dense'] {
 		--card-accent: var(--tint-blue-fg);
 		--card-tint: var(--tint-blue);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-type='cross-encoder'] {
 		--card-accent: var(--tint-orange-fg);
 		--card-tint: var(--tint-orange);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-type='late-interaction'] {
 		--card-accent: var(--tint-green-fg);
 		--card-tint: var(--tint-green);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-type='sparse'] {
 		--card-accent: var(--tint-amber-fg);
 		--card-tint: var(--tint-amber);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card[data-type='router'] {
 		--card-accent: var(--tint-purple-fg);
 		--card-tint: var(--tint-purple);
-		background: linear-gradient(180deg, color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%, var(--surface) 64px);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card:hover {
 		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));

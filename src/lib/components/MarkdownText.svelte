@@ -44,6 +44,8 @@
 	let segments = $derived(parse(text ?? ''));
 </script>
 
+<!-- eslint-disable svelte/no-navigation-without-resolve -->
+<!-- All <a> here carry URLs from user-supplied markdown — always external. -->
 {#each segments as seg, i (i)}
 	{#if seg.type === 'link'}
 		<a

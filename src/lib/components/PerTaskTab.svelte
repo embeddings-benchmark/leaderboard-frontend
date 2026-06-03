@@ -3,6 +3,14 @@
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import {
+		ariaSort as ariaSortFor,
+		bestPerColumn,
+		defaultDirFor,
+		heat,
+		nextSort,
+		sortIcon as sortIconFor
+	} from '$lib/format';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 
 	type Tip = {
@@ -35,52 +43,26 @@
 		});
 	});
 
-	function defaultDir(k: SortKey): 'asc' | 'desc' {
-		return k === 'model' ? 'asc' : 'desc';
-	}
+	const ASC_KEYS: readonly SortKey[] = ['model'];
+	const defaultDir = (k: SortKey) => defaultDirFor(k, ASC_KEYS);
 	function clickSort(k: SortKey) {
-		if (sortKey !== k) {
-			sortKey = k;
-			sortDir = defaultDir(k);
-			return;
-		}
-		if (sortDir === defaultDir(k)) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		else sortKey = null;
+		const next = nextSort(k, sortKey, sortDir, defaultDir);
+		sortKey = next.key;
+		sortDir = next.dir;
 	}
-	function sortIcon(k: SortKey): string {
-		if (sortKey !== k) return '↕';
-		return sortDir === 'asc' ? '↑' : '↓';
-	}
-	function ariaSort(k: SortKey): 'ascending' | 'descending' | 'none' {
-		if (sortKey !== k) return 'none';
-		return sortDir === 'asc' ? 'ascending' : 'descending';
-	}
+	const sortIcon = (k: SortKey) => sortIconFor(k, sortKey, sortDir);
+	const ariaSort = (k: SortKey) => ariaSortFor(k, sortKey, sortDir);
 
 	function fmt(score: number | undefined): string {
 		if (score === undefined) return '';
 		return (score * 100).toFixed(2);
 	}
-	function heat(score: number | undefined): string {
-		if (score === undefined) return '';
-		const v = Math.max(0, Math.min(1, (score - 0.45) / 0.3));
-		const pct = Math.round(v * 55);
-		if (pct === 0) return '';
-		return `background-color: color-mix(in srgb, var(--primary) ${pct}%, transparent);`;
-	}
 
-	function bestPerTask(): Record<string, number> {
-		const best: Record<string, number> = {};
-		for (const t of summary.tasks) {
-			let max = -Infinity;
-			for (const r of summary.rows) {
-				const v = r.scoresByTask[t];
-				if (v !== undefined && v > max) max = v;
-			}
-			best[t] = max;
-		}
-		return best;
-	}
-	let best = $derived(bestPerTask());
+	// Task columns are rendered A→Z so wide leaderboards are scannable.
+	// API ordering is whatever the benchmark registered; alphabetising
+	// here keeps it stable as the user filters the task set.
+	let sortedTasks = $derived([...summary.tasks].sort((a, b) => a.localeCompare(b)));
+	let best = $derived(bestPerColumn(sortedTasks, summary.rows, (r, t) => r.scoresByTask[t]));
 
 	let sortedRows = $derived.by(() => {
 		let rows = summary.rows;
@@ -113,8 +95,8 @@
 		<p class="muted">This benchmark has no tasks defined in the mock data.</p>
 	{:else}
 		<p class="muted">
-			Per-task scores for each visible model. {summary.tasks.length} tasks; scroll horizontally to
-			see them all. Click any column header to sort.
+			Per-task scores for each visible model. {summary.tasks.length} tasks; scroll horizontally to see
+			them all. Click any column header to sort.
 		</p>
 		<div class="tbl-scroll">
 			<table class="tbl" use:stickyHead>
@@ -127,7 +109,7 @@
 								<span class="tbl-sort-ind" class:on={sortKey === 'model'}>{sortIcon('model')}</span>
 							</button>
 						</th>
-						{#each summary.tasks as task (task)}
+						{#each sortedTasks as task (task)}
 							{@const k = `task:${task}` as SortKey}
 							<th class="tbl-num" aria-sort={ariaSort(k)}>
 								<button class="tbl-sort" onclick={() => clickSort(k)} title={task}>
@@ -174,24 +156,26 @@
 								onfocusout={onCellLeave}
 							>
 								{#if row.model.url}
+									<!-- External model URL (HuggingFace etc.) -->
+									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 									<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
-										<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
-											class="tbl-model-name">{row.model.displayName}</span
-										>
+										<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
+											>/</span
+										><span class="tbl-model-name">{row.model.displayName}</span>
 									</a>
 								{:else}
 									<span class="tbl-model-link">
-										<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep">/</span><span
-											class="tbl-model-name">{row.model.displayName}</span
-										>
+										<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
+											>/</span
+										><span class="tbl-model-name">{row.model.displayName}</span>
 									</span>
 								{/if}
 							</td>
-							{#each summary.tasks as task (task)}
+							{#each sortedTasks as task (task)}
 								<td
 									class="tbl-num"
 									class:tbl-best={row.scoresByTask[task] === best[task]}
-									style={heat(row.scoresByTask[task])}
+									style={heat(row.scoresByTask[task], best[task])}
 								>
 									{fmt(row.scoresByTask[task])}
 								</td>

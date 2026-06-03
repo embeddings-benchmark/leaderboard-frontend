@@ -126,11 +126,7 @@
 		<span class="val">{format(localMin)}</span>
 		<span class="val">{format(localMax)}</span>
 	</div>
-	<div
-		class="track-wrap"
-		role="presentation"
-		onpointerdown={trackPointerDown}
-	>
+	<div class="track-wrap" role="presentation" onpointerdown={trackPointerDown}>
 		<div class="track"></div>
 		<div class="fill" style:left="{leftPct}%" style:right="{100 - rightPct}%"></div>
 		<input
