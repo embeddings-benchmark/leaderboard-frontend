@@ -122,6 +122,17 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	}
 
 	function update() {
+		// Bail when our table lives in a `data-prepaint` pane that isn't
+		// active. The pane stays fully laid out (clip-path hides the
+		// paint), so `getBoundingClientRect` still returns valid bounds
+		// — without this check every inactive table would also stack its
+		// own thead overlay at the top, showing columns from every tab.
+		const inactivePane = table.closest('.tab-pane[data-prepaint]:not(.active)');
+		if (inactivePane) {
+			overlay.style.display = 'none';
+			return;
+		}
+
 		const wrapperRect = wrapper.getBoundingClientRect();
 		const theadRect = realThead.getBoundingClientRect();
 		const tableRect = table.getBoundingClientRect();
@@ -204,6 +215,17 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	const mo = new MutationObserver(scheduleContent);
 	mo.observe(realThead, { childList: true, subtree: true, characterData: true, attributes: true });
 
+	// Watch the containing pane (if any) for class flips so the overlay
+	// hides immediately when this table's tab goes inactive — without it,
+	// `update()` only runs on scroll/resize and the overlay would linger
+	// at the viewport top showing columns from the wrong tab.
+	const paneAncestor = table.closest('.tab-pane');
+	let paneMo: MutationObserver | null = null;
+	if (paneAncestor) {
+		paneMo = new MutationObserver(scheduleUpdate);
+		paneMo.observe(paneAncestor, { attributes: true, attributeFilter: ['class'] });
+	}
+
 	window.addEventListener('scroll', scheduleUpdate, { passive: true });
 	wrapper.addEventListener('scroll', scheduleUpdate, { passive: true });
 	window.addEventListener('resize', scheduleResync);
@@ -219,6 +241,7 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 			if (contentRaf) cancelAnimationFrame(contentRaf);
 			ro.disconnect();
 			mo.disconnect();
+			paneMo?.disconnect();
 			window.removeEventListener('scroll', scheduleUpdate);
 			wrapper.removeEventListener('scroll', scheduleUpdate);
 			window.removeEventListener('resize', scheduleResync);

@@ -184,6 +184,45 @@
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
 
+	// Progressive row render — same pattern as /tasks and /models. Paint
+	// the first 80 rows immediately (covers ~1 viewport on desktop), then
+	// stream the rest in `requestIdleCallback` chunks of 200 so the main
+	// thread isn't blocked creating 400+ rows of cells on first paint.
+	// `lastRowSignature` lets Svelte 5's $effect bail on its own writes
+	// to `visibleRows` (otherwise the effect re-fires on every chunk
+	// increment and pins the table at 80).
+	const INITIAL_ROW_CHUNK = 80;
+	const ROW_CHUNK_STEP = 200;
+	let visibleRows = $state(INITIAL_ROW_CHUNK);
+	let growVersion = 0;
+	let lastRowSignature = '';
+	let rowKickoffTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		const total = sortedRows.length;
+		const signature = `${total}|${sortedRows[0]?.model.name ?? ''}|${sortedRows[total - 1]?.model.name ?? ''}`;
+		if (signature === lastRowSignature) return;
+		lastRowSignature = signature;
+		const myVersion = ++growVersion;
+		visibleRows = Math.min(INITIAL_ROW_CHUNK, total);
+		if (visibleRows >= total) return;
+		if (rowKickoffTimer) clearTimeout(rowKickoffTimer);
+		rowKickoffTimer = setTimeout(() => {
+			rowKickoffTimer = null;
+			if (myVersion !== growVersion) return;
+			const idle = (cb: () => void): number =>
+				'requestIdleCallback' in window
+					? window.requestIdleCallback(cb, { timeout: 500 })
+					: (setTimeout(cb, 0) as unknown as number);
+			const grow = () => {
+				if (myVersion !== growVersion) return;
+				visibleRows = Math.min(visibleRows + ROW_CHUNK_STEP, total);
+				if (visibleRows < total) idle(grow);
+			};
+			idle(grow);
+		}, 60);
+	});
+	let renderedRows = $derived(sortedRows.slice(0, visibleRows));
+
 	function fmtZeroShot(pct: number): string {
 		if (pct === -1) return '⚠️ NA';
 		return `${pct.toFixed(0)}%`;
@@ -567,7 +606,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each sortedRows as row (row.model.name)}
+				{#each renderedRows as row (row.model.name)}
 					<tr class:pinned={pinnedModels.has(row.model.name)}>
 						<td class="sticky-left">
 							<div class="rank-cell">
