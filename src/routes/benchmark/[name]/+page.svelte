@@ -65,6 +65,14 @@
 		}
 	});
 
+	// Bound to the live PerLanguageTab instance so the page-level toolbar
+	// can call its `buildCsv()` for the Download CSV button — keeps the
+	// download next to the search bar like the other tabs, instead of
+	// PerLanguageTab rendering its own button on a separate row.
+	let perLanguageTab = $state<{ buildCsv: () => ReturnType<typeof buildPerTaskCsv> } | null>(
+		null
+	);
+
 	$effect(() => {
 		if (!benchmarkName) return;
 		// Trigger load both when the URL benchmark differs from the store's
@@ -245,6 +253,11 @@
 							filename="{sanitizeFilename(benchmark.name)}_per_task"
 							build={buildPerTaskCsv}
 						/>
+					{:else if activeTab === 'perf_language' && filteredSummary && perLanguageTab}
+						<DownloadButton
+							filename="{sanitizeFilename(benchmark.name)}_per_language"
+							build={() => perLanguageTab!.buildCsv()}
+						/>
 					{/if}
 				</div>
 			{/if}
@@ -278,7 +291,7 @@
 					{/if}
 					{#if visited.has('perf_language')}
 						<div class="tab-pane" class:active={activeTab === 'perf_language'}>
-							<PerLanguageTab summary={filteredSummary} />
+							<PerLanguageTab summary={filteredSummary} bind:this={perLanguageTab} />
 						</div>
 					{/if}
 					{#if visited.has('task_info')}
@@ -303,9 +316,19 @@
 		flex: 1;
 		min-width: 0;
 		max-width: 1400px;
-		margin: 0 auto;
-		padding: 18px 28px 40px;
-		padding-right: 28px;
+		/* Don't centre inside the flex track. With `margin: 0 auto`,
+		   collapsing the filter sidebar would split the freed width
+		   equally on both sides of `.main`, leaving a big empty strip
+		   on the right. Anchoring to the left keeps content snug
+		   against the page edge and the gap shrinks naturally as the
+		   sidebar expands/collapses. */
+		margin: 0;
+		/* 12 px right padding gives the hero card / table a small gap
+		   from the filter sidebar (or the overlay toggle button when
+		   the sidebar is collapsed) — wide enough to read as
+		   intentional, narrow enough that the previous 28 px dead
+		   zone next to the filter content doesn't return. */
+		padding: 18px 12px 40px 28px;
 	}
 	.breadcrumb {
 		display: flex;
@@ -344,7 +367,11 @@
 	}
 	@media (max-width: 1000px) {
 		.hero {
-			grid-template-columns: 1fr;
+			/* `minmax(0, 1fr)` (not bare `1fr`) lets the column shrink
+			   below its intrinsic content width — without it, the
+			   CiteBlock's <pre> claims its full bibtex width and
+			   blows the card past the viewport on mobile. */
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 	.title-block {
@@ -438,6 +465,25 @@
 		.kpi {
 			min-width: 0;
 			flex: 1;
+		}
+	}
+	@media (max-width: 640px) {
+		/* 4 KPIs on a 375 px row leaves ~80 px each, which makes the
+		   value (e.g. 380 models) burst out of the chip. A 2×2 grid
+		   gives each ~150 px and stacks the value under the label
+		   so big numbers always fit inside their tile. */
+		.kpis {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 6px;
+		}
+		.kpi {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 2px;
+		}
+		.kpi-value {
+			font-size: 18px;
 		}
 	}
 

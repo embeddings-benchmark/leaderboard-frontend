@@ -883,6 +883,17 @@
 	tbody tr:hover td.sticky {
 		background: var(--row-hover);
 	}
+	/* Mobile: the 240 px sticky model column hides almost every score
+	   column behind itself on a 375 px viewport. Drop the stickyness
+	   so columns scroll together. */
+	@media (max-width: 640px) {
+		.sticky,
+		thead th.sticky {
+			position: static;
+			left: auto;
+			min-width: 160px;
+		}
+	}
 	.task-model-link {
 		color: var(--text);
 		text-decoration: none;

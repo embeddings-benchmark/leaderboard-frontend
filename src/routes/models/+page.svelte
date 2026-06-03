@@ -126,6 +126,14 @@
 				dimension, max context, and release date. Filters here share state with the leaderboard
 				on every benchmark detail page.
 			</p>
+			<p class="contribute-note">
+				To add your model, follow our
+				<a
+					href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_model/"
+					target="_blank"
+					rel="noreferrer">contributor guide</a
+				>.
+			</p>
 		</header>
 
 		<div class="toolbar">
@@ -237,7 +245,6 @@
 	.lead {
 		color: var(--text-muted);
 		margin: 0;
-		max-width: 60ch;
 	}
 
 	.toolbar {
@@ -405,6 +412,15 @@
 		font-size: 14px;
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
+	}
+
+	/* Mobile: the 2x2 KPI grid (params / embed dim / max tokens /
+	   released) crowds each card; the same numbers are on the detail
+	   page. Drop the grid and lean on the title + badges. */
+	@media (max-width: 640px) {
+		.stats {
+			display: none;
+		}
 	}
 
 	.type-chip {

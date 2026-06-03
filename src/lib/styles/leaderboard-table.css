@@ -35,6 +35,10 @@
 	border-radius: 8px;
 	background: var(--surface);
 	box-shadow: var(--shadow-sm);
+	/* Momentum scrolling on iOS + don't let a horizontal swipe chain
+	   back/forward navigation when the user reaches an edge. */
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: contain;
 }
 
 .tbl {
@@ -217,6 +221,25 @@
 }
 .tbl tbody tr.pinned td.tbl-sticky-col {
 	background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
+}
+
+/* Mobile: a 220 px sticky Model column behind a 32 px pin column
+   leaves only ~120 px for the actual score columns on a 375 px
+   phone — the data the user came for. Drop the sticky behaviour so
+   every column scrolls together inside the table's horizontal
+   overflow container. */
+@media (max-width: 640px) {
+	.tbl-sticky-pin,
+	.tbl thead th.tbl-sticky-pin {
+		position: static;
+	}
+	.tbl-sticky-col,
+	.tbl thead th.tbl-sticky-col {
+		position: static;
+		left: auto;
+		min-width: 140px;
+		max-width: 180px;
+	}
 }
 
 /* Model identity rendered as org/name (HF-style). Org and slash are muted so

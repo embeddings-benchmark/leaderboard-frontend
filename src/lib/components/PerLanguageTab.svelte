@@ -2,10 +2,9 @@
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import { stickyHead } from '$lib/actions/sticky-head';
-	import { sanitizeFilename, type CsvCell } from '$lib/csv';
+	import { type CsvCell } from '$lib/csv';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
-	import DownloadButton from './DownloadButton.svelte';
 
 	type Tip = {
 		showFor: (t: HTMLElement, row: SummaryRow) => void;
@@ -132,7 +131,12 @@
 		if (n == null) return '—';
 		return n.toFixed(2);
 	}
-	function buildCsv() {
+	// Exported as an instance method (Svelte 5) so the parent page can
+	// render its DownloadButton in the shared `.toolbar-row` next to
+	// the search bar — same layout as the Summary and Per-task tabs —
+	// instead of letting this component show its own download button
+	// on a second row.
+	export function buildCsv() {
 		const headers = ['Rank', 'Model', 'Mean', ...LANGUAGES];
 		const round = (n: number | null) => (n == null ? null : Number(n.toFixed(2)));
 		const rows: CsvCell[][] = summary.rows.map((row) => [
@@ -156,16 +160,10 @@
 </script>
 
 <div class="wrap">
-	<div class="head">
-		<p class="muted">
-			Example per-language scores for the visible models. Click any column header to sort.
-			Values are simulated until the backend exposes the real per-language breakdown.
-		</p>
-		<DownloadButton
-			filename="{sanitizeFilename(summary.benchmarkName)}_per_language"
-			build={buildCsv}
-		/>
-	</div>
+	<p class="muted head-note">
+		Example per-language scores for the visible models. Click any column header to sort.
+		Values are simulated until the backend exposes the real per-language breakdown.
+	</p>
 	<div class="tbl-scroll">
 		<table class="tbl lang-table" use:stickyHead>
 			<thead>
@@ -278,16 +276,8 @@
 		color: var(--text-muted);
 		margin: 0;
 	}
-	.head {
-		display: flex;
-		gap: 12px;
-		align-items: flex-start;
-		justify-content: space-between;
-		margin-bottom: 12px;
-	}
-	.head .muted {
-		flex: 1;
-		min-width: 0;
+	.head-note {
+		margin: 0 0 12px;
 	}
 	/* Per-language table always fits the main column; stretch to fill it. */
 	.lang-table {

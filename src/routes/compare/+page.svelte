@@ -858,7 +858,7 @@
 	}
 	.picker-panel.bench-panel {
 		left: 0;
-		width: 420px;
+		width: min(420px, calc(100vw - 24px));
 	}
 	.picker-row.bench-row {
 		grid-template-columns: 1fr auto 16px;
@@ -955,7 +955,10 @@
 		position: absolute;
 		top: calc(100% + 6px);
 		left: 0;
-		width: 360px;
+		/* Cap at the viewport width (minus a small margin) so the
+		   panel never overflows the screen on mobile. The 16 px
+		   subtracts a hair of breathing room on each side. */
+		width: min(360px, calc(100vw - 24px));
 		max-height: 420px;
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -1078,7 +1081,14 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 14px;
-		overflow: hidden;
+		/* Horizontal scroll instead of page overflow when 4 model
+		   columns × 220 px don't fit the viewport (everything below
+		   ~1080 px on a max compare). `position: sticky` on the
+		   left-most label column anchors against this scrollport. */
+		overflow-x: auto;
+		overflow-y: hidden;
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior-x: contain;
 		box-shadow: var(--shadow-sm);
 	}
 	.cell {
@@ -1097,6 +1107,16 @@
 		font-weight: 700;
 		z-index: 1;
 		border-right: 1px solid var(--border);
+	}
+	/* Mobile: a 200 px sticky label column would eat more than half
+	   of a 375 px viewport, leaving the model columns unreachable
+	   even with the new horizontal scroll. Drop the stickyness so
+	   the labels scroll along with the values. */
+	@media (max-width: 640px) {
+		.cell.sticky {
+			position: static;
+			left: auto;
+		}
 	}
 	.head {
 		border-bottom: 2px solid var(--border);

@@ -309,19 +309,76 @@
 		}
 	}
 	@media (max-width: 720px) {
-		/* Drop the 3-column grid and stack naturally — the center nav floats
-		   below the brand row rather than getting crushed. */
+		/* Keep everything on one row: brand | nav (scrolls) | ext-links.
+		   The middle column is `minmax(0, 1fr)` so it doesn't push the
+		   ext-links offscreen; long nav lists scroll horizontally
+		   within their column instead. */
 		.bar {
-			grid-template-columns: auto 1fr;
-			row-gap: 6px;
+			grid-template-columns: auto minmax(0, 1fr) auto;
 		}
 		.subnav {
-			grid-column: 1 / -1;
+			/* `display: inline-flex` (the default) sizes to content and
+			   ignores the cell width, so the nav was painting over the
+			   ext-links column. Block-level flex + width:100% forces it
+			   to honour the `minmax(0, 1fr)` track and scroll within. */
+			display: flex;
+			width: 100%;
 			justify-self: start;
+			min-width: 0;
 			overflow-x: auto;
 			scrollbar-width: none;
 		}
 		.subnav::-webkit-scrollbar {
+			display: none;
+		}
+	}
+
+	@media (max-width: 640px) {
+		/* Trim the header's vertical footprint on phones — the previous
+		   stacked layout took ~100 px before any content rendered. Shrink
+		   padding, fonts, and the brand block; drop the wordmark so just
+		   the icon represents the brand on the narrowest screens. */
+		.bar {
+			padding: 6px 10px;
+			gap: 8px;
+		}
+		.brand {
+			gap: 6px;
+		}
+		.brand-icon {
+			width: 20px;
+			height: 20px;
+		}
+		.name {
+			font-size: 13px;
+		}
+		.subnav {
+			font-size: 10px;
+			letter-spacing: 0.1em;
+		}
+		.subnav a {
+			padding: 6px 8px;
+		}
+		.subnav a::after {
+			left: 8px;
+			right: 8px;
+			bottom: 2px;
+		}
+		.ext-links {
+			gap: 2px;
+		}
+		/* Drop the GitHub / Documentation / Leaderboard icon links on
+		   phones — they take precious header width and duplicate links
+		   that live in the footer. The theme toggle stays. */
+		.ext-links .icon-link {
+			display: none;
+		}
+	}
+
+	@media (max-width: 380px) {
+		/* Drop the wordmark at the very smallest widths; the icon alone
+		   identifies the brand. */
+		.name {
 			display: none;
 		}
 	}

@@ -669,7 +669,11 @@
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: #ff9b6f;
+		/* Theme accent so the title pops against the (always dark)
+		   tooltip background — orange in light mode, blue in dark
+		   mode. The previous hardcoded `#ff9b6f` looked stale in
+		   dark theme where every other accent flipped to azure. */
+		color: var(--primary);
 		margin-bottom: 4px;
 	}
 	.tip-portal-body {
@@ -722,10 +726,36 @@
 	.param-cell[data-model-type='router'] {
 		background-color: color-mix(in srgb, var(--tint-purple) 70%, var(--surface));
 	}
-	/* On hover, deepen the tint slightly so the row still has feedback. */
-	tbody tr:hover td.sticky-model[data-model-type],
-	tbody tr:hover td.param-cell[data-model-type] {
-		filter: brightness(0.96);
+	/* Tint the model name itself so the type is readable from the text
+	   alone (the row's column tint already echoes it). Foregrounds come
+	   from the same --tint-*-fg tokens used by chips elsewhere, so the
+	   palette stays consistent. The org + slash stay muted so the model
+	   name remains the visual anchor. */
+	.sticky-model[data-model-type='dense'] .tbl-model-name {
+		color: var(--tint-blue-fg);
+	}
+	.sticky-model[data-model-type='cross-encoder'] .tbl-model-name {
+		color: var(--tint-orange-fg);
+	}
+	.sticky-model[data-model-type='late-interaction'] .tbl-model-name {
+		color: var(--tint-green-fg);
+	}
+	.sticky-model[data-model-type='sparse'] .tbl-model-name {
+		color: var(--tint-amber-fg);
+	}
+	.sticky-model[data-model-type='router'] .tbl-model-name {
+		color: var(--tint-purple-fg);
+	}
+	/* Whole-row hover feedback. Score cells own a `background-color`
+	   (the heat-shading `color-mix(...)`) that overrides the shared
+	   `tr:hover td { background }` rule, so a plain background swap
+	   only registers on the first three columns. Painting an inset
+	   box-shadow across the cell layers a translucent dark over
+	   whatever background is underneath (heat tint, --row-alt, type
+	   tint, …) so every cell visibly highlights. The 100vmax spread
+	   is the standard "fill the box" trick. */
+	tbody tr:hover td {
+		box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 7%, transparent);
 	}
 	/* Subtle dotted underline on the model link cues that hovering shows more. */
 	.has-tip a {
@@ -852,5 +882,28 @@
 	}
 	tbody tr:hover td.sticky-model {
 		background: var(--row-hover);
+	}
+
+	/* Mobile: 72 px (rank) + 260 px (model) of sticky pane eats almost
+	   the whole 375 px viewport, leaving the score columns unreachable.
+	   Drop the stickyness and let everything flow inside the horizontal
+	   scroll container — rank and model just become the first two
+	   columns the user scrolls past. */
+	@media (max-width: 640px) {
+		.sticky-left,
+		thead th.sticky-left,
+		tbody td.sticky-left {
+			position: static;
+			width: auto;
+			min-width: 0;
+		}
+		.sticky-model,
+		thead th.sticky-model {
+			position: static;
+			left: auto;
+			width: auto;
+			min-width: 160px;
+			max-width: 200px;
+		}
 	}
 </style>

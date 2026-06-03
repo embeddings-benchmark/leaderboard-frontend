@@ -22,7 +22,18 @@
 
 import type { Action } from 'svelte/action';
 
-const STICKY_TOP_PX = 60;
+/**
+ * Resolve the current sticky-bar offset (px). The header is `position: sticky;
+ * top: 0` in `+layout.svelte` and its height depends on the viewport — the
+ * mobile breakpoint compacts it to ~48 px, desktop sits ~52 px. Reading it
+ * live keeps the floating thead-clone flush against the bar instead of
+ * leaving a gap (when the constant was too large) or sliding under it
+ * (when too small).
+ */
+function stickyTopPx(): number {
+	const bar = document.querySelector<HTMLElement>('header.bar');
+	return bar ? bar.getBoundingClientRect().height : 48;
+}
 
 export const stickyHead: Action<HTMLTableElement> = (table) => {
 	const wrapperOrNull = table.closest<HTMLElement>('.tbl-scroll');
@@ -37,7 +48,7 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	overlay.className = 'sticky-head-overlay';
 	overlay.style.cssText = `
 		position: fixed;
-		top: ${STICKY_TOP_PX}px;
+		top: ${stickyTopPx()}px;
 		z-index: 50;
 		overflow: hidden;
 		pointer-events: none;
@@ -107,12 +118,18 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		const theadRect = realThead.getBoundingClientRect();
 		const tableRect = table.getBoundingClientRect();
 
+		// Re-measure each frame — the bar shrinks at the mobile
+		// breakpoint and we want the overlay flush against whatever the
+		// current bar height is.
+		const stickyTop = stickyTopPx();
+		overlay.style.top = `${stickyTop}px`;
+
 		// Show the overlay only when the real thead has scrolled above the offset
 		// AND the table itself is still on screen (its bottom hasn't crossed
 		// above the overlay yet). Otherwise we'd leave a ghost thead floating
 		// after the table is gone.
 		const headH = theadRect.height;
-		const shouldShow = theadRect.top < STICKY_TOP_PX && tableRect.bottom > STICKY_TOP_PX + headH;
+		const shouldShow = theadRect.top < stickyTop && tableRect.bottom > stickyTop + headH;
 
 		if (!shouldShow) {
 			overlay.style.display = 'none';

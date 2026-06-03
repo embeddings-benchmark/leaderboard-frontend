@@ -820,6 +820,18 @@
 	tbody tr:hover td.sticky {
 		background: var(--row-hover);
 	}
+	/* Mobile: a 240 px sticky first column eats most of a 375 px
+	   viewport, leaving the actual score columns unreachable. Drop
+	   the stickyness so every column flows inside the horizontal
+	   scroll container together. */
+	@media (max-width: 640px) {
+		.sticky,
+		thead th.sticky {
+			position: static;
+			left: auto;
+			min-width: 160px;
+		}
+	}
 	.bench-link {
 		font-weight: 600;
 		color: var(--text);

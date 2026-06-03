@@ -34,7 +34,16 @@ const config = {
 			strict: true
 		}),
 		paths: {
-			base: dev ? '' : process.env.BASE_PATH || ''
+			base: dev ? '' : process.env.BASE_PATH || '',
+			// SvelteKit 2 defaults this to `true`, which emits *relative*
+			// asset URLs. On a deep route like `/benchmark/<name>/` that
+			// turns `_app/immutable/...` into
+			// `/benchmark/<name>/_app/immutable/...`, which doesn't exist
+			// on disk → nginx SPA fallback serves 404.html → browser
+			// refuses to load the resulting HTML as a JS module (MIME
+			// mismatch). Force absolute (`/_app/...`) so the asset URL
+			// is the same from every page.
+			relative: false
 		},
 		prerender: {
 			// The story page's TOC links to section anchors (#lede, #leader, …).

@@ -220,6 +220,14 @@
 			Every task across every benchmark, deduped by name. Click a card to see how each model
 			performs on that task.
 		</p>
+		<p class="contribute-note">
+			To add your task, follow our
+			<a
+				href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_dataset/"
+				target="_blank"
+				rel="noreferrer">contributor guide</a
+			>.
+		</p>
 	</header>
 
 	{#if loadingData}
@@ -304,7 +312,7 @@
 				</div>
 				<div class="pills scroll">
 					{#each FULL_TYPES_PRESENT as t (t)}
-						<label class="pill">
+						<label class="pill type-fill" data-type={t}>
 							<input
 								type="checkbox"
 								checked={fullTypeFilter.has(t)}
@@ -322,7 +330,7 @@
 				</div>
 				<div class="pills">
 					{#each MODALITIES as m (m)}
-						<label class="pill">
+						<label class="pill modality-fill" data-modality={m}>
 							<input
 								type="checkbox"
 								checked={modalityFilter.has(m)}
@@ -401,7 +409,6 @@
 	.lead {
 		color: var(--text-muted);
 		margin: 0;
-		max-width: 60ch;
 	}
 
 	/* Toolbar -------------------------------------------------------------- */
@@ -565,7 +572,6 @@
 	.pill {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
 		padding: 5px 11px;
 		font-size: 12px;
 		background: var(--surface);
@@ -574,12 +580,56 @@
 		cursor: pointer;
 		user-select: none;
 	}
+	/* Mobile: stack the three filter groups vertically. Side-by-side
+	   on a 375 px viewport gave each group ~120 px of width, which
+	   forced even short pills to wrap to one-per-row. Stacking lets
+	   each group's pill strip flow horizontally with wrap, so the
+	   Type and Modality groups end up ~1 row tall (≈ 50 px) and the
+	   Task type group caps at a matching height with internal
+	   scroll for the long tail. */
+	@media (max-width: 640px) {
+		.pill {
+			padding: 8px 14px;
+			font-size: 13px;
+		}
+		.row.filter-row {
+			flex-direction: column;
+			gap: 14px;
+			align-items: stretch;
+		}
+		.group {
+			flex: 0 0 auto;
+		}
+		.pills.scroll {
+			max-height: 80px;
+			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
+			overscroll-behavior-y: contain;
+		}
+	}
 	.pill input {
-		margin: 0;
-		accent-color: var(--primary);
+		/* Hidden but still reachable for screen readers + keyboard.
+		   The pill's `:has(input:checked)` styles do the visual
+		   indication via background + border colour. */
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
+		border: 0;
+		clip: rect(0 0 0 0);
+		overflow: hidden;
+		white-space: nowrap;
 	}
 	.pill:has(input:checked) {
 		font-weight: 600;
+	}
+	/* The checkbox is visually hidden, so route its focus ring up to
+	   the pill — otherwise keyboard users can't tell which pill is
+	   active when tabbing. */
+	.pill:has(input:focus-visible) {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
 	}
 	/* Per-simplified-type colors when a type pill is selected. Theme-aware
 	   via --tint-* — light in light mode, muted-dark in dark mode. */
@@ -607,6 +657,28 @@
 		background: var(--tint-pink);
 		border-color: color-mix(in srgb, var(--tint-pink-fg) 35%, transparent);
 		color: var(--tint-pink-fg);
+	}
+
+	/* Task type + Modality pills use the same plain theme-accent
+	   treatment as the FilterContent sidebar — no per-category tints.
+	   Keeps the filter row visually quieter and unified with the
+	   existing model-filter UI. */
+	.type-fill,
+	.modality-fill {
+		color: var(--text-muted);
+	}
+	/* Long full-type names (e.g. "Multilabel Classification") wrap to
+	   two lines and make their pills visibly taller than the single-
+	   line simplified-type pills. Force single-line so every chip in
+	   the filter row has the same height. */
+	.type-fill {
+		white-space: nowrap;
+	}
+	.type-fill:has(input:checked),
+	.modality-fill:has(input:checked) {
+		background: var(--primary-soft);
+		border-color: var(--primary);
+		color: var(--primary-strong);
 	}
 
 	/* Cards ---------------------------------------------------------------- */

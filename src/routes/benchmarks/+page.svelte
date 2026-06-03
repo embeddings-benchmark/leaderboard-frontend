@@ -86,6 +86,14 @@
 			Every benchmark registered in mteb — including ones that aren't on the curated explorer
 			menu. Use the search box to find a benchmark by name.
 		</p>
+		<p class="contribute-note">
+			To add your benchmark, follow our
+			<a
+				href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_benchmark/"
+				target="_blank"
+				rel="noreferrer">contributor guide</a
+			>.
+		</p>
 	</header>
 
 	<div class="toolbar">
@@ -232,7 +240,6 @@
 		border-radius: 2px;
 	}
 	.lead {
-		max-width: 64ch;
 		color: var(--text-muted);
 		margin: 0;
 		font-size: 15px;

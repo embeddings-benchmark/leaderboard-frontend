@@ -27,10 +27,27 @@
 <style>
 	.tabs {
 		display: flex;
-		flex-wrap: wrap;
 		gap: 4px;
 		border-bottom: 1px solid var(--border);
 		padding-top: 2px;
+		/* Keep the tab strip on a single row at every viewport — narrow
+		   screens scroll horizontally instead of stacking, which kept
+		   pushing the page content down by one+ rows. */
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		overflow-y: hidden;
+		scrollbar-width: thin;
+		/* Snap each tab so quick swipes settle on a button edge instead
+		   of stopping mid-label. */
+		scroll-snap-type: x proximity;
+		-webkit-overflow-scrolling: touch;
+	}
+	.tabs::-webkit-scrollbar {
+		height: 4px;
+	}
+	.tabs::-webkit-scrollbar-thumb {
+		background: var(--border-strong);
+		border-radius: 2px;
 	}
 	.tab {
 		position: relative;
@@ -46,6 +63,8 @@
 		color: var(--text-subtle);
 		white-space: nowrap;
 		transition: color 0.16s ease;
+		flex: 0 0 auto;
+		scroll-snap-align: start;
 	}
 	/* Resting underline accent — sits flush against the hairline, scales on
 	   active. Subtler than a 2px border because it has rounded ends and a
