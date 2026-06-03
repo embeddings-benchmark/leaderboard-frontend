@@ -107,28 +107,37 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		}
 	}
 
-	const ro = new ResizeObserver(() => update());
+	// Batch `update()` so a noisy scroll stream resolves to one layout
+	// read + style write per frame instead of one per event.
+	let rafId = 0;
+	function scheduleUpdate() {
+		if (rafId) return;
+		rafId = requestAnimationFrame(() => {
+			rafId = 0;
+			update();
+		});
+	}
+
+	const ro = new ResizeObserver(scheduleUpdate);
 	ro.observe(wrapper);
 	const table = wrapper.firstElementChild;
 	if (table) ro.observe(table);
 
-	const onScroll = () => update();
-	const onResize = () => update();
-
-	window.addEventListener('scroll', onScroll, { passive: true });
+	window.addEventListener('scroll', scheduleUpdate, { passive: true });
 	wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
 	overlay.addEventListener('scroll', onOverlayScroll, { passive: true });
-	window.addEventListener('resize', onResize);
+	window.addEventListener('resize', scheduleUpdate);
 
 	update();
 
 	return {
 		destroy() {
+			if (rafId) cancelAnimationFrame(rafId);
 			ro.disconnect();
-			window.removeEventListener('scroll', onScroll);
+			window.removeEventListener('scroll', scheduleUpdate);
 			wrapper.removeEventListener('scroll', onWrapperScroll);
 			overlay.removeEventListener('scroll', onOverlayScroll);
-			window.removeEventListener('resize', onResize);
+			window.removeEventListener('resize', scheduleUpdate);
 			overlay.remove();
 		}
 	};

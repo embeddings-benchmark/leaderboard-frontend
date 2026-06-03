@@ -1,14 +1,4 @@
-<!--
-  Shared search input used by every "index" toolbar — /benchmarks,
-  /models (via ModelSearchBar), /tasks, and the per-benchmark detail
-  toolbar. Renders a magnifying-glass icon, a search input, and a clear
-  button that appears once the value is non-empty.
-
-  Visual contract (must stay in sync if changed):
-    height ≈ 32 px (padding 8 + 13 px font + 1 px border × 2)
-    so the row co-aligns with the `.sort select` / `.dir-btn` widgets
-    in `app.css`.
--->
+<!-- Icon + input + clear button. Targets ~32 px tall to align with `.sort select` + `.dir-btn`. -->
 <script lang="ts">
 	interface Props {
 		value: string;
@@ -48,9 +38,17 @@
 <style>
 	.search {
 		position: relative;
-		flex: 1;
+		flex: 1 1 220px;
 		min-width: 220px;
 		max-width: 420px;
+	}
+	/* Drop the 220 px floor on mobile so the sort widget can share or wrap below the row. */
+	@media (max-width: 640px) {
+		.search {
+			flex: 1 1 100%;
+			min-width: 0;
+			max-width: none;
+		}
 	}
 	.icon {
 		position: absolute;

@@ -731,20 +731,12 @@
 		white-space: normal;
 		pointer-events: auto;
 	}
-	/* Tip arrow removed: the portal now butts against the cell with no
-	   gap (top padding absorbs the visual breathing room), and a
-	   horizontally-clamped tip wouldn't line up with the cell centre
-	   anyway. */
 	.tip-portal-title {
 		display: block;
 		font-size: 11px;
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		/* Theme accent so the title pops against the (always dark)
-		   tooltip background — orange in light mode, blue in dark
-		   mode. The previous hardcoded `#ff9b6f` looked stale in
-		   dark theme where every other accent flipped to azure. */
 		color: var(--primary);
 		margin-bottom: 4px;
 	}
@@ -775,16 +767,8 @@
 		color: #f1f3f5;
 	}
 
-	/* Per-row model-type colour-fill is dropped — the icon next to the
-	   model name carries the type signal without painting the full
-	   sticky column. The `.type-icon` cluster + per-model-type tint
-	   rules live in src/lib/styles/leaderboard-table.css so every
-	   model-row table (SummaryTable, ModelScoreTable, PerTaskTab,
-	   PerLanguageTab) shares one source of truth. */
-	/* Whole-row hover feedback lives in src/lib/styles/leaderboard-table.css
-	   so PerTaskTab / PerLanguageTab / model + task detail tables all
-	   share the same inset-shadow treatment. */
-	/* Subtle dotted underline on the model link cues that hovering shows more. */
+	/* `.type-icon` + per-model-type tints, plus shared row hover, live in
+	   src/lib/styles/leaderboard-table.css. */
 	.has-tip a {
 		text-decoration: underline dotted color-mix(in srgb, var(--link) 50%, transparent);
 		text-underline-offset: 3px;
@@ -795,9 +779,7 @@
 	}
 	.sort-btn {
 		all: unset;
-		/* all: unset resets box-sizing to content-box; force border-box so that
-		   width: 100% + horizontal padding stays inside the <th>. Otherwise the
-		   right-aligned sort indicator gets painted outside the column. */
+		/* `all: unset` flips box-sizing back to content-box; force border-box. */
 		box-sizing: border-box;
 		display: inline-flex;
 		align-items: center;
@@ -814,9 +796,6 @@
 	.sort-btn.tbl-num {
 		justify-content: flex-end;
 	}
-	/* Zero-shot cell: tabular nums so the percentage column stays
-	   visually aligned. `.partial` greys the "⚠️ NA" sentinel down so
-	   it doesn't compete with real percentages for attention. */
 	.zs-cell {
 		font-variant-numeric: tabular-nums;
 	}
@@ -856,15 +835,13 @@
 		color: var(--text-subtle);
 		letter-spacing: 0.02em;
 	}
-	/* Rank-cell layout: pin button + rank number share the leftmost column. */
+	/* Pin button + rank pill share the leftmost column. */
 	.rank-cell {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		padding: 4px 8px;
 	}
-	/* `.rank-pill` lives in src/lib/styles/leaderboard-table.css — shared
-	   with ModelScoreTable so both views render the rank identically. */
 	/* Combined pin + rank column. */
 	.sticky-left {
 		position: sticky;

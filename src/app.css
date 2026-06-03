@@ -36,12 +36,8 @@
 	--primary-strong-dark: #88c2ff;
 	--primary-soft-light: #e6efff;
 	--primary-soft-dark: #1a2839;
-	/* Separate tint used as the source colour for table heat-shading.
-	   Light mode uses a softer sky-blue (saturation pulled back) so the
-	   dense grid of tinted cells doesn't compete with the action accent;
-	   dark mode keeps the same azure as --primary so cells still pop on
-	   the deep surface. Hooked up via the `--heat` live token below and
-	   consumed by `heat()` in lib/format.ts via var(--heat). */
+	/* Heat-shading source, kept separate from `--primary` so the light-mode
+	   accent stays cleaner than the table's tinted grid. */
 	--heat-light: #7da7e8;
 	--heat-dark: #5da9ff;
 	--link-light: #2563eb;
@@ -78,12 +74,7 @@
 	--shadow-sm: light-dark(var(--shadow-sm-light), var(--shadow-sm-dark));
 	--bar-bg: light-dark(var(--bar-bg-light), var(--bar-bg-dark));
 
-	/* Category-tint palette — one row per category used by model-type and
-	   simplified-task-type pills, card top-accents, and SummaryTable model
-	   column tints. Each row exposes:
-	   - --tint-<name>      a soft background fill
-	   - --tint-<name>-fg   a readable text color paired with that fill
-	   Both adapt per theme so consumers stop reaching for hardcoded white. */
+	/* Category palette — each row pairs a soft bg with a readable fg. */
 	--tint-blue: light-dark(#e8edff, #1e2740);
 	--tint-blue-fg: light-dark(#2740b8, #a7bbf0);
 	--tint-purple: light-dark(#f2e7ff, #2c2245);
@@ -231,14 +222,7 @@ code {
 	color: var(--text-subtle);
 }
 
-/* Per-modality tint utility. Any element bearing both `.modality-tint`
-   and `data-modality="<text|image|audio|video>"` picks up the canonical
-   per-modality background + foreground from the shared --tint-* palette
-   (so light / dark variants come for free). Consumers own the
-   geometry (padding, border-radius, font-size) — this utility only
-   sets the colour pair, mirroring the way model-type tints work on
-   SummaryTable's sticky columns. Unknown modalities fall through to
-   the neutral surface-muted tint. */
+/* Per-modality colour pair via `.modality-tint[data-modality=text|image|audio|video]`. */
 .modality-tint {
 	background: var(--surface-muted);
 	color: var(--text-muted);
@@ -266,6 +250,35 @@ code {
 .lead {
 	margin: 0;
 	color: var(--text-muted);
+}
+
+/* Sticky search + sort shelf shared by every overview page. */
+.toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 12px;
+	margin: 12px 0 18px;
+	padding: 10px 12px;
+	background: var(--bar-bg);
+	backdrop-filter: blur(14px) saturate(140%);
+	-webkit-backdrop-filter: blur(14px) saturate(140%);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	box-shadow: var(--shadow-sm);
+	position: sticky;
+	top: var(--header-offset, 56px);
+	z-index: 5;
+}
+@media (max-width: 640px) {
+	.toolbar {
+		margin: 10px 0 14px;
+		padding: 10px;
+		gap: 8px 10px;
+	}
+	.toolbar .sort {
+		margin-left: 0;
+	}
 }
 
 /* Sort + direction-toggle widget shared by the /models and /tasks
@@ -307,10 +320,7 @@ code {
 	border-color: var(--border-strong);
 }
 
-/* Breadcrumb strip used by every detail page (/benchmark/[name],
-   /models/[name], /tasks/[name]) and by /benchmarks. Same shape
-   each time: small muted text, "/"-style separator, last item in
-   --text weight. */
+/* Breadcrumb strip shared by detail pages. */
 .breadcrumb {
 	display: flex;
 	align-items: center;
@@ -334,28 +344,23 @@ code {
 	font-weight: 600;
 }
 
-/* Centered page container used by every standalone route (no sidebar):
-   /benchmarks, /tasks, /tasks/[name], /models/[name], /compare. The
-   sidebar-bearing /benchmark/[name] has its own .app + .main shell. */
+/* `min-width: 0` is load-bearing: `.shell` is a flex column, and without
+   it a long unbreakable token (BibTeX, wide URL) stretches the page past
+   the viewport instead of being clipped by internal scrollports. */
 .page {
+	width: 100%;
 	max-width: 1280px;
 	margin: 0 auto;
 	padding: 18px 28px 56px;
+	min-width: 0;
+	box-sizing: border-box;
 }
 
-/* "Muted" paragraph helper — used by ~12 components for the small
-   gray text below a section title or beside a label. Each variant
-   tweaks margin / padding / font-size in its scoped block; the
-   colour itself lives here so a future palette change is one edit. */
 .muted {
 	margin: 0;
 	color: var(--text-muted);
 }
 
-/* Empty-state placeholder used by /models and /tasks when the user's
-   filters produce no matches. `compare/+page.svelte` overrides this
-   with its own dashed-border variant via scoped CSS (higher
-   specificity). */
 .empty {
 	padding: 40px;
 	text-align: center;

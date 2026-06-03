@@ -1,9 +1,4 @@
-<!--
-  Filter-store-bound wrapper around `SearchInput` for the global model
-  name query. Adds the "matches / total" count next to the input so the
-  user knows how aggressive their filter is. Used by /models and by the
-  per-benchmark detail toolbar.
--->
+<!-- Filter-store-bound `SearchInput` + match/total count. -->
 <script lang="ts">
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import { filters } from '$lib/stores/filters.svelte';
@@ -27,15 +22,13 @@
 </div>
 
 <style>
-	/* No outer margin — this component renders inside the page-level
-	   sticky `.toolbar` strip which already owns padding and spacing.
-	   The /benchmark/[name] detail page wraps this in `.toolbar-row`
-	   which adds its own `margin: 8px 0` via a `:global(.bar)` rule. */
+	/* `flex: 1 1 240px` triggers `.toolbar`'s flex-wrap on mobile so the
+	   sort widget drops to its own row instead of bleeding under the search. */
 	.bar {
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		flex: 1;
+		flex: 1 1 240px;
 		min-width: 0;
 	}
 	.count {

@@ -1,16 +1,11 @@
 <script lang="ts">
-	// Floating "copy link" button pinned to the bottom-right of the
-	// viewport. Captures `window.location.href` — which includes every
-	// filter param the page has reflected into the URL (sort keys,
-	// active task types, model picks, tab id, etc.) — so the recipient
-	// lands on the exact view the sender was looking at.
+	// Bottom-right "copy link" pill — copies `window.location.href` so the
+	// recipient lands on the exact view (all filter params already in the URL).
 
 	import { page } from '$app/state';
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
-	// Re-render the visible URL whenever SvelteKit's reactive state
-	// changes — keeps the tooltip preview in sync with filter edits.
 	let currentUrl = $derived(page.url.href);
 
 	async function copy() {
@@ -77,6 +72,12 @@
 		right: 22px;
 		bottom: 22px;
 		z-index: 60;
+		transition:
+			background 0.14s,
+			border-color 0.14s,
+			color 0.14s,
+			box-shadow 0.14s,
+			transform 0.14s;
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
@@ -87,21 +88,12 @@
 		font-family: inherit;
 		color: var(--primary-strong);
 		background: var(--surface);
-		/* Accent border ties the floating button to the leaderboard's
-		   primary tint (orange in light, blue in dark) so it reads as a
-		   distinct action affordance, not just another surface chip. */
 		border: 1.5px solid var(--primary);
 		border-radius: 999px;
 		box-shadow:
 			0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
 			0 6px 18px rgb(15, 23, 42, 0.12);
 		cursor: pointer;
-		transition:
-			background 0.14s,
-			border-color 0.14s,
-			color 0.14s,
-			box-shadow 0.14s,
-			transform 0.14s;
 	}
 	.share-btn:hover {
 		background: color-mix(in srgb, var(--primary) 12%, var(--surface));

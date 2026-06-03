@@ -23,7 +23,7 @@
 		numModels: number;
 	}
 
-	// Order intentionally matches the colour palette below.
+	// Curated order — matches the `.type-pill[data-stype=…]` palette below.
 	const SIMPLIFIED_TYPES = [
 		'retrieval',
 		'classification',
@@ -55,12 +55,10 @@
 	$effect(() => {
 		(async () => {
 			try {
-				// /tasks returns the full mteb task registry (~1300), much larger
-				// than any single benchmark's task list. Benchmark membership is
-				// computed from the menu's per-benchmark `tasks` arrays.
+				// /tasks returns the full task registry; we cross-reference the menu
+				// to know which benchmarks each task appears in.
 				const [menu, tasks] = await Promise.all([loadBenchmarkMenu(), loadTasks()]);
 				const allBenches = collectBenchmarks(menu);
-				// Local accumulator for benchmark membership — plain Map is correct.
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const occurrences = new Map<string, string[]>();
 				for (const b of allBenches) {
@@ -76,8 +74,7 @@
 					simplifiedType: m.simplifiedType ?? m.type?.toLowerCase() ?? '',
 					languages: m.languages ?? [],
 					domains: m.domains ?? [],
-					// Defend against a stale browser-cached payload from before the
-					// `modality: str` → `modalities: list[str]` schema change.
+					// Fallback for the old `modality: str` payload shape.
 					modalities:
 						m.modalities ??
 						((m as unknown as { modality?: string }).modality
@@ -90,8 +87,7 @@
 				entries.sort((a, b) => a.name.localeCompare(b.name));
 				ALL_TASKS = entries;
 				const presentSet = new Set(entries.map((t) => t.simplifiedType));
-				// Preserve the curated order from SIMPLIFIED_TYPES, then append
-				// any extra simplified types that didn't make the curated list.
+				// Curated order first, then any extras alphabetised.
 				SIMPLIFIED_PRESENT = [
 					...SIMPLIFIED_TYPES.filter((t) => presentSet.has(t)),
 					...[...presentSet].filter((t) => !SIMPLIFIED_TYPES.includes(t as never)).sort()
@@ -135,11 +131,7 @@
 	const modalityFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 
-	// Collapsed sidebar state — mirrors FilterSidebar's behaviour on
-	// /benchmark and /models. Start collapsed on narrow viewports
-	// where the sidebar would otherwise overlap the content; SSR has
-	// no `window`, so default to expanded there and let the client
-	// flip on hydration.
+	// Start collapsed on narrow viewports where the drawer would overlap content.
 	let sidebarCollapsed = $state(
 		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 	);
@@ -191,7 +183,6 @@
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
 
-	// Domain search — same pattern as the task-type group above.
 	let domainQuery = $state('');
 	let visibleDomains = $derived.by(() => {
 		const q = domainQuery.trim().toLowerCase();
@@ -199,26 +190,17 @@
 		return DOMAINS.filter((d) => d.toLowerCase().includes(q));
 	});
 
-	// Per-strip search query — mirrors the Languages / Tasks search
-	// inputs in FilterContent so the user can narrow a long list of
-	// task types (Classification, Reranking, …) by name. The pills
-	// container is `.pills.scroll`, a fixed-height scrollport, so a
-	// previous "+N more / Show less" toggle has been retired — the
-	// long tail is reachable via the inner scrollbar, the search box
-	// covers the find-by-name case.
 	let fullTypeQuery = $state('');
 	let visibleFullTypes = $derived.by(() => {
 		const q = fullTypeQuery.trim().toLowerCase();
 		if (!q) return FULL_TYPES_PRESENT;
-		// Match against both the raw CamelCase id and the humanised
-		// form so typing either "BitextMining" or "bitext" both hit.
+		// Match the raw CamelCase id and the humanised form so "BitextMining"
+		// and "bitext" both hit.
 		return FULL_TYPES_PRESENT.filter(
 			(t) => t.toLowerCase().includes(q) || humanizeType(t).toLowerCase().includes(q)
 		);
 	});
 
-	// Rank within the curated palette so the "Type" sort groups cards by
-	// colour bucket (retrieval first, then classification, …).
 	const SIMPLIFIED_RANK: Record<string, number> = Object.fromEntries(
 		SIMPLIFIED_TYPES.map((t, i) => [t, i])
 	);
@@ -228,12 +210,8 @@
 
 	let filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		// Bypass each filter when *all* of its chips are checked (the default
-		// state). Without this, tasks whose modality / domain / type list is
-		// empty silently drop out: `[].some(...)` is always false, so they
-		// match no chip — even when the user has every chip selected. Same
-		// effect on `.has` for the type/fullType single-string fields when
-		// the value is "" and the seed filter set never adds the empty key.
+		// Filters with every chip checked are bypassed so rows with empty
+		// modality / domain / type lists stay visible (`[].some(...)` is false).
 		const typeOff = typeFilter.size === SIMPLIFIED_PRESENT.length;
 		const fullTypeOff = fullTypeFilter.size === FULL_TYPES_PRESENT.length;
 		const modalityOff = modalityFilter.size === MODALITIES.length;
@@ -256,9 +234,8 @@
 				return false;
 			return true;
 		});
-		// Comparator always computes "ascending" cmp; sortDir flips at the end.
-		// Tie-break by name stays stable across directions so identical rows
-		// don't reshuffle when the user toggles the arrow.
+		// Comparator computes ascending cmp; sortDir flips at the end. Name
+		// tie-break stays stable so equal rows don't reshuffle on direction toggle.
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
@@ -534,23 +511,7 @@
 	   groups have moved into the right-hand sidebar (`.sidebar`) to
 	   mirror the /models layout. */
 	/* Sticky shelf — matches /benchmarks and /models. */
-	.toolbar {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 16px 20px;
-		align-items: center;
-		margin: 16px 0 18px;
-		padding: 10px 14px;
-		background: var(--bar-bg);
-		backdrop-filter: blur(14px) saturate(140%);
-		-webkit-backdrop-filter: blur(14px) saturate(140%);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		box-shadow: var(--shadow-sm);
-		position: sticky;
-		top: var(--header-offset, 56px);
-		z-index: 5;
-	}
+	/* `.toolbar` (sticky shell + mobile rules) is shared in src/app.css. */
 	/* Two-column layout: cards on the left, filters in the sticky
 	   sidebar on the right — same shape as `/models`. `.app` is the
 	   page-level flex container so the sidebar spans the full viewport
@@ -567,236 +528,15 @@
 		margin: 0 auto;
 		padding: 28px 28px 64px;
 	}
-	/* Sticky filter sidebar — mirrors FilterSidebar's shell used on
-	   /benchmark and /models so the three pages read as one design.
-	   Pinned to the right edge of the page (margin-left: auto) so it
-	   doesn't drift inward on viewports wider than the content track.
-	   Collapsed state collapses the flex column to 0 px and floats the
-	   toggle button leftward over the table. */
-	.sidebar {
-		flex: 0 0 340px;
-		min-width: 320px;
-		max-width: 380px;
-		margin-left: auto;
-		border-left: 1px solid var(--border);
-		background: var(--surface);
-
-		--header-offset: 64px;
-
-		height: calc(100vh - var(--header-offset));
-		position: sticky;
-		top: var(--header-offset);
-		overflow-y: auto;
-		transition:
-			flex-basis 0.18s ease,
-			min-width 0.18s ease,
-			max-width 0.18s ease;
-	}
-	.sidebar.collapsed {
-		flex: 0 0 0;
-		min-width: 0;
-		max-width: none;
-		width: 0;
-		border-left: none;
-		background: none;
-		overflow: visible;
-	}
-	.sidebar-toggle {
-		position: sticky;
-		top: 0;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		padding: 10px 12px;
-		background: var(--surface);
-		border: none;
-		border-bottom: 1px solid var(--border);
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-muted);
-		cursor: pointer;
-		z-index: 2;
-	}
-	.sidebar.collapsed .sidebar-toggle {
-		position: relative;
-		transform: translateX(-100%);
-		margin-top: 56px;
-		margin-right: 8px;
-		padding: 6px 10px;
-		width: auto;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface);
-		box-shadow: var(--shadow-sm);
-		z-index: 11;
-	}
-	.sidebar-toggle:hover {
-		color: var(--text);
-		background: var(--surface-muted);
-	}
-	.chev {
-		display: inline-block;
-		font-size: 18px;
-		line-height: 1;
-		transition: transform 0.18s ease;
-		color: var(--text-subtle);
-	}
-	.chev.open {
-		transform: rotate(180deg);
-	}
-	.toggle-label {
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-	.filters {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		padding: 14px 16px 24px;
-	}
-	.group {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		min-width: 0;
-		flex: 1;
-	}
-	.group-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-	}
-	.group-label {
-		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-	}
-	/* Task-type search input — same shape as the Languages / Tasks
-	   filter inputs in FilterContent so the two strips read as part
-	   of one design system. */
-	.type-search {
-		width: 100%;
-		max-width: 320px;
-		padding: 5px 9px;
-		font-size: 12px;
-		font-family: inherit;
-		background: var(--surface);
-		color: var(--text);
-		border: 1px solid var(--border);
-		border-radius: 6px;
-	}
-	.type-search:focus {
-		outline: none;
-		border-color: var(--primary);
-		box-shadow: 0 0 0 3px var(--primary-soft);
-	}
-	.no-match {
-		margin: 0;
-		font-size: 12px;
-		color: var(--text-subtle);
-	}
-	.link-btn {
-		background: none;
-		border: none;
-		color: var(--link);
-		font-size: 11px;
-		font-weight: 600;
-		cursor: pointer;
-		padding: 0 2px;
-	}
-	.link-btn:hover {
-		text-decoration: underline;
-	}
-
+	/* Sidebar shell + pills + filter pills live in $lib/styles/sidebar.css.
+	   Only the per-simplified-type colour overrides for the Task-group
+	   pills are local to this page. */
 	.count {
 		font-size: 12px;
 		color: var(--text-subtle);
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* Pills ---------------------------------------------------------------- */
-	.pills {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	/* Long task-type / domain lists scroll internally so they don't push
-	   the rest of the sidebar off-screen. The cap is generous (≈ 10 rows
-	   of single-line pills) because the sidebar now spans the full
-	   viewport and Modality / Task group sit above with only ~80–120 px
-	   of vertical footprint, leaving plenty of room for the two
-	   search-driven lists to breathe. */
-	.pills.scroll {
-		max-height: 320px;
-		overflow-y: auto;
-		padding-right: 4px;
-		scrollbar-width: thin;
-	}
-	.pills.scroll::-webkit-scrollbar {
-		width: 6px;
-	}
-	.pills.scroll::-webkit-scrollbar-thumb {
-		background: var(--border-strong);
-		border-radius: 3px;
-	}
-	.pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		padding: 5px 11px;
-		font-size: 12px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		cursor: pointer;
-		user-select: none;
-	}
-	/* Mobile: stack the three filter groups vertically. Side-by-side
-	   on a 375 px viewport gave each group ~120 px of width, which
-	   forced even short pills to wrap to one-per-row. Stacking lets
-	   each group's pill strip flow horizontally with wrap, so the
-	   Type and Modality groups end up ~1 row tall (≈ 50 px) and the
-	   Task type group caps at a matching height with internal
-	   scroll for the long tail. */
-	@media (max-width: 640px) {
-		.pill {
-			padding: 8px 14px;
-			font-size: 13px;
-		}
-		.group {
-			flex: 0 0 auto;
-		}
-	}
-	.pill input {
-		/* Hidden but still reachable for screen readers + keyboard.
-		   The pill's `:has(input:checked)` styles do the visual
-		   indication via background + border colour. */
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		margin: -1px;
-		padding: 0;
-		border: 0;
-		clip: rect(0 0 0 0);
-		overflow: hidden;
-		white-space: nowrap;
-	}
-	.pill:has(input:checked) {
-		font-weight: 600;
-	}
-	/* The checkbox is visually hidden, so route its focus ring up to
-	   the pill — otherwise keyboard users can't tell which pill is
-	   active when tabbing. */
-	.pill:has(input:focus-visible) {
-		outline: 2px solid var(--primary);
-		outline-offset: 2px;
-	}
-	/* Per-simplified-type colors when a type pill is selected. Theme-aware
-	   via --tint-* — light in light mode, muted-dark in dark mode. */
 	.type-pill[data-stype='retrieval']:has(input:checked) {
 		background: var(--tint-purple);
 		border-color: color-mix(in srgb, var(--tint-purple-fg) 35%, transparent);
@@ -821,27 +561,6 @@
 		background: var(--tint-pink);
 		border-color: color-mix(in srgb, var(--tint-pink-fg) 35%, transparent);
 		color: var(--tint-pink-fg);
-	}
-
-	/* Task type / Modality / Domain pills all share the same primary
-	   accent treatment when checked — matches the FilterContent sidebar
-	   on /models and reads as one consistent "filter selected" state. */
-	.type-fill,
-	.modality-fill {
-		color: var(--text-muted);
-	}
-	/* Long full-type names (e.g. "Multilabel Classification") wrap to
-	   two lines and make their pills visibly taller than the single-
-	   line simplified-type pills. Force single-line so every chip in
-	   the filter row has the same height. */
-	.type-fill {
-		white-space: nowrap;
-	}
-	.type-fill:has(input:checked),
-	.modality-fill:has(input:checked) {
-		background: var(--primary-soft);
-		border-color: var(--primary);
-		color: var(--primary-strong);
 	}
 
 	/* Cards ---------------------------------------------------------------- */

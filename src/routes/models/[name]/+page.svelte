@@ -484,7 +484,38 @@
 	}
 	@media (max-width: 1000px) {
 		.hero {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	/* Mobile: tighten hero padding so the gradient header + chip rows
+	   don't bleed past the viewport edge, and force long-token chip
+	   text (e.g. "FEVERHardNegatives") to break instead of overflowing
+	   the chip + page. */
+	@media (max-width: 640px) {
+		.hero {
+			padding: 18px 16px;
+			gap: 16px;
+			margin-bottom: 12px;
+		}
+		.kpis {
+			gap: 8px;
+		}
+		.kpi {
+			padding: 8px 10px;
+		}
+		.kpi-value {
+			font-size: 17px;
+		}
+		.spec-list {
+			grid-template-columns: 110px minmax(0, 1fr);
+			column-gap: 12px;
+			row-gap: 8px;
+		}
+		.spec-list .chip {
+			overflow-wrap: anywhere;
+		}
+		.spec-list dd {
+			overflow-wrap: anywhere;
 		}
 	}
 

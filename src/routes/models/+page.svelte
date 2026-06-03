@@ -266,25 +266,7 @@
 	}
 	/* `.lead`, `.sort*`, `.dir-btn*` live in src/app.css — same
 	   markup is on /tasks so the rules were exact duplicates. */
-	/* Sticky shelf — matches /benchmarks and /tasks so the three
-	   overview pages share one shelf treatment. */
-	.toolbar {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 12px;
-		align-items: center;
-		margin: 8px 0 18px;
-		padding: 10px 12px;
-		background: var(--bar-bg);
-		backdrop-filter: blur(14px) saturate(140%);
-		-webkit-backdrop-filter: blur(14px) saturate(140%);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		box-shadow: var(--shadow-sm);
-		position: sticky;
-		top: var(--header-offset, 56px);
-		z-index: 5;
-	}
+	/* `.toolbar` (sticky shell + mobile rules) is shared in src/app.css. */
 	/* Cards ---------------------------------------------------------------- */
 	.grid {
 		display: grid;
@@ -468,12 +450,22 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* Mobile: the 2x2 KPI grid (params / embed dim / max tokens /
-	   released) crowds each card; the same numbers are on the detail
-	   page. Drop the grid and lean on the title + badges. */
+	/* Mobile: keep the 2x2 KPI grid (params / embed dim / max tokens /
+	   released) so the card carries real information. Tighten the gap +
+	   font sizes so the card stays compact, and drop the min-height
+	   floor since the stats now fill the body naturally. */
 	@media (max-width: 640px) {
 		.stats {
-			display: none;
+			gap: 6px 12px;
+		}
+		.stats dt {
+			font-size: 9px;
+		}
+		.stats dd {
+			font-size: 13px;
+		}
+		.card {
+			min-height: 0;
 		}
 	}
 

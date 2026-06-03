@@ -1,10 +1,4 @@
-<!--
-  Floating "back to top" button pinned to the bottom-left of the
-  viewport. Mirrors `ShareUrlButton`'s placement (bottom-right) so the
-  two action affordances bookend the page without colliding. Becomes
-  visible once the user has scrolled past roughly one viewport so it
-  doesn't clutter the initial above-the-fold view.
--->
+<!-- Bottom-left floating "back to top" pill; bookends `ShareUrlButton`. -->
 <script lang="ts">
 	let visible = $state(false);
 
@@ -50,9 +44,6 @@
 </button>
 
 <style>
-	/* Mirrors `ShareUrlButton`'s accent treatment so the bookended pair
-	   (Top on the left, Copy link on the right) reads as one family of
-	   floating actions. Same accent border + soft halo, same hover lift. */
 	.top-btn {
 		position: fixed;
 		left: 22px;

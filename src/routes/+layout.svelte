@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import '$lib/styles/leaderboard-table.css';
+	import '$lib/styles/sidebar.css';
 	import { onMount } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { page, updated } from '$app/state';
