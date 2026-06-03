@@ -19,6 +19,7 @@
 	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import ModelTypeIcon from './ModelTypeIcon.svelte';
 	import {
 		ariaSort as ariaSortFor,
 		defaultDirFor,
@@ -149,7 +150,10 @@
 					<td class="tbl-num">
 						<span class="rank-pill" class:top={s.rank === 1}>#{s.rank}</span>
 					</td>
-					<td class="sticky">
+					<td class="sticky" data-model-type={s.model.modelType}>
+						<span class="type-icon" title={s.model.modelType}>
+							<ModelTypeIcon type={s.model.modelType} size={13} />
+						</span>
 						<a
 							class="task-model-link"
 							href={resolve('/models/[name]', { name: slug(s.model.name) })}
@@ -218,6 +222,37 @@
 	}
 	.task-model-link:hover {
 		color: var(--link);
+	}
+	/* Type icon + model-name colour share the same --tint-*-fg so the
+	   pair reads as one cluster. Matches SummaryTable's treatment so the
+	   model identity carries the same visual cue across views. */
+	.type-icon {
+		display: inline-flex;
+		align-items: center;
+		flex-shrink: 0;
+		margin-right: 6px;
+		color: var(--text-subtle);
+		vertical-align: -2px;
+	}
+	[data-model-type='dense'] .type-icon,
+	[data-model-type='dense'] .tbl-model-name {
+		color: var(--tint-blue-fg);
+	}
+	[data-model-type='cross-encoder'] .type-icon,
+	[data-model-type='cross-encoder'] .tbl-model-name {
+		color: var(--tint-orange-fg);
+	}
+	[data-model-type='late-interaction'] .type-icon,
+	[data-model-type='late-interaction'] .tbl-model-name {
+		color: var(--tint-green-fg);
+	}
+	[data-model-type='sparse'] .type-icon,
+	[data-model-type='sparse'] .tbl-model-name {
+		color: var(--tint-amber-fg);
+	}
+	[data-model-type='router'] .type-icon,
+	[data-model-type='router'] .tbl-model-name {
+		color: var(--tint-purple-fg);
 	}
 	.mean-cell.partial {
 		color: var(--text-subtle);

@@ -5,6 +5,7 @@
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import CopyableId from '$lib/components/CopyableId.svelte';
+	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import { apiUrl, fmtCompact, isIconUrl, slug } from '$lib/format';
 
 	let menu = $state<MenuEntry[]>([]);
@@ -55,7 +56,12 @@
 </div>
 
 {#snippet benchmarkCard(b: Benchmark)}
-	<a class="card" href={resolve('/benchmark/[name]', { name: slug(b.name) })}>
+	{@const accentModality = b.modalities?.[0] ?? 'text'}
+	<a
+		class="card"
+		href={resolve('/benchmark/[name]', { name: slug(b.name) })}
+		data-modality={accentModality}
+	>
 		<div class="card-head">
 			{#if b.icon}
 				{#if isIconUrl(b.icon)}
@@ -65,52 +71,59 @@
 				{/if}
 			{/if}
 			<div class="card-titles">
-				<span class="card-name">{b.displayName}</span>
+				<span class="title" title={b.displayName}>{b.displayName}</span>
 				<CopyableId value={b.name} ariaLabel="Copy benchmark id" />
 			</div>
 		</div>
-		<p class="card-desc"><MarkdownText text={b.description} /></p>
-		<div class="card-foot">
-			{#if b.newVersion && b.newVersion.length > 0}
-				<!-- Whole note is clickable; navigates to the first newer version.
-				     Nested inside the card's outer <a>, so this is a <button>
-				     with stopPropagation to keep the card link from firing too. -->
-				<button
-					type="button"
-					class="newer-note"
-					title="Open {b.newVersion[0]}"
-					onclick={(e) => {
-						e.stopPropagation();
-						e.preventDefault();
-						goto(resolve('/benchmark/[name]', { name: slug(b.newVersion![0]) }));
-					}}
-				>
-					<span class="newer-label">Newer version</span>
-					{#each b.newVersion as nv (nv)}
-						<code class="newer-link">{nv}</code>
-					{/each}
-				</button>
-			{/if}
-			<div class="stats-line">
-				{#if b.numModels && b.numModels > 0}
-					<span title="{b.numModels} models"><strong>{fmtCompact(b.numModels)}</strong> models</span
-					>
-					<span class="dot">·</span>
-				{/if}
-				<span title="{b.tasks.length} tasks"
-					><strong>{fmtCompact(b.tasks.length)}</strong> tasks</span
-				>
-				<span class="dot">·</span>
-				<span title="{b.languages.length} languages"
-					><strong>{fmtCompact(b.languages.length)}</strong> langs</span
-				>
-				<span class="dot">·</span>
-				<span title="{b.taskTypes.length} task types"
-					><strong>{fmtCompact(b.taskTypes.length)}</strong> types</span
-				>
+		<p class="desc"><MarkdownText text={b.description} /></p>
+		<dl class="stats">
+			<div>
+				<dt>Models</dt>
+				<dd>{fmtCompact(b.numModels ?? 0)}</dd>
 			</div>
-			<span class="cta">Open leaderboard →</span>
-		</div>
+			<div>
+				<dt>Tasks</dt>
+				<dd>{fmtCompact(b.tasks.length)}</dd>
+			</div>
+			<div>
+				<dt>Languages</dt>
+				<dd>{fmtCompact(b.languages.length)}</dd>
+			</div>
+			<div>
+				<dt>Task types</dt>
+				<dd>{fmtCompact(b.taskTypes.length)}</dd>
+			</div>
+		</dl>
+		{#if b.newVersion && b.newVersion.length > 0}
+			<!-- Whole note is clickable; navigates to the first newer version.
+			     Nested inside the card's outer <a>, so this is a <button>
+			     with stopPropagation to keep the card link from firing too. -->
+			<button
+				type="button"
+				class="newer-note"
+				title="Open {b.newVersion[0]}"
+				onclick={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					goto(resolve('/benchmark/[name]', { name: slug(b.newVersion![0]) }));
+				}}
+			>
+				<span class="newer-label">Newer version</span>
+				{#each b.newVersion as nv (nv)}
+					<code class="newer-link">{nv}</code>
+				{/each}
+			</button>
+		{/if}
+		{#if b.modalities && b.modalities.length > 0}
+			<div class="badges">
+				{#each b.modalities as mod (mod)}
+					<span class="badge modality-tint" data-modality={mod} title={mod}>
+						<ModalityIcon modality={mod} size={12} />
+						<span>{mod}</span>
+					</span>
+				{/each}
+			</div>
+		{/if}
 	</a>
 {/snippet}
 
@@ -249,7 +262,9 @@
 		font-size: 13px;
 	}
 
-	/* Cards ------------------------------------------------------------------- */
+	/* Cards — shared design with /benchmarks: top-accent stripe driven
+	   by modality, gradient header band, 2x2 stats grid, modality
+	   badges pinned to the card bottom. */
 	.grid {
 		margin: 8px 0 12px;
 		display: grid;
@@ -257,41 +272,79 @@
 		gap: 14px;
 	}
 	.card {
+		position: relative;
+		overflow: hidden;
 		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: 14px;
-		padding: 16px 18px;
+		border-radius: 12px;
+		padding: 14px 16px;
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
 		text-decoration: none;
-		color: var(--text);
+		color: inherit;
 		transition:
 			transform 0.12s ease,
 			border-color 0.12s ease,
 			box-shadow 0.12s ease;
-		position: relative;
-		max-height: 220px;
-		overflow: hidden;
 	}
 	.card:hover {
-		border-color: var(--primary);
 		transform: translateY(-1px);
-		box-shadow: 0 10px 24px rgb(15, 23, 42, 0.06);
+		box-shadow: 0 8px 22px rgb(15, 23, 42, 0.08);
+		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 50%, var(--border));
+	}
+	.card:hover .title {
+		color: var(--card-accent, var(--primary-strong));
+	}
+	.card:focus-visible {
+		outline: 2px solid var(--card-accent, var(--primary));
+		outline-offset: 2px;
+	}
+	.card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--card-accent, var(--border));
+	}
+	.card[data-modality='text'] {
+		--card-accent: var(--tint-teal-fg);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-teal) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
+	}
+	.card[data-modality='image'] {
+		--card-accent: var(--tint-blue-fg);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
+	}
+	.card[data-modality='audio'] {
+		--card-accent: var(--tint-amber-fg);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
+	}
+	.card[data-modality='video'] {
+		--card-accent: var(--tint-purple-fg);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 	}
 	.card-head {
 		display: flex;
-		/* Align the icon to the top so it sits next to the display-name
-		   row rather than vertically centring between the name and the
-		   id pill below it. */
 		align-items: flex-start;
 		gap: 10px;
-	}
-	.card-head .card-icon {
-		/* Nudge the 28 px icon down by the difference between line-box
-		   height of the 15 px display name and the icon, so its centre
-		   lines up with the name's baseline-cap region. */
-		margin-top: 1px;
 	}
 	.card-icon {
 		width: 28px;
@@ -300,6 +353,7 @@
 		border-radius: 4px;
 		object-fit: contain;
 		background: var(--surface-muted);
+		margin-top: 1px;
 	}
 	.card-icon-text {
 		display: inline-flex;
@@ -316,26 +370,64 @@
 		min-width: 0;
 		flex: 1;
 	}
-	.card-name {
-		font-size: 15px;
+	.title {
+		font-size: 14px;
 		font-weight: 700;
-		letter-spacing: -0.005em;
+		color: var(--text);
+		overflow-wrap: anywhere;
+		word-break: normal;
+		line-height: 1.3;
 	}
-	.card-desc {
-		font-size: 13px;
-		color: var(--text-muted);
+	.desc {
 		margin: 0;
-		overflow: hidden;
+		font-size: 12.5px;
+		line-height: 1.45;
+		color: var(--text-muted);
 		display: -webkit-box;
-		-webkit-line-clamp: 3;
-		line-clamp: 3;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
-	.card-foot {
-		margin-top: auto;
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 8px 14px;
+		margin: 0;
+	}
+	.stats > div {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 1px;
+	}
+	.stats dt {
+		font-size: 10px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+		font-weight: 600;
+	}
+	.stats dd {
+		margin: 0;
+		font-size: 14px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.badges {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: auto;
+	}
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 10px;
+		padding: 3px 8px;
+		border-radius: 999px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
 	}
 	.newer-note {
 		display: inline-flex;
@@ -378,35 +470,8 @@
 		border-radius: 4px;
 		color: var(--primary-strong);
 	}
-	.stats-line {
-		display: flex;
-		flex-wrap: wrap;
-		column-gap: 4px;
-		row-gap: 2px;
-		align-items: baseline;
-		font-size: 11.5px;
-		color: var(--text-muted);
-	}
-	/* Keep each "<N> label" chunk together — only the separator dots
-	   are allowed to land at line-break candidates, so wrapping (if it
-	   happens on a very narrow viewport) splits cleanly. */
-	.stats-line > span:not(.dot) {
-		white-space: nowrap;
-	}
-	.stats-line strong {
-		color: var(--text);
-		font-variant-numeric: tabular-nums;
-	}
-	.stats-line .dot {
-		color: var(--border-strong);
-	}
 	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
 		padding: 20px 0;
-	}
-	.cta {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--primary-strong);
 	}
 </style>

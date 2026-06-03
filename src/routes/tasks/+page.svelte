@@ -5,6 +5,9 @@
 	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import SearchInput from '$lib/components/SearchInput.svelte';
+	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { humanizeType, slug } from '$lib/format';
 
@@ -17,6 +20,7 @@
 		modalities: string[];
 		description: string;
 		benchmarks: string[];
+		numModels: number;
 	}
 
 	// Order intentionally matches the colour palette below.
@@ -44,6 +48,7 @@
 	let SIMPLIFIED_PRESENT = $state<string[]>([]);
 	let FULL_TYPES_PRESENT = $state<string[]>([]);
 	let MODALITIES = $state<string[]>([]);
+	let DOMAINS = $state<string[]>([]);
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
 
@@ -79,7 +84,8 @@
 							? [(m as unknown as { modality: string }).modality]
 							: []),
 					description: m.description ?? '',
-					benchmarks: occurrences.get(m.name) ?? []
+					benchmarks: occurrences.get(m.name) ?? [],
+					numModels: m.numModels ?? 0
 				}));
 				entries.sort((a, b) => a.name.localeCompare(b.name));
 				ALL_TASKS = entries;
@@ -93,9 +99,11 @@
 
 				MODALITIES = Array.from(new Set(entries.flatMap((t) => t.modalities))).sort();
 				FULL_TYPES_PRESENT = Array.from(new Set(entries.map((t) => t.type).filter(Boolean))).sort();
+				DOMAINS = Array.from(new Set(entries.flatMap((t) => t.domains))).sort();
 				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
 				for (const v of FULL_TYPES_PRESENT) fullTypeFilter.add(v);
 				for (const v of MODALITIES) modalityFilter.add(v);
+				for (const v of DOMAINS) domainFilter.add(v);
 				loadingData = false;
 			} catch (e) {
 				loadError = e instanceof Error ? e.message : String(e);
@@ -108,7 +116,8 @@
 		{ id: 'name', label: 'Name' },
 		{ id: 'type', label: 'Type' },
 		{ id: 'benchmarks', label: 'Benchmark count' },
-		{ id: 'languages', label: 'Language count' }
+		{ id: 'languages', label: 'Language count' },
+		{ id: 'models', label: 'Models evaluated' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];
 	type SortDir = 'asc' | 'desc';
@@ -116,13 +125,24 @@
 		name: 'asc',
 		type: 'asc',
 		benchmarks: 'desc',
-		languages: 'desc'
+		languages: 'desc',
+		models: 'desc'
 	};
 
 	let query = $state('');
 	const typeFilter = new SvelteSet<string>();
 	const fullTypeFilter = new SvelteSet<string>();
 	const modalityFilter = new SvelteSet<string>();
+	const domainFilter = new SvelteSet<string>();
+
+	// Collapsed sidebar state — mirrors FilterSidebar's behaviour on
+	// /benchmark and /models. Start collapsed on narrow viewports
+	// where the sidebar would otherwise overlap the content; SSR has
+	// no `window`, so default to expanded there and let the client
+	// flip on hydration.
+	let sidebarCollapsed = $state(
+		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
+	);
 	let sort = $state<SortId>('name');
 	let sortDir = $state<SortDir>(NATURAL_DIR.name);
 
@@ -146,6 +166,10 @@
 		if (modalityFilter.has(m)) modalityFilter.delete(m);
 		else modalityFilter.add(m);
 	}
+	function toggleDomain(d: string) {
+		if (domainFilter.has(d)) domainFilter.delete(d);
+		else domainFilter.add(d);
+	}
 	function toggleAllTypes() {
 		if (typeFilter.size === SIMPLIFIED_PRESENT.length) typeFilter.clear();
 		else for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
@@ -154,19 +178,44 @@
 		if (fullTypeFilter.size === FULL_TYPES_PRESENT.length) fullTypeFilter.clear();
 		else for (const v of FULL_TYPES_PRESENT) fullTypeFilter.add(v);
 	}
+	function toggleAllDomains() {
+		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
+		else for (const v of DOMAINS) domainFilter.add(v);
+	}
+	function toggleAllModalities() {
+		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
+		else for (const v of MODALITIES) modalityFilter.add(v);
+	}
 	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
 	let allFullTypes = $derived(fullTypeFilter.size === FULL_TYPES_PRESENT.length);
+	let allDomains = $derived(domainFilter.size === DOMAINS.length);
+	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
 
-	// Mobile-only collapse for the Task type strip. The full list runs
-	// 30+ pills and used to scroll inside a fixed-height window that
-	// fought page scroll; expose a "More" toggle instead and only
-	// render the long tail when the user asks for it.
-	let showAllFullTypes = $state(false);
-	const FULL_TYPES_PREVIEW = 6;
-	let visibleFullTypes = $derived(
-		showAllFullTypes ? FULL_TYPES_PRESENT : FULL_TYPES_PRESENT.slice(0, FULL_TYPES_PREVIEW)
-	);
-	let hiddenFullTypeCount = $derived(Math.max(0, FULL_TYPES_PRESENT.length - FULL_TYPES_PREVIEW));
+	// Domain search — same pattern as the task-type group above.
+	let domainQuery = $state('');
+	let visibleDomains = $derived.by(() => {
+		const q = domainQuery.trim().toLowerCase();
+		if (!q) return DOMAINS;
+		return DOMAINS.filter((d) => d.toLowerCase().includes(q));
+	});
+
+	// Per-strip search query — mirrors the Languages / Tasks search
+	// inputs in FilterContent so the user can narrow a long list of
+	// task types (Classification, Reranking, …) by name. The pills
+	// container is `.pills.scroll`, a fixed-height scrollport, so a
+	// previous "+N more / Show less" toggle has been retired — the
+	// long tail is reachable via the inner scrollbar, the search box
+	// covers the find-by-name case.
+	let fullTypeQuery = $state('');
+	let visibleFullTypes = $derived.by(() => {
+		const q = fullTypeQuery.trim().toLowerCase();
+		if (!q) return FULL_TYPES_PRESENT;
+		// Match against both the raw CamelCase id and the humanised
+		// form so typing either "BitextMining" or "bitext" both hit.
+		return FULL_TYPES_PRESENT.filter(
+			(t) => t.toLowerCase().includes(q) || humanizeType(t).toLowerCase().includes(q)
+		);
+	});
 
 	// Rank within the curated palette so the "Type" sort groups cards by
 	// colour bucket (retrieval first, then classification, …).
@@ -179,11 +228,31 @@
 
 	let filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
+		// Bypass each filter when *all* of its chips are checked (the default
+		// state). Without this, tasks whose modality / domain / type list is
+		// empty silently drop out: `[].some(...)` is always false, so they
+		// match no chip — even when the user has every chip selected. Same
+		// effect on `.has` for the type/fullType single-string fields when
+		// the value is "" and the seed filter set never adds the empty key.
+		const typeOff = typeFilter.size === SIMPLIFIED_PRESENT.length;
+		const fullTypeOff = fullTypeFilter.size === FULL_TYPES_PRESENT.length;
+		const modalityOff = modalityFilter.size === MODALITIES.length;
+		const domainOff = domainFilter.size === DOMAINS.length;
 		const list = ALL_TASKS.filter((t) => {
 			if (q && !t.name.toLowerCase().includes(q)) return false;
-			if (typeFilter.size > 0 && !typeFilter.has(t.simplifiedType)) return false;
-			if (fullTypeFilter.size > 0 && !fullTypeFilter.has(t.type)) return false;
-			if (modalityFilter.size > 0 && !(t.modalities ?? []).some((m) => modalityFilter.has(m)))
+			if (!typeOff && typeFilter.size > 0 && !typeFilter.has(t.simplifiedType)) return false;
+			if (!fullTypeOff && fullTypeFilter.size > 0 && !fullTypeFilter.has(t.type)) return false;
+			if (
+				!modalityOff &&
+				modalityFilter.size > 0 &&
+				!(t.modalities ?? []).some((m) => modalityFilter.has(m))
+			)
+				return false;
+			if (
+				!domainOff &&
+				domainFilter.size > 0 &&
+				!(t.domains ?? []).some((d) => domainFilter.has(d))
+			)
 				return false;
 			return true;
 		});
@@ -201,6 +270,8 @@
 				cmp = a.benchmarks.length - b.benchmarks.length;
 			} else if (sort === 'languages') {
 				cmp = a.languages.length - b.languages.length;
+			} else if (sort === 'models') {
+				cmp = a.numModels - b.numModels;
 			} else {
 				cmp = 0;
 			}
@@ -211,57 +282,40 @@
 	});
 </script>
 
-<div class="page">
-	<header class="hero">
-		<h1>Tasks</h1>
-		<p class="lead">
-			Every task across every benchmark, deduped by name. Click a card to see how each model
-			performs on that task.
-		</p>
-		<p class="contribute-note">
-			To add your task, follow our
-			<a
-				href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_dataset/"
-				target="_blank"
-				rel="noreferrer">contributor guide</a
-			>. Already have model scores? See the
-			<a
-				href="https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/"
-				target="_blank"
-				rel="noreferrer">submitting results guide</a
-			>.
-		</p>
-	</header>
+<div class="app">
+	<main class="main">
+		<header class="hero">
+			<h1>Tasks</h1>
+			<p class="lead">
+				Every task across every benchmark, deduped by name. Click a card to see how each model
+				performs on that task.
+			</p>
+			<p class="contribute-note">
+				To add your task, follow our
+				<a
+					href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_dataset/"
+					target="_blank"
+					rel="noreferrer">contributor guide</a
+				>. Already have model scores? See the
+				<a
+					href="https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/"
+					target="_blank"
+					rel="noreferrer">submitting results guide</a
+				>.
+			</p>
+		</header>
 
-	{#if loadingData}
-		<p class="empty">Loading tasks…</p>
-	{:else if loadError}
-		<p class="empty">Failed to load tasks: {loadError}</p>
-	{:else}
-		<div class="toolbar">
-			<div class="row search-row">
-				<div class="search">
-					<svg
-						viewBox="0 0 24 24"
-						width="14"
-						height="14"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<circle cx="11" cy="11" r="7" />
-						<path d="m20 20-3.5-3.5" />
-					</svg>
-					<input type="search" placeholder="Search tasks by name…" bind:value={query} />
-					{#if query}
-						<button type="button" class="clear" onclick={() => (query = '')} aria-label="Clear"
-							>×</button
-						>
-					{/if}
-				</div>
+		{#if loadingData}
+			<p class="empty">Loading tasks…</p>
+		{:else if loadError}
+			<p class="empty">Failed to load tasks: {loadError}</p>
+		{:else}
+			<div class="toolbar">
+				<SearchInput
+					bind:value={query}
+					placeholder="Search tasks by name…"
+					ariaLabel="Search tasks"
+				/>
 				<div class="sort">
 					<label for="sort-select">Sort by</label>
 					<select
@@ -283,16 +337,83 @@
 							? 'Ascending (click for descending)'
 							: 'Descending (click for ascending)'}
 					>
-						{sortDir === 'asc' ? '↑' : '↓'}
+						<SortDirIcon dir={sortDir} />
 					</button>
 				</div>
 				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
 			</div>
 
-			<div class="row filter-row">
+			{#if filtered.length === 0}
+				<p class="empty">No tasks match those filters.</p>
+			{:else}
+				<div class="grid" data-loaded>
+					{#each filtered as t (t.name)}
+						<a
+							class="card"
+							href={resolve('/tasks/[name]', { name: slug(t.name) })}
+							data-stype={t.simplifiedType}
+						>
+							<div class="card-head">
+								<span class="title" title={t.name}>{t.name}</span>
+							</div>
+							<p class="desc"><MarkdownText text={t.description} /></p>
+							<dl class="stats">
+								<div>
+									<dt>Benchmarks</dt>
+									<dd>{t.benchmarks.length}</dd>
+								</div>
+								<div>
+									<dt>Languages</dt>
+									<dd>{t.languages.length}</dd>
+								</div>
+								<div>
+									<dt>Domains</dt>
+									<dd>{t.domains.length}</dd>
+								</div>
+								<div>
+									<dt>Models evaluated</dt>
+									<dd>{t.numModels}</dd>
+								</div>
+							</dl>
+							{#if t.modalities.length > 0}
+								<div class="badges">
+									{#each t.modalities as mod (mod)}
+										<span class="badge modality-tint" data-modality={mod} title={mod}>
+											<ModalityIcon modality={mod} size={12} />
+											<span>{mod}</span>
+										</span>
+									{/each}
+								</div>
+							{/if}
+							<div class="card-foot">
+								<span class="type-chip" data-type={t.type} title={t.type}>{t.type}</span>
+							</div>
+						</a>
+					{/each}
+				</div>
+			{/if}
+		{/if}
+	</main>
+
+	<aside class="sidebar" class:collapsed={sidebarCollapsed} aria-label="Filters">
+		<button
+			type="button"
+			class="sidebar-toggle"
+			onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
+			aria-expanded={!sidebarCollapsed}
+			title={sidebarCollapsed ? 'Expand filters' : 'Collapse filters'}
+		>
+			<span class="chev" class:open={!sidebarCollapsed}>‹</span>
+			{#if !sidebarCollapsed}
+				<span class="toggle-label">Filters</span>
+			{/if}
+		</button>
+
+		{#if !sidebarCollapsed}
+			<div class="filters">
 				<div class="group">
 					<div class="group-head">
-						<span class="group-label">Type</span>
+						<span class="group-label">Task group</span>
 						<button type="button" class="link-btn" onclick={toggleAllTypes}>
 							{allTypes ? 'Clear' : 'All'}
 						</button>
@@ -309,42 +430,14 @@
 
 				<div class="group">
 					<div class="group-head">
-						<span class="group-label">Task type</span>
-						<button type="button" class="link-btn" onclick={toggleAllFullTypes}>
-							{allFullTypes ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills scroll">
-						{#each visibleFullTypes as t (t)}
-							<label class="pill type-fill" data-type={t}>
-								<input
-									type="checkbox"
-									checked={fullTypeFilter.has(t)}
-									onchange={() => toggleFullType(t)}
-								/>
-								<span>{humanizeType(t)}</span>
-							</label>
-						{/each}
-						{#if hiddenFullTypeCount > 0}
-							<button
-								type="button"
-								class="pill more-btn"
-								onclick={() => (showAllFullTypes = !showAllFullTypes)}
-								aria-expanded={showAllFullTypes}
-							>
-								{showAllFullTypes ? 'Show less' : `+${hiddenFullTypeCount} more`}
-							</button>
-						{/if}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
 						<span class="group-label">Modality</span>
+						<button type="button" class="link-btn" onclick={toggleAllModalities}>
+							{allModalities ? 'Clear' : 'All'}
+						</button>
 					</div>
 					<div class="pills">
 						{#each MODALITIES as m (m)}
-							<label class="pill modality-fill" data-modality={m}>
+							<label class="pill modality-fill">
 								<input
 									type="checkbox"
 									checked={modalityFilter.has(m)}
@@ -356,69 +449,75 @@
 						{/each}
 					</div>
 				</div>
-			</div>
-		</div>
 
-		{#if filtered.length === 0}
-			<p class="empty">No tasks match those filters.</p>
-		{:else}
-			<div class="grid" data-loaded>
-				{#each filtered as t (t.name)}
-					<a
-						class="card"
-						href={resolve('/tasks/[name]', { name: slug(t.name) })}
-						data-stype={t.simplifiedType}
-					>
-						<div class="card-head">
-							<span class="title" title={t.name}>{t.name}</span>
-						</div>
-						<p class="desc"><MarkdownText text={t.description} /></p>
-						<dl class="stats">
-							<div>
-								<dt>Benchmarks</dt>
-								<dd>{t.benchmarks.length}</dd>
-							</div>
-							<div>
-								<dt>Languages</dt>
-								<dd>{t.languages.length}</dd>
-							</div>
-							<div>
-								<dt>Domains</dt>
-								<dd>{t.domains.length}</dd>
-							</div>
-							<div>
-								<dt>{t.modalities.length === 1 ? 'Modality' : 'Modalities'}</dt>
-								<dd class="modality">{t.modalities.join(', ') || '—'}</dd>
-							</div>
-						</dl>
-						{#if t.domains.length > 0}
-							<div class="badges">
-								{#each t.domains.slice(0, 3) as d (d)}
-									<span class="badge soft">{d}</span>
-								{/each}
-								{#if t.domains.length > 3}
-									<span class="badge soft muted">+{t.domains.length - 3}</span>
-								{/if}
-							</div>
+				<div class="group">
+					<div class="group-head">
+						<span class="group-label">Task type</span>
+						<button type="button" class="link-btn" onclick={toggleAllFullTypes}>
+							{allFullTypes ? 'Clear' : 'All'}
+						</button>
+					</div>
+					<input
+						type="search"
+						class="type-search"
+						placeholder="Search task types…"
+						bind:value={fullTypeQuery}
+					/>
+					<div class="pills scroll">
+						{#each visibleFullTypes as t (t)}
+							<label class="pill type-fill" data-type={t}>
+								<input
+									type="checkbox"
+									checked={fullTypeFilter.has(t)}
+									onchange={() => toggleFullType(t)}
+								/>
+								<span>{humanizeType(t)}</span>
+							</label>
+						{/each}
+						{#if visibleFullTypes.length === 0}
+							<p class="muted no-match">No task types match.</p>
 						{/if}
-						<div class="card-foot">
-							<span class="type-chip" data-type={t.type} title={t.type}>{t.type}</span>
-						</div>
-					</a>
-				{/each}
+					</div>
+				</div>
+
+				<div class="group">
+					<div class="group-head">
+						<span class="group-label">Domain</span>
+						<button type="button" class="link-btn" onclick={toggleAllDomains}>
+							{allDomains ? 'Clear' : 'All'}
+						</button>
+					</div>
+					<input
+						type="search"
+						class="type-search"
+						placeholder="Search domains…"
+						bind:value={domainQuery}
+					/>
+					<div class="pills scroll">
+						{#each visibleDomains as d (d)}
+							<label class="pill type-fill">
+								<input
+									type="checkbox"
+									checked={domainFilter.has(d)}
+									onchange={() => toggleDomain(d)}
+								/>
+								<span>{d}</span>
+							</label>
+						{/each}
+						{#if visibleDomains.length === 0}
+							<p class="muted no-match">No domains match.</p>
+						{/if}
+					</div>
+				</div>
 			</div>
 		{/if}
-	{/if}
+	</aside>
 </div>
 
+<ScrollToTopButton />
 <ShareUrlButton />
 
 <style>
-	/* Base `.page` (1280 px centred, 18/28/56 padding) is in app.css. */
-	.page {
-		padding-top: 28px;
-		padding-bottom: 64px;
-	}
 	.hero {
 		padding: 24px 0 16px;
 	}
@@ -431,28 +530,130 @@
 	   markup is on /models so the rules were exact duplicates. */
 
 	/* Toolbar -------------------------------------------------------------- */
+	/* Toolbar is now just a single search-row strip — the four filter
+	   groups have moved into the right-hand sidebar (`.sidebar`) to
+	   mirror the /models layout. */
+	/* Sticky shelf — matches /benchmarks and /models. */
 	.toolbar {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		margin: 16px 0 18px;
-		padding: 14px 16px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		box-shadow: var(--shadow-sm);
-	}
-	.row {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 16px 20px;
 		align-items: center;
+		margin: 16px 0 18px;
+		padding: 10px 14px;
+		background: var(--bar-bg);
+		backdrop-filter: blur(14px) saturate(140%);
+		-webkit-backdrop-filter: blur(14px) saturate(140%);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		box-shadow: var(--shadow-sm);
+		position: sticky;
+		top: var(--header-offset, 56px);
+		z-index: 5;
 	}
-	.row.filter-row {
-		border-top: 1px solid var(--border);
-		padding-top: 14px;
-		gap: 8px 28px;
-		align-items: flex-start;
+	/* Two-column layout: cards on the left, filters in the sticky
+	   sidebar on the right — same shape as `/models`. `.app` is the
+	   page-level flex container so the sidebar spans the full viewport
+	   height (not just the cards section). `.main` carries the
+	   1280 px max-width + page padding that used to live on `.page`. */
+	.app {
+		display: flex;
+		min-height: 100vh;
+	}
+	.main {
+		flex: 1;
+		min-width: 0;
+		max-width: 1280px;
+		margin: 0 auto;
+		padding: 28px 28px 64px;
+	}
+	/* Sticky filter sidebar — mirrors FilterSidebar's shell used on
+	   /benchmark and /models so the three pages read as one design.
+	   Pinned to the right edge of the page (margin-left: auto) so it
+	   doesn't drift inward on viewports wider than the content track.
+	   Collapsed state collapses the flex column to 0 px and floats the
+	   toggle button leftward over the table. */
+	.sidebar {
+		flex: 0 0 340px;
+		min-width: 320px;
+		max-width: 380px;
+		margin-left: auto;
+		border-left: 1px solid var(--border);
+		background: var(--surface);
+
+		--header-offset: 64px;
+
+		height: calc(100vh - var(--header-offset));
+		position: sticky;
+		top: var(--header-offset);
+		overflow-y: auto;
+		transition:
+			flex-basis 0.18s ease,
+			min-width 0.18s ease,
+			max-width 0.18s ease;
+	}
+	.sidebar.collapsed {
+		flex: 0 0 0;
+		min-width: 0;
+		max-width: none;
+		width: 0;
+		border-left: none;
+		background: none;
+		overflow: visible;
+	}
+	.sidebar-toggle {
+		position: sticky;
+		top: 0;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		padding: 10px 12px;
+		background: var(--surface);
+		border: none;
+		border-bottom: 1px solid var(--border);
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-muted);
+		cursor: pointer;
+		z-index: 2;
+	}
+	.sidebar.collapsed .sidebar-toggle {
+		position: relative;
+		transform: translateX(-100%);
+		margin-top: 56px;
+		margin-right: 8px;
+		padding: 6px 10px;
+		width: auto;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface);
+		box-shadow: var(--shadow-sm);
+		z-index: 11;
+	}
+	.sidebar-toggle:hover {
+		color: var(--text);
+		background: var(--surface-muted);
+	}
+	.chev {
+		display: inline-block;
+		font-size: 18px;
+		line-height: 1;
+		transition: transform 0.18s ease;
+		color: var(--text-subtle);
+	}
+	.chev.open {
+		transform: rotate(180deg);
+	}
+	.toggle-label {
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+	.filters {
+		display: flex;
+		flex-direction: column;
+		gap: 18px;
+		padding: 14px 16px 24px;
 	}
 	.group {
 		display: flex;
@@ -474,6 +675,30 @@
 		text-transform: uppercase;
 		color: var(--text-subtle);
 	}
+	/* Task-type search input — same shape as the Languages / Tasks
+	   filter inputs in FilterContent so the two strips read as part
+	   of one design system. */
+	.type-search {
+		width: 100%;
+		max-width: 320px;
+		padding: 5px 9px;
+		font-size: 12px;
+		font-family: inherit;
+		background: var(--surface);
+		color: var(--text);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+	}
+	.type-search:focus {
+		outline: none;
+		border-color: var(--primary);
+		box-shadow: 0 0 0 3px var(--primary-soft);
+	}
+	.no-match {
+		margin: 0;
+		font-size: 12px;
+		color: var(--text-subtle);
+	}
 	.link-btn {
 		background: none;
 		border: none;
@@ -485,47 +710,6 @@
 	}
 	.link-btn:hover {
 		text-decoration: underline;
-	}
-
-	.search {
-		position: relative;
-		flex: 1;
-		min-width: 240px;
-		max-width: 420px;
-	}
-	.search svg {
-		position: absolute;
-		left: 10px;
-		top: 50%;
-		transform: translateY(-50%);
-		color: var(--text-subtle);
-	}
-	.search input {
-		width: 100%;
-		padding: 8px 28px 8px 30px;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		font-size: 13px;
-		font-family: inherit;
-		background: var(--surface);
-	}
-	.search input:focus {
-		outline: none;
-		border-color: var(--primary);
-		box-shadow: 0 0 0 3px var(--primary-soft);
-	}
-	.clear {
-		position: absolute;
-		right: 6px;
-		top: 50%;
-		transform: translateY(-50%);
-		width: 20px;
-		height: 20px;
-		border: none;
-		background: none;
-		color: var(--text-subtle);
-		font-size: 16px;
-		cursor: pointer;
 	}
 
 	.count {
@@ -540,10 +724,14 @@
 		flex-wrap: wrap;
 		gap: 4px;
 	}
-	/* The full-task-type filter has ~30+ chips; cap its height and scroll
-	   internally so the toolbar doesn't push the cards grid down. */
+	/* Long task-type / domain lists scroll internally so they don't push
+	   the rest of the sidebar off-screen. The cap is generous (≈ 10 rows
+	   of single-line pills) because the sidebar now spans the full
+	   viewport and Modality / Task group sit above with only ~80–120 px
+	   of vertical footprint, leaving plenty of room for the two
+	   search-driven lists to breathe. */
 	.pills.scroll {
-		max-height: 96px;
+		max-height: 320px;
 		overflow-y: auto;
 		padding-right: 4px;
 		scrollbar-width: thin;
@@ -567,17 +755,6 @@
 		cursor: pointer;
 		user-select: none;
 	}
-	/* "+N more" / "Show less" toggle inside the Task type strip. Same
-	   chip shape but in the link colour so it doesn't read as a
-	   filter pill the user might accidentally try to select. */
-	.more-btn {
-		color: var(--link);
-		font-weight: 600;
-		font-family: inherit;
-	}
-	.more-btn:hover {
-		border-color: color-mix(in srgb, var(--link) 50%, var(--border));
-	}
 	/* Mobile: stack the three filter groups vertically. Side-by-side
 	   on a 375 px viewport gave each group ~120 px of width, which
 	   forced even short pills to wrap to one-per-row. Stacking lets
@@ -590,19 +767,8 @@
 			padding: 8px 14px;
 			font-size: 13px;
 		}
-		.row.filter-row {
-			flex-direction: column;
-			gap: 14px;
-			align-items: stretch;
-		}
 		.group {
 			flex: 0 0 auto;
-		}
-		/* No vertical scroll on mobile — the "More" button reveals the
-		   hidden pills inline instead. */
-		.pills.scroll {
-			max-height: none;
-			overflow: visible;
 		}
 	}
 	.pill input {
@@ -657,10 +823,9 @@
 		color: var(--tint-pink-fg);
 	}
 
-	/* Task type + Modality pills use the same plain theme-accent
-	   treatment as the FilterContent sidebar — no per-category tints.
-	   Keeps the filter row visually quieter and unified with the
-	   existing model-filter UI. */
+	/* Task type / Modality / Domain pills all share the same primary
+	   accent treatment when checked — matches the FilterContent sidebar
+	   on /models and reads as one consistent "filter selected" state. */
 	.type-fill,
 	.modality-fill {
 		color: var(--text-muted);
@@ -825,29 +990,20 @@
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
-	.stats dd.modality {
-		font-size: 12px;
-		text-transform: capitalize;
-	}
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px;
 	}
 	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
 		font-size: 10px;
 		padding: 3px 8px;
 		border-radius: 999px;
 		font-weight: 600;
 		letter-spacing: 0.02em;
-	}
-	.badge.soft {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
-	}
-	.badge.muted {
-		color: var(--text-subtle);
 	}
 	.card-foot {
 		display: flex;

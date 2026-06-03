@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { SvelteSet } from 'svelte/reactivity';
 	import type { Benchmark, TaskMeta } from '$lib/types';
 	import { slug } from '$lib/format';
 
@@ -17,8 +18,8 @@
 	interface TaskRow {
 		name: string;
 		type: string;
-		languages: string;
-		domains: string;
+		languages: string[];
+		domains: string[];
 		modalities: string;
 	}
 
@@ -29,8 +30,8 @@
 			return {
 				name,
 				type: meta?.type ?? '—',
-				languages: meta?.languages.length ? meta.languages.join(', ') : '—',
-				domains: meta?.domains.length ? meta.domains.join(', ') : '—',
+				languages: meta?.languages ?? [],
+				domains: meta?.domains ?? [],
 				modalities: meta?.modalities.length ? meta.modalities.join(', ') : '—'
 			};
 		});
@@ -41,6 +42,24 @@
 			? rows.filter((r) => r.name.toLowerCase().includes(query.toLowerCase().trim()))
 			: rows
 	);
+
+	// Long Languages / Domains lists (MMTEB tasks declare 200+ languages
+	// each) blow the row height out without a cap. Show the first
+	// PREVIEW entries inline; the row stays scannable, the user clicks
+	// "+N more" to expand a single cell.
+	const PREVIEW = 6;
+	// Key: `${row.name}|${col}`. Tracking expanded cells in a set lets
+	// each Languages cell expand independently of the matching Domains
+	// cell on the same row.
+	const expanded = new SvelteSet<string>();
+	function expandKey(rowName: string, col: 'lang' | 'dom'): string {
+		return `${rowName}|${col}`;
+	}
+	function toggleExpand(rowName: string, col: 'lang' | 'dom') {
+		const k = expandKey(rowName, col);
+		if (expanded.has(k)) expanded.delete(k);
+		else expanded.add(k);
+	}
 </script>
 
 <div class="wrap">
@@ -62,6 +81,12 @@
 			</thead>
 			<tbody>
 				{#each filtered as row (row.name)}
+					{@const langOpen = expanded.has(expandKey(row.name, 'lang'))}
+					{@const domOpen = expanded.has(expandKey(row.name, 'dom'))}
+					{@const langShown = langOpen ? row.languages : row.languages.slice(0, PREVIEW)}
+					{@const domShown = domOpen ? row.domains : row.domains.slice(0, PREVIEW)}
+					{@const langHidden = row.languages.length - langShown.length}
+					{@const domHidden = row.domains.length - domShown.length}
 					<tr>
 						<td>
 							<a class="task-link" href={resolve('/tasks/[name]', { name: slug(row.name) })}
@@ -69,8 +94,52 @@
 							>
 						</td>
 						<td>{row.type}</td>
-						<td class="wrap-col" title={row.languages}>{row.languages}</td>
-						<td class="wrap-col" title={row.domains}>{row.domains}</td>
+						<td class="wrap-col" title={row.languages.join(', ') || '—'}>
+							{#if row.languages.length === 0}
+								—
+							{:else}
+								{langShown.join(', ')}{#if langHidden > 0},
+									<button
+										type="button"
+										class="more-toggle"
+										onclick={() => toggleExpand(row.name, 'lang')}
+									>
+										+{langHidden} more
+									</button>
+								{:else if langOpen && row.languages.length > PREVIEW}
+									<button
+										type="button"
+										class="more-toggle"
+										onclick={() => toggleExpand(row.name, 'lang')}
+									>
+										Show fewer
+									</button>
+								{/if}
+							{/if}
+						</td>
+						<td class="wrap-col" title={row.domains.join(', ') || '—'}>
+							{#if row.domains.length === 0}
+								—
+							{:else}
+								{domShown.join(', ')}{#if domHidden > 0},
+									<button
+										type="button"
+										class="more-toggle"
+										onclick={() => toggleExpand(row.name, 'dom')}
+									>
+										+{domHidden} more
+									</button>
+								{:else if domOpen && row.domains.length > PREVIEW}
+									<button
+										type="button"
+										class="more-toggle"
+										onclick={() => toggleExpand(row.name, 'dom')}
+									>
+										Show fewer
+									</button>
+								{/if}
+							{/if}
+						</td>
 						<td>{row.modalities}</td>
 					</tr>
 				{/each}
@@ -140,7 +209,9 @@
 	}
 	/* Languages + Domains can carry hundreds of entries on multilingual tasks
 	   (MMTEB, MIEB(Multilingual), ...). Cap the column and let the cell wrap
-	   so the row grows vertically instead of the table going horizontal. */
+	   so the row grows vertically instead of the table going horizontal.
+	   Combined with the per-cell "+N more" toggle in the markup, the
+	   collapsed state stays roughly one line tall. */
 	.wrap-col {
 		max-width: 320px;
 		white-space: normal;
@@ -170,5 +241,27 @@
 	.task-link:hover {
 		color: var(--link);
 		text-decoration-color: var(--link);
+	}
+	/* "+N more" / "Show fewer" inline button: looks like a link, sits
+	   on the same line as the comma-joined preview so the cell stays
+	   compact even when expanded. ``margin-left`` separates the button
+	   from the preceding comma (or, in the expanded case, the final
+	   item) since Svelte collapses literal whitespace between adjacent
+	   blocks. */
+	.more-toggle {
+		all: unset;
+		margin-left: 4px;
+		color: var(--link);
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.more-toggle:hover {
+		text-decoration: underline;
+	}
+	.more-toggle:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 1px;
+		border-radius: 3px;
 	}
 </style>

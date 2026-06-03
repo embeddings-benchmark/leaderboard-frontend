@@ -7,6 +7,7 @@
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
+	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import CopyableId from '$lib/components/CopyableId.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
@@ -313,6 +314,7 @@
 	<FilterSidebar />
 </div>
 
+<ScrollToTopButton />
 <ShareUrlButton />
 
 <style>

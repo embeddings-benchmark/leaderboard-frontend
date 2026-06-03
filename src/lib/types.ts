@@ -59,6 +59,9 @@ export interface TaskMeta {
 	annotationsCreators?: string | null;
 	dialect?: string[] | null;
 	sampleCreation?: string | null;
+	// Count of distinct models that have at least one score on this task —
+	// surfaced on the /tasks overview cards as "Models evaluated".
+	numModels?: number;
 }
 
 export interface MenuEntry {

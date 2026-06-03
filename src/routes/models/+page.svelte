@@ -5,6 +5,8 @@
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
+	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ModelTypeIcon from '$lib/components/ModelTypeIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { ModelMeta } from '$lib/types';
@@ -160,7 +162,7 @@
 						? 'Ascending (click for descending)'
 						: 'Descending (click for ascending)'}
 				>
-					{sortDir === 'asc' ? '↑' : '↓'}
+					<SortDirIcon dir={sortDir} />
 				</button>
 			</div>
 		</div>
@@ -239,6 +241,7 @@
 	<FilterSidebar hideScope flatModel />
 </div>
 
+<ScrollToTopButton />
 <ShareUrlButton />
 
 <style>
@@ -263,12 +266,24 @@
 	}
 	/* `.lead`, `.sort*`, `.dir-btn*` live in src/app.css — same
 	   markup is on /tasks so the rules were exact duplicates. */
+	/* Sticky shelf — matches /benchmarks and /tasks so the three
+	   overview pages share one shelf treatment. */
 	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 12px;
 		align-items: center;
 		margin: 8px 0 18px;
+		padding: 10px 12px;
+		background: var(--bar-bg);
+		backdrop-filter: blur(14px) saturate(140%);
+		-webkit-backdrop-filter: blur(14px) saturate(140%);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		box-shadow: var(--shadow-sm);
+		position: sticky;
+		top: var(--header-offset, 56px);
+		z-index: 5;
 	}
 	/* Cards ---------------------------------------------------------------- */
 	.grid {

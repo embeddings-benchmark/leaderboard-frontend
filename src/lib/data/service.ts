@@ -99,8 +99,11 @@ export async function loadSummary(benchmarkName: string): Promise<BenchmarkSumma
 		if (!USE_MOCK) throw noApiError('loadSummary');
 		return buildMockSummary(benchmarkName);
 	}
+	// Path is `/scores` (consistent with /tasks/{name}/scores and
+	// /models/{name}/scores). The backend keeps `/summary` as a
+	// deprecated alias for one frontend deploy window.
 	return enrichSummary(
-		await http<BenchmarkSummary>(`/benchmarks/${encodeURIComponent(benchmarkName)}/summary`)
+		await http<BenchmarkSummary>(`/benchmarks/${encodeURIComponent(benchmarkName)}/scores`)
 	);
 }
 

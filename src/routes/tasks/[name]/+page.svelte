@@ -9,6 +9,7 @@
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { slug } from '$lib/format';
 	import {
@@ -239,7 +240,7 @@
 				<div class="kicker">
 					<span class="type-badge" data-type={task.meta.type}>{task.meta.type}</span>
 					{#each task.meta.modalities ?? [] as m (m)}
-						<span class="badge soft">
+						<span class="badge modality-tint" data-modality={m} title={m}>
 							<ModalityIcon modality={m} size={12} />
 							<span>{m}</span>
 						</span>
@@ -455,6 +456,7 @@
 	</div>
 {/if}
 
+<ScrollToTopButton />
 <ShareUrlButton />
 
 <style>
@@ -600,11 +602,6 @@
 		font-weight: 600;
 		letter-spacing: 0.02em;
 	}
-	.badge.soft {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
-
 	.hero h1 {
 		font-size: 26px;
 		font-weight: 800;

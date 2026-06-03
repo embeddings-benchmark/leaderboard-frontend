@@ -8,6 +8,7 @@
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ModelTypeIcon from '$lib/components/ModelTypeIcon.svelte';
+	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { fmtInt, fmtParamsUnit, fmtParamsValue, slug } from '$lib/format';
@@ -397,6 +398,7 @@
 	{/if}
 </div>
 
+<ScrollToTopButton />
 <ShareUrlButton />
 
 <style>

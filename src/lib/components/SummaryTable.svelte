@@ -13,10 +13,13 @@
 		maxOf,
 		minOf,
 		nextSort,
+		slug,
 		sortIcon as sortIconFor,
 		worstPerColumn
 	} from '$lib/format';
+	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
+	import ModelTypeIcon from './ModelTypeIcon.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import MarkdownText from './MarkdownText.svelte';
 
@@ -93,6 +96,7 @@
 		| 'rank'
 		| 'model'
 		| 'totalParams'
+		| 'zeroShot'
 		| 'meanTask'
 		| 'meanTaskType'
 		| 'meanPublic'
@@ -132,6 +136,10 @@
 				return { v: row.model.displayName.toLowerCase(), missing: false };
 			case 'totalParams':
 				return { v: row.totalParamsB, missing: row.totalParamsB === 0 };
+			case 'zeroShot':
+				// -1 is the "unknown" sentinel; treat as missing so it sorts
+				// to the bottom regardless of direction.
+				return { v: row.zeroShotPct, missing: row.zeroShotPct === -1 };
 			case 'meanTask':
 				return { v: row.meanTask ?? 0, missing: row.meanTask == null };
 			case 'meanTaskType':
@@ -428,6 +436,23 @@
 							>
 						</button>
 					</th>
+					<th
+						class="tbl-num"
+						data-tip-title={INFO.zeroShot.title}
+						data-tip={INFO.zeroShot.text}
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						aria-sort={ariaSort('zeroShot')}
+					>
+						<button class="sort-btn tbl-num" onclick={() => clickSort('zeroShot')}>
+							<span>Zero-shot</span>
+							<span class="ind" class:on={sortKey === 'zeroShot'}
+								>{sortIcon('zeroShot') || '↕'}</span
+							>
+						</button>
+					</th>
 					{#if showMeanTask}
 						<th
 							class="tbl-num"
@@ -564,26 +589,29 @@
 							onfocusin={(e) => showModelTip(e, row)}
 							onfocusout={hideTip}
 						>
-							{#if row.model.url}
-								<!-- External model URL (HuggingFace etc.) -->
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-								<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
-									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
-										>/</span
-									><span class="tbl-model-name">{row.model.displayName}</span>
-								</a>
-							{:else}
-								<span class="tbl-model-link">
-									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
-										>/</span
-									><span class="tbl-model-name">{row.model.displayName}</span>
-								</span>
-							{/if}
+							<span class="type-icon" title={row.model.modelType}>
+								<ModelTypeIcon type={row.model.modelType} size={13} />
+							</span>
+							<!-- Internal link to the model detail page. The HuggingFace
+							     reference URL is still surfaced on the model card itself
+							     (and via the hover tooltip's Model-page row), so the table
+							     navigation stays inside the leaderboard. -->
+							<a
+								class="tbl-model-link"
+								href={resolve('/models/[name]', { name: slug(row.model.name) })}
+							>
+								<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
+									>/</span
+								><span class="tbl-model-name">{row.model.displayName}</span>
+							</a>
 						</td>
 						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
 							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
 									class="unit">{fmtParamsUnit(row.totalParamsB)}</span
 								>{/if}
+						</td>
+						<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
+							{fmtZeroShot(row.zeroShotPct)}
 						</td>
 						{#if showMeanTask}
 							<td
@@ -746,47 +774,38 @@
 		color: #f1f3f5;
 	}
 
-	/* Soft per-model-type tint on the Model + Params columns. Theme-aware
-	   tints from the shared --tint-* palette — pastel-on-white in light
-	   mode, dim-muted-on-dark in dark mode. */
-	.sticky-model[data-model-type='dense'],
-	.param-cell[data-model-type='dense'] {
-		background-color: color-mix(in srgb, var(--tint-blue) 70%, var(--surface));
+	/* Per-row model-type colour-fill is dropped — the icon next to the
+	   model name carries the type signal without painting the full
+	   sticky column. The model name itself and the icon share the same
+	   --tint-*-fg colour per type so they read as one cluster; the org
+	   prefix and slash stay muted so the model name is the visual
+	   anchor. Foregrounds match the filter pills + chip palette. */
+	.type-icon {
+		display: inline-flex;
+		align-items: center;
+		flex-shrink: 0;
+		margin-right: 6px;
+		color: var(--text-subtle);
+		vertical-align: -2px;
 	}
-	.sticky-model[data-model-type='cross-encoder'],
-	.param-cell[data-model-type='cross-encoder'] {
-		background-color: color-mix(in srgb, var(--tint-orange) 70%, var(--surface));
-	}
-	.sticky-model[data-model-type='late-interaction'],
-	.param-cell[data-model-type='late-interaction'] {
-		background-color: color-mix(in srgb, var(--tint-green) 70%, var(--surface));
-	}
-	.sticky-model[data-model-type='sparse'],
-	.param-cell[data-model-type='sparse'] {
-		background-color: color-mix(in srgb, var(--tint-amber) 70%, var(--surface));
-	}
-	.sticky-model[data-model-type='router'],
-	.param-cell[data-model-type='router'] {
-		background-color: color-mix(in srgb, var(--tint-purple) 70%, var(--surface));
-	}
-	/* Tint the model name itself so the type is readable from the text
-	   alone (the row's column tint already echoes it). Foregrounds come
-	   from the same --tint-*-fg tokens used by chips elsewhere, so the
-	   palette stays consistent. The org + slash stay muted so the model
-	   name remains the visual anchor. */
-	.sticky-model[data-model-type='dense'] .tbl-model-name {
+	[data-model-type='dense'] .type-icon,
+	[data-model-type='dense'] .tbl-model-name {
 		color: var(--tint-blue-fg);
 	}
-	.sticky-model[data-model-type='cross-encoder'] .tbl-model-name {
+	[data-model-type='cross-encoder'] .type-icon,
+	[data-model-type='cross-encoder'] .tbl-model-name {
 		color: var(--tint-orange-fg);
 	}
-	.sticky-model[data-model-type='late-interaction'] .tbl-model-name {
+	[data-model-type='late-interaction'] .type-icon,
+	[data-model-type='late-interaction'] .tbl-model-name {
 		color: var(--tint-green-fg);
 	}
-	.sticky-model[data-model-type='sparse'] .tbl-model-name {
+	[data-model-type='sparse'] .type-icon,
+	[data-model-type='sparse'] .tbl-model-name {
 		color: var(--tint-amber-fg);
 	}
-	.sticky-model[data-model-type='router'] .tbl-model-name {
+	[data-model-type='router'] .type-icon,
+	[data-model-type='router'] .tbl-model-name {
 		color: var(--tint-purple-fg);
 	}
 	/* Whole-row hover feedback lives in src/lib/styles/leaderboard-table.css
@@ -821,6 +840,16 @@
 	}
 	.sort-btn.tbl-num {
 		justify-content: flex-end;
+	}
+	/* Zero-shot cell: tabular nums so the percentage column stays
+	   visually aligned. `.partial` greys the "⚠️ NA" sentinel down so
+	   it doesn't compete with real percentages for attention. */
+	.zs-cell {
+		font-variant-numeric: tabular-nums;
+	}
+	.zs-cell.partial {
+		color: var(--text-subtle);
+		font-weight: 500;
 	}
 	.sort-btn:hover {
 		color: var(--text);
