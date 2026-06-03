@@ -9,10 +9,12 @@
 		bestPerColumn,
 		defaultDirFor,
 		heat,
+		humanizeType,
 		nextSort,
 		sortIcon as sortIconFor,
 		worstPerColumn
 	} from '$lib/format';
+	import MarkdownText from './MarkdownText.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 	import ModelTypeIcon from './ModelTypeIcon.svelte';
 
@@ -119,6 +121,77 @@
 		}, 200);
 	}
 
+	// Column-header tip for the task name. Mirrors the SummaryTable
+	// portal pattern (fixed-position, JS-clamped to viewport) — the
+	// `<th>` is sticky and lives in `overflow-x: auto`, so a child
+	// tooltip would be clipped + trapped in the th's stacking context.
+	// One portal element is reused across every column.
+	const TASK_TIP_MAX_WIDTH = 320;
+	const TASK_TIP_EDGE = 8;
+	type TaskTipState = {
+		visible: boolean;
+		title: string;
+		type: string;
+		description: string;
+		x: number;
+		y: number;
+	};
+	let taskTip = $state<TaskTipState>({
+		visible: false,
+		title: '',
+		type: '',
+		description: '',
+		x: 0,
+		y: 0
+	});
+	let taskTipHideTimer: ReturnType<typeof setTimeout> | null = null;
+	function clampTaskTipX(rawX: number): number {
+		if (typeof window === 'undefined') return rawX;
+		const half = TASK_TIP_MAX_WIDTH / 2;
+		const min = TASK_TIP_EDGE + half;
+		const max = window.innerWidth - TASK_TIP_EDGE - half;
+		if (min > max) return window.innerWidth / 2;
+		return Math.min(max, Math.max(min, rawX));
+	}
+	function cancelTaskTipHide() {
+		if (taskTipHideTimer !== null) {
+			clearTimeout(taskTipHideTimer);
+			taskTipHideTimer = null;
+		}
+	}
+	// Lookup keyed by task name. tasksMeta entries are 1:1 with the
+	// benchmark's task list, but defensive map-lookup keeps it robust
+	// if the backend ever returns a different order or omits entries.
+	let taskMetaByName = $derived.by(() => {
+		const m = new Map<string, (typeof summary.tasksMeta)[number]>();
+		for (const t of summary.tasksMeta ?? []) m.set(t.name, t);
+		return m;
+	});
+	function showTaskTip(e: PointerEvent | FocusEvent, taskName: string) {
+		cancelTaskTipHide();
+		const meta = taskMetaByName.get(taskName);
+		const el = e.currentTarget as HTMLElement;
+		const r = el.getBoundingClientRect();
+		taskTip = {
+			visible: true,
+			title: taskName,
+			type: meta?.type ? humanizeType(meta.type) : '',
+			description: meta?.description ?? '',
+			x: clampTaskTipX(r.left + r.width / 2),
+			y: r.bottom
+		};
+	}
+	function hideTaskTip() {
+		cancelTaskTipHide();
+		taskTipHideTimer = setTimeout(() => {
+			taskTip = { ...taskTip, visible: false };
+			taskTipHideTimer = null;
+		}, 200);
+	}
+	function keepTaskTip() {
+		cancelTaskTipHide();
+	}
+
 	// Task columns are rendered A→Z so wide leaderboards are scannable.
 	// API ordering is whatever the benchmark registered; alphabetising
 	// here keeps it stable as the user filters the task set.
@@ -173,8 +246,15 @@
 						</th>
 						{#each sortedTasks as task (task)}
 							{@const k = `task:${task}` as SortKey}
-							<th class="tbl-num" aria-sort={ariaSort(k)}>
-								<button class="tbl-sort" onclick={() => clickSort(k)} title={task}>
+							<th
+								class="tbl-num"
+								aria-sort={ariaSort(k)}
+								onpointerenter={(e) => showTaskTip(e, task)}
+								onpointerleave={hideTaskTip}
+								onfocusin={(e) => showTaskTip(e, task)}
+								onfocusout={hideTaskTip}
+							>
+								<button class="tbl-sort" onclick={() => clickSort(k)}>
 									<span class="lbl">{task}</span>
 									<span class="tbl-sort-ind" class:on={sortKey === k}>{sortIcon(k)}</span>
 								</button>
@@ -278,6 +358,25 @@
 			{trainTip.text}
 		</div>
 	{/if}
+
+	{#if taskTip.visible}
+		<div
+			class="task-tip"
+			role="tooltip"
+			style:left="{taskTip.x}px"
+			style:top="{taskTip.y}px"
+			onpointerenter={keepTaskTip}
+			onpointerleave={hideTaskTip}
+		>
+			<strong class="task-tip-title">{taskTip.title}</strong>
+			{#if taskTip.type}<span class="task-tip-type">{taskTip.type}</span>{/if}
+			{#if taskTip.description}
+				<span class="task-tip-body"><MarkdownText text={taskTip.description} /></span>
+			{:else}
+				<span class="task-tip-empty">No description available.</span>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -335,5 +434,52 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 160px;
+	}
+	/* Column-header tip — same dark-portal treatment as the trained-on
+	   warning bubble and SummaryTable's column tip. Fixed-position so
+	   it escapes the table's overflow + sticky-header stacking context. */
+	.task-tip {
+		position: fixed;
+		transform: translate(-50%, 6px);
+		max-width: 320px;
+		min-width: 220px;
+		padding: 10px 12px;
+		font-family: var(--font-sans);
+		font-size: 12px;
+		font-weight: 400;
+		line-height: 1.5;
+		color: #f1f3f5;
+		background: #1f2329;
+		border-radius: 8px;
+		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
+		text-align: left;
+		white-space: normal;
+		z-index: 1000;
+		pointer-events: auto;
+	}
+	.task-tip-title {
+		display: block;
+		font-size: 12px;
+		font-weight: 700;
+		color: #f1f3f5;
+		margin-bottom: 2px;
+		word-break: break-word;
+	}
+	.task-tip-type {
+		display: block;
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--primary);
+		margin-bottom: 6px;
+	}
+	.task-tip-body {
+		display: block;
+	}
+	.task-tip-empty {
+		display: block;
+		color: #9aa3ad;
+		font-style: italic;
 	}
 </style>

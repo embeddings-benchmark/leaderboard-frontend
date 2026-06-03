@@ -106,7 +106,7 @@
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: #ff9b6f;
+		color: var(--primary);
 		margin-bottom: 4px;
 	}
 	dl {
