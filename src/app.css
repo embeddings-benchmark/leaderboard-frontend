@@ -5,15 +5,19 @@
 	/* Raw palettes — keep both per token so we can compose with light-dark()
 	   and so a hard-pinned theme (data-theme="light"/"dark") still has access
 	   to either side when needed. */
-	--bg-light: #f6f5f1;
+	/* Light theme leans toward off-white / neutral grey now that the
+	   accent is a cool blue. The previous warm cream (#f6f5f1) clashed
+	   with blue. Surfaces stay pure white so cards still read against
+	   the page background. */
+	--bg-light: #fbfcfd;
 	--bg-dark: #14161b;
 	--surface-light: #fff;
 	--surface-dark: #1d1f26;
-	--surface-muted-light: #f2f0ea;
+	--surface-muted-light: #f1f3f6;
 	--surface-muted-dark: #23262e;
-	--border-light: #e4e1d8;
+	--border-light: #e3e6ec;
 	--border-dark: #2d313a;
-	--border-strong-light: #cdc9bd;
+	--border-strong-light: #c6cbd4;
 	--border-strong-dark: #3f4452;
 	--text-light: #1b1f24;
 	--text-dark: #ecedf2;
@@ -23,26 +27,34 @@
 	--text-subtle-dark: #8d96a4;
 	--ink-strong-light: #0e1116;
 	--ink-strong-dark: #f7f9fd;
-	--primary-light: #ff6f3c;
-	/* Dark theme pivots the accent from coral → azure. Orange on a dark
-	   surface reads as a warning ("this is hot"), while a clear sky blue
-	   keeps the same visual weight without the alarm-bell connotation. */
+	/* Light theme uses the same blue family as dark, just one stop
+	   deeper so it reads with comparable contrast on a warm-paper
+	   surface. */
+	--primary-light: #2563eb;
 	--primary-dark: #5da9ff;
-	--primary-strong-light: #d34d1c;
+	--primary-strong-light: #1d4ed8;
 	--primary-strong-dark: #88c2ff;
-	--primary-soft-light: #fff0e8;
+	--primary-soft-light: #e6efff;
 	--primary-soft-dark: #1a2839;
+	/* Separate tint used as the source colour for table heat-shading.
+	   Light mode uses a softer sky-blue (saturation pulled back) so the
+	   dense grid of tinted cells doesn't compete with the action accent;
+	   dark mode keeps the same azure as --primary so cells still pop on
+	   the deep surface. Hooked up via the `--heat` live token below and
+	   consumed by `heat()` in lib/format.ts via var(--heat). */
+	--heat-light: #7da7e8;
+	--heat-dark: #5da9ff;
 	--link-light: #2563eb;
 	--link-dark: #88c2ff;
-	--row-alt-light: #fafaf6;
+	--row-alt-light: #f8f9fb;
 	--row-alt-dark: #1f2229;
-	--row-hover-light: #efeee8;
+	--row-hover-light: #eaedf3;
 	--row-hover-dark: #2a2d36;
 	--shadow-sm-light: 0 1px 2px rgb(15, 23, 42, 0.04);
 	--shadow-sm-dark: 0 1px 2px rgb(0, 0, 0, 0.4);
 	/* Top-bar background — translucent so the page surface peeks through the
 	   blur. Pair per theme rather than mixing the same alpha both ways. */
-	--bar-bg-light: rgb(252, 250, 245, 0.78);
+	--bar-bg-light: rgb(255, 255, 255, 0.82);
 	--bar-bg-dark: rgb(20, 22, 27, 0.78);
 
 	/* Live tokens — chosen by the browser based on the resolved color-scheme
@@ -59,6 +71,7 @@
 	--primary: light-dark(var(--primary-light), var(--primary-dark));
 	--primary-strong: light-dark(var(--primary-strong-light), var(--primary-strong-dark));
 	--primary-soft: light-dark(var(--primary-soft-light), var(--primary-soft-dark));
+	--heat: light-dark(var(--heat-light), var(--heat-dark));
 	--link: light-dark(var(--link-light), var(--link-dark));
 	--row-alt: light-dark(var(--row-alt-light), var(--row-alt-dark));
 	--row-hover: light-dark(var(--row-hover-light), var(--row-hover-dark));
@@ -121,6 +134,7 @@
 		--primary: var(--primary-light);
 		--primary-strong: var(--primary-strong-light);
 		--primary-soft: var(--primary-soft-light);
+		--heat: var(--heat-light);
 		--link: var(--link-light);
 		--row-alt: var(--row-alt-light);
 		--row-hover: var(--row-hover-light);
@@ -141,6 +155,7 @@
 			--primary: var(--primary-dark);
 			--primary-strong: var(--primary-strong-dark);
 			--primary-soft: var(--primary-soft-dark);
+			--heat: var(--heat-dark);
 			--link: var(--link-dark);
 			--row-alt: var(--row-alt-dark);
 			--row-hover: var(--row-hover-dark);
@@ -161,6 +176,7 @@
 		--primary: var(--primary-dark);
 		--primary-strong: var(--primary-strong-dark);
 		--primary-soft: var(--primary-soft-dark);
+		--heat: var(--heat-dark);
 		--link: var(--link-dark);
 		--row-alt: var(--row-alt-dark);
 		--row-hover: var(--row-hover-dark);

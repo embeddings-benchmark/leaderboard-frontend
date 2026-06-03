@@ -150,7 +150,7 @@ describe('heat', () => {
 	it('cell at the column max hits ~55% tint', () => {
 		const style = heat(0.8, 0.5, 0.8);
 		expect(style).toMatch(/55%/);
-		expect(style).toContain('var(--primary)');
+		expect(style).toContain('var(--heat)');
 	});
 
 	it('cell at the column min renders un-tinted', () => {

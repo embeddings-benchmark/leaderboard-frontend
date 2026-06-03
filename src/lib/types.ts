@@ -122,6 +122,10 @@ export interface SummaryRow {
 	meanPrivate?: number | null;
 	scoresByTaskType: Record<string, number>;
 	scoresByTask: Record<string, number>;
+	// Tasks (within this benchmark) the model declares in its training
+	// datasets — used by PerTaskTab to surface a ⚠️ next to scores that
+	// the model isn't zero-shot on.
+	trainedOnTasks?: string[];
 }
 
 export interface BenchmarkSummary {

@@ -145,7 +145,11 @@ export function heat(score: number | null | undefined, min: number, max: number)
 	const ratio = Math.max(0, Math.min(1, (score - min) / (max - min)));
 	const pct = Math.round(ratio * 55);
 	if (pct === 0) return '';
-	return `background-color: color-mix(in srgb, var(--primary) ${pct}%, transparent);`;
+	// `--heat` (defined in app.css) is a lighter, sky-blue source colour
+	// in light mode and the same azure as --primary in dark mode. Using
+	// it instead of --primary keeps action-blue elements vivid while the
+	// dense grid of tinted cells stays calm.
+	return `background-color: color-mix(in srgb, var(--heat) ${pct}%, transparent);`;
 }
 
 /**

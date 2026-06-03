@@ -143,12 +143,13 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 100vh;
-		/* Light-mode: warm gradient + faint dark-noise grain for "paper" feel.
-		   Dark-mode override below swaps the grain to a light-on-dark tint so
-		   it stays subtle without disappearing or muddying. */
+		/* Light-mode: a barely-there dark-noise grain over the cool
+		   off-white --bg. The previous warm peach gradient pulled the
+		   page into amber territory, which fought the blue accent now
+		   that the theme has pivoted away from coral. Dark mode keeps
+		   its own light-on-dark grain via the override below. */
 		background:
-			linear-gradient(180deg, rgb(255, 247, 240, 0.6) 0%, transparent 320px),
-			url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+			url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.025 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
 			var(--bg);
 	}
 	/* Dark variant: drop the warm gradient and use a lighter grain mask. */

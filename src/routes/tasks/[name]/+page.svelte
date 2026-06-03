@@ -128,6 +128,81 @@
 
 	let multipleBenchmarks = $derived(benchmarks.length > 1);
 
+	// Instant tooltip for the `info-dot` (?) buttons in the spec list.
+	// Same fixed-portal pattern as SummaryTable's column tips and
+	// PerTaskTab's trained-on warnings — appears the moment the cursor
+	// enters, no browser `title` delay, no CSS transition. Hides on a
+	// 200 ms debounce that the tip's own pointerenter cancels.
+	//
+	// Each info-dot keys into ``INFO_TIPS`` via ``data-tip-key`` rather
+	// than carrying a free-form text blob. That lets us render the tip
+	// body as a real definition list (with bolded terms) instead of
+	// the previous prose-with-backticks string.
+	type InfoTip = {
+		title: string;
+		items: ReadonlyArray<readonly [term: string, definition: string]>;
+	};
+	const INFO_TIPS: Record<string, InfoTip> = {
+		annotations: {
+			title: 'Who produced the labels',
+			items: [
+				['expert-annotated', 'domain experts'],
+				['human-annotated', 'e.g. crowd workers'],
+				['derived', 'labels extracted from existing structure'],
+				['LM-generated', 'labels produced by a language model']
+			]
+		},
+		'sample-creation': {
+			title: 'How the text samples were produced',
+			items: [
+				['found', 'harvested from existing sources'],
+				['created', 'written specifically for the dataset'],
+				['machine-translated', 'automatically translated (optionally “and verified” by humans)'],
+				['LM-generated', 'synthesised by a model']
+			]
+		}
+	};
+
+	const INFO_TIP_MAX_WIDTH = 360;
+	const INFO_TIP_EDGE = 8;
+	type InfoTipState = { visible: boolean; tip: InfoTip | null; x: number; y: number };
+	let infoTip = $state<InfoTipState>({ visible: false, tip: null, x: 0, y: 0 });
+	let infoTipHideTimer: ReturnType<typeof setTimeout> | null = null;
+	function clampInfoX(rawX: number): number {
+		if (typeof window === 'undefined') return rawX;
+		const half = INFO_TIP_MAX_WIDTH / 2;
+		const min = INFO_TIP_EDGE + half;
+		const max = window.innerWidth - INFO_TIP_EDGE - half;
+		if (min > max) return window.innerWidth / 2;
+		return Math.min(max, Math.max(min, rawX));
+	}
+	function cancelInfoTipHide() {
+		if (infoTipHideTimer !== null) {
+			clearTimeout(infoTipHideTimer);
+			infoTipHideTimer = null;
+		}
+	}
+	function showInfoTip(e: PointerEvent | FocusEvent) {
+		cancelInfoTipHide();
+		const el = e.currentTarget as HTMLElement;
+		const tip = INFO_TIPS[el.dataset.tipKey ?? ''] ?? null;
+		if (!tip) return;
+		const r = el.getBoundingClientRect();
+		infoTip = {
+			visible: true,
+			tip,
+			x: clampInfoX(r.left + r.width / 2),
+			y: r.bottom
+		};
+	}
+	function hideInfoTip() {
+		cancelInfoTipHide();
+		infoTipHideTimer = setTimeout(() => {
+			infoTip = { ...infoTip, visible: false };
+			infoTipHideTimer = null;
+		}, 200);
+	}
+
 	function buildCsv() {
 		const headers = ['Rank', 'Model', 'Mean scores', ...subsets];
 		const pct = (v: number | null | undefined) => (v == null ? null : (v * 100).toFixed(2));
@@ -248,8 +323,11 @@
 									type="button"
 									class="info-dot"
 									aria-label="What does this mean?"
-									title="Who produced the labels. `expert-annotated` = domain experts; `human-annotated` = e.g. crowd workers; `derived` = labels extracted from existing structure; `LM-generated` = labels produced by a language model."
-									>?</button
+									data-tip-key="annotations"
+									onpointerenter={showInfoTip}
+									onpointerleave={hideInfoTip}
+									onfocusin={showInfoTip}
+									onfocusout={hideInfoTip}>?</button
 								>
 							</dt>
 							<dd>{task.meta.annotationsCreators}</dd>
@@ -275,8 +353,11 @@
 									type="button"
 									class="info-dot"
 									aria-label="What does this mean?"
-									title="How the text samples were produced. `found` = harvested from existing sources; `created` = written specifically for the dataset; `machine-translated` = automatically translated (optionally `and verified` by humans); `LM-generated` = synthesised by a model."
-									>?</button
+									data-tip-key="sample-creation"
+									onpointerenter={showInfoTip}
+									onpointerleave={hideInfoTip}
+									onfocusin={showInfoTip}
+									onfocusout={hideInfoTip}>?</button
 								>
 							</dt>
 							<dd>{task.meta.sampleCreation}</dd>
@@ -354,6 +435,25 @@
 		</section>
 	{/if}
 </div>
+
+{#if infoTip.visible && infoTip.tip}
+	<div
+		class="info-tip"
+		role="tooltip"
+		style:left="{infoTip.x}px"
+		style:top="{infoTip.y}px"
+		onpointerenter={cancelInfoTipHide}
+		onpointerleave={hideInfoTip}
+	>
+		<p class="info-tip-title">{infoTip.tip.title}</p>
+		<dl class="info-tip-list">
+			{#each infoTip.tip.items as [term, defn] (term)}
+				<dt><code>{term}</code></dt>
+				<dd>{defn}</dd>
+			{/each}
+		</dl>
+	</div>
+{/if}
 
 <ShareUrlButton />
 
@@ -645,8 +745,10 @@
 		border-radius: 4px;
 		color: var(--text);
 	}
-	/* Tiny inline (?) hint button that surfaces the explanation via the
-	   browser-native title tooltip — universal support, no JS / portals. */
+	/* Tiny inline (?) hint button. Hover surfaces the explanation in
+	   the fixed-positioned `.info-tip` portal below — same pattern as
+	   SummaryTable's column tips, so the bubble appears instantly
+	   without the browser-native `title` attribute's ~700 ms delay. */
 	.info-dot {
 		all: unset;
 		display: inline-flex;
@@ -668,6 +770,69 @@
 		color: var(--ink-strong, var(--text));
 		background: var(--primary-soft);
 		border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+	}
+	/* Portal tip body — fixed position so it escapes any ancestor
+	   overflow / stacking context. Pointer-events: auto + the
+	   matching `cancelInfoTipHide` on enter lets the user mouse onto
+	   the bubble (e.g. to select text) without it vanishing. Body is
+	   structured as a definition list: each row is a `<code>` term
+	   followed by its plain-prose explanation. */
+	.info-tip {
+		position: fixed;
+		transform: translate(-50%, 6px);
+		max-width: 360px;
+		padding: 10px 14px;
+		font-family: var(--font-sans);
+		font-size: 12px;
+		font-weight: 400;
+		line-height: 1.45;
+		color: #f1f3f5;
+		background: #1f2329;
+		border-radius: 6px;
+		box-shadow: 0 8px 18px rgb(15, 23, 42, 0.22);
+		text-align: left;
+		white-space: normal;
+		z-index: 1000;
+		pointer-events: auto;
+	}
+	.info-tip-title {
+		margin: 0 0 6px;
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--primary);
+	}
+	/* Two-column grid: term pills (sized to their longest content) on
+	   the left, definitions filling the remaining track on the right.
+	   Definitions wrap inside their own column, so a long entry like
+	   "machine-translated …" can flow over several lines without
+	   pushing the term to a separate row above it. */
+	.info-tip-list {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		column-gap: 10px;
+		row-gap: 6px;
+		margin: 0;
+		padding: 0;
+	}
+	.info-tip-list dt {
+		margin: 0;
+	}
+	.info-tip-list dt code {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		padding: 1px 6px;
+		background: rgb(255, 255, 255, 0.08);
+		border-radius: 4px;
+		color: #f1f3f5;
+		white-space: nowrap;
+	}
+	.info-tip-list dd {
+		margin: 0;
+		min-width: 0;
+		color: #c4cad2;
+		overflow-wrap: anywhere;
 	}
 	@media (max-width: 720px) {
 		.spec-list {

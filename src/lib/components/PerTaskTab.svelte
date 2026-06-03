@@ -59,6 +59,54 @@
 		return (score * 100).toFixed(2);
 	}
 
+	// Trained-on warning tooltip — mirrors the SummaryTable column-tip
+	// pattern (fixed-position portal anchored to the icon's bounding
+	// rect). Replaces the previous CSS ::after bubble which felt slow
+	// because anchor-positioning re-layout + the transition combined
+	// add perceptible latency. The portal is a single element shared
+	// across every ⚠️ in the table, with no transition: shown the
+	// moment the cursor enters, hidden 200 ms after it leaves so the
+	// user has time to mouse onto it if needed.
+	const TRAIN_TIP_MAX_WIDTH = 260;
+	const TRAIN_TIP_EDGE = 8;
+	type TrainTipState = { visible: boolean; text: string; x: number; y: number };
+	let trainTip = $state<TrainTipState>({ visible: false, text: '', x: 0, y: 0 });
+	let trainTipHideTimer: ReturnType<typeof setTimeout> | null = null;
+	function clampX(rawX: number): number {
+		if (typeof window === 'undefined') return rawX;
+		const half = TRAIN_TIP_MAX_WIDTH / 2;
+		const min = TRAIN_TIP_EDGE + half;
+		const max = window.innerWidth - TRAIN_TIP_EDGE - half;
+		if (min > max) return window.innerWidth / 2;
+		return Math.min(max, Math.max(min, rawX));
+	}
+	function cancelTrainTipHide() {
+		if (trainTipHideTimer !== null) {
+			clearTimeout(trainTipHideTimer);
+			trainTipHideTimer = null;
+		}
+	}
+	function showTrainTip(e: PointerEvent | FocusEvent) {
+		cancelTrainTipHide();
+		const el = e.currentTarget as HTMLElement;
+		const text = el.dataset.tip ?? '';
+		if (!text) return;
+		const r = el.getBoundingClientRect();
+		trainTip = {
+			visible: true,
+			text,
+			x: clampX(r.left + r.width / 2),
+			y: r.bottom
+		};
+	}
+	function hideTrainTip() {
+		cancelTrainTipHide();
+		trainTipHideTimer = setTimeout(() => {
+			trainTip = { ...trainTip, visible: false };
+			trainTipHideTimer = null;
+		}, 200);
+	}
+
 	// Task columns are rendered A→Z so wide leaderboards are scannable.
 	// API ordering is whatever the benchmark registered; alphabetising
 	// here keeps it stable as the user filters the task set.
@@ -174,12 +222,23 @@
 								{/if}
 							</td>
 							{#each sortedTasks as task (task)}
+								{@const trained = row.trainedOnTasks?.includes(task) ?? false}
 								<td
 									class="tbl-num"
 									class:tbl-best={row.scoresByTask[task] === best[task]}
+									class:trained-on={trained}
 									style={heat(row.scoresByTask[task], worst[task], best[task])}
 								>
-									{fmt(row.scoresByTask[task])}
+									{fmt(row.scoresByTask[task])}{#if trained}<button
+											type="button"
+											class="trained-warn"
+											data-tip="Model lists this task in its training datasets — score is not zero-shot."
+											aria-label="Trained on this task"
+											onpointerenter={showTrainTip}
+											onpointerleave={hideTrainTip}
+											onfocusin={showTrainTip}
+											onfocusout={hideTrainTip}>⚠️</button
+										>{/if}
 								</td>
 							{/each}
 						</tr>
@@ -190,6 +249,19 @@
 	{/if}
 
 	<ModelHoverPortal bind:this={tipPortal} />
+
+	{#if trainTip.visible}
+		<div
+			class="train-tip"
+			role="tooltip"
+			style:left="{trainTip.x}px"
+			style:top="{trainTip.y}px"
+			onpointerenter={cancelTrainTipHide}
+			onpointerleave={hideTrainTip}
+		>
+			{trainTip.text}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -202,6 +274,47 @@
 	}
 	/* Task column headers can be long ("AmazonReviewsClassification…") — clip
 	   them so they don't push the column impossibly wide. */
+	/* Trained-on warning sits inline after the score number with a small
+	   gap so it doesn't crowd the digits. The cell already keeps its
+	   heat-shaded background, so the ⚠️ is purely additive. The
+	   tooltip itself lives in a fixed-positioned portal rendered as a
+	   sibling of `.tbl-scroll` (see `.train-tip` below) — JS sets x/y
+	   from the icon's getBoundingClientRect on pointerenter, so the
+	   bubble appears instantly without re-layout cost or browser
+	   `title` delay, and isn't clipped by the table's overflow-x. */
+	.trained-warn {
+		/* Reset <button> chrome so the inline ⚠️ icon stays purely
+		   typographic — it's a button only so a static role / tabindex
+		   isn't needed for the hover-tooltip handlers. */
+		all: unset;
+		margin-left: 4px;
+		font-size: 11px;
+		line-height: 1;
+		cursor: help;
+	}
+	.trained-warn:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 1px;
+		border-radius: 3px;
+	}
+	.train-tip {
+		position: fixed;
+		transform: translate(-50%, 6px);
+		max-width: 260px;
+		padding: 6px 10px;
+		font-family: var(--font-sans);
+		font-size: 11px;
+		font-weight: 500;
+		line-height: 1.4;
+		color: #f1f3f5;
+		background: #1f2329;
+		border-radius: 6px;
+		box-shadow: 0 8px 18px rgb(15, 23, 42, 0.22);
+		text-align: left;
+		white-space: normal;
+		z-index: 1000;
+		pointer-events: auto;
+	}
 	.lbl {
 		overflow: hidden;
 		text-overflow: ellipsis;
