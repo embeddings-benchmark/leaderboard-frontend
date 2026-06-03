@@ -62,6 +62,46 @@
 		if (!visited.has(activeTab)) visited.add(activeTab);
 	});
 
+	// Pre-mount the heavy table panes once the active tab + filteredSummary
+	// have rendered. They're created into `content-visibility: hidden` so
+	// the layout/paint cost lands during idle time rather than when the
+	// user clicks the tab. Combined with the cached-pane swap below, the
+	// per-task / per-language tabs feel instant on first click.
+	const PREWARM: TabId[] = ['perf_task', 'perf_language'];
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		if (!filteredSummary) return;
+		const pending = PREWARM.filter((t) => !visited.has(t));
+		if (pending.length === 0) return;
+		// Add one tab per idle slice so we never block the main thread for the
+		// full pre-mount budget. Skip if the user already navigates away.
+		let cancelled = false;
+		let handle: number | null = null;
+		const idle = (cb: () => void): number =>
+			'requestIdleCallback' in window
+				? window.requestIdleCallback(cb, { timeout: 2000 })
+				: (setTimeout(cb, 250) as unknown as number);
+		const cancel = (id: number): void => {
+			if ('cancelIdleCallback' in window) window.cancelIdleCallback(id);
+			else clearTimeout(id);
+		};
+		function next() {
+			if (cancelled) return;
+			const tab = pending.shift();
+			if (!tab) return;
+			handle = idle(() => {
+				if (cancelled) return;
+				visited.add(tab);
+				next();
+			}) as number;
+		}
+		next();
+		return () => {
+			cancelled = true;
+			if (handle !== null) cancel(handle);
+		};
+	});
+
 	// Bound to the live PerLanguageTab instance so the page-level toolbar
 	// can call its `buildCsv()` for the Download CSV button — keeps the
 	// download next to the search bar like the other tabs, instead of
@@ -201,7 +241,14 @@
 					<div class="title-block">
 						{#if benchmark.icon}
 							{#if isIconUrl(benchmark.icon)}
-								<img class="hero-icon" src={apiUrl(benchmark.icon)} alt="" />
+								<img
+									class="hero-icon"
+									src={apiUrl(benchmark.icon)}
+									alt="{benchmark.displayName} icon"
+									width="32"
+									height="32"
+									fetchpriority="high"
+								/>
 							{:else}
 								<span class="hero-icon hero-icon-text" aria-hidden="true">{benchmark.icon}</span>
 							{/if}
@@ -292,12 +339,17 @@
 						</div>
 					{/if}
 					{#if visited.has('perf_task')}
-						<div class="tab-pane" class:active={activeTab === 'perf_task'}>
+						<!-- `data-prepaint`: keep the pane in the paint pipeline while hidden
+						     (clip-path: inset(100%) below). Browser caches the painted layer
+						     so first click after the idle pre-mount is nearly instant. Only
+						     applied to table panes — Plotly tabs need a real-size container
+						     on mount, so they stay on the default `content-visibility: hidden`. -->
+						<div class="tab-pane" class:active={activeTab === 'perf_task'} data-prepaint>
 							<PerTaskTab summary={filteredSummary} />
 						</div>
 					{/if}
 					{#if visited.has('perf_language')}
-						<div class="tab-pane" class:active={activeTab === 'perf_language'}>
+						<div class="tab-pane" class:active={activeTab === 'perf_language'} data-prepaint>
 							<PerLanguageTab summary={filteredSummary} bind:this={perLanguageTab} />
 						</div>
 					{/if}
@@ -472,15 +524,40 @@
 
 	.tab-body {
 		padding-top: 14px;
+		position: relative;
 	}
-	/* Inactive panes stay mounted but hidden — see the visited-set comment
-	   above. Using `display: none` (instead of `hidden`) means the layout
-	   collapses cleanly without stealing keyboard focus or scrollable space. */
+	/* Default: `content-visibility: hidden` keeps inactive panes' rendered
+	   state cached without taking layout space. First activation pays the
+	   paint cost; subsequent switches restore from cache. */
 	.tab-pane {
-		display: none;
+		content-visibility: hidden;
+		contain-intrinsic-size: 0;
 	}
 	.tab-pane.active {
-		display: block;
+		content-visibility: visible;
+		contain-intrinsic-size: none;
+	}
+	/* Heavy table panes opt into pre-paint. While inactive they sit
+	   absolutely positioned over .tab-body, fully laid out + painted,
+	   but visually clipped to a 0×0 box — the browser's painted layer
+	   stays warm, so when the user clicks the tab the swap is just a
+	   `clip-path: none` (no re-layout, no re-paint).
+	   A grid-stack + opacity variant was measured ~35% faster on
+	   Firefox but forced every pane to contribute to .tab-body's
+	   width/height — that made each tab inherit the widest pane's
+	   table size, ballooning the page on summary/per-language. */
+	.tab-pane[data-prepaint] {
+		content-visibility: visible;
+		contain-intrinsic-size: none;
+		position: absolute;
+		inset: 0;
+		clip-path: inset(100%);
+		pointer-events: none;
+	}
+	.tab-pane[data-prepaint].active {
+		position: static;
+		clip-path: none;
+		pointer-events: auto;
 	}
 	.toolbar-row {
 		display: flex;

@@ -110,6 +110,43 @@
 		return list;
 	});
 
+	// Progressive render — same pattern as /tasks. Debounce the grow
+	// kick-off so the storm of filter-set seeding during data load
+	// doesn't permanently reset visibleCount to the initial chunk.
+	const INITIAL_CHUNK = 60;
+	const CHUNK_STEP = 200;
+	let visibleCount = $state(INITIAL_CHUNK);
+	let growVersion = 0;
+	let lastFilteredSignature = '';
+	let kickoffTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		const total = filtered.length;
+		// Signature catches real filter changes; lets our own visibleCount
+		// writes re-fire the effect harmlessly (bail on same signature).
+		const signature = `${total}|${filtered[0]?.name ?? ''}|${filtered[total - 1]?.name ?? ''}`;
+		if (signature === lastFilteredSignature) return;
+		lastFilteredSignature = signature;
+		const myVersion = ++growVersion;
+		visibleCount = Math.min(INITIAL_CHUNK, total);
+		if (visibleCount >= total) return;
+		if (kickoffTimer) clearTimeout(kickoffTimer);
+		kickoffTimer = setTimeout(() => {
+			kickoffTimer = null;
+			if (myVersion !== growVersion) return;
+			const idle = (cb: () => void): number =>
+				'requestIdleCallback' in window
+					? window.requestIdleCallback(cb, { timeout: 500 })
+					: (setTimeout(cb, 0) as unknown as number);
+			const grow = () => {
+				if (myVersion !== growVersion) return;
+				visibleCount = Math.min(visibleCount + CHUNK_STEP, total);
+				if (visibleCount < total) idle(grow);
+			};
+			idle(grow);
+		}, 80);
+	});
+	let visibleModels = $derived(filtered.slice(0, visibleCount));
+
 	function fmtParams(b: number): string {
 		if (!b) return '—';
 		return b >= 1 ? `${b.toFixed(1)}B` : `${(b * 1000).toFixed(0)}M`;
@@ -175,7 +212,7 @@
 			<p class="empty">No models match those filters.</p>
 		{:else}
 			<div class="grid">
-				{#each filtered as m (m.name)}
+				{#each visibleModels as m (m.name)}
 					<a
 						class="card"
 						href={resolve('/models/[name]', { name: slug(m.name) })}

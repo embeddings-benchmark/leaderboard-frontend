@@ -37,6 +37,31 @@ async function http<T>(path: string): Promise<T> {
 	return (await res.json()) as T;
 }
 
+// Session-scoped in-memory cache. Re-opening /tasks, /models, or any
+// already-seen benchmark page becomes a synchronous cache hit — no network,
+// no JSON parse. We dedupe in-flight requests so a quick double-trigger (e.g.
+// effect re-fire from a filter change) doesn't fire two parallel fetches.
+const responseCache = new Map<string, unknown>();
+const inflight = new Map<string, Promise<unknown>>();
+
+async function cachedHttp<T>(path: string): Promise<T> {
+	if (responseCache.has(path)) return responseCache.get(path) as T;
+	const existing = inflight.get(path);
+	if (existing) return existing as Promise<T>;
+	const p = http<T>(path)
+		.then((v) => {
+			responseCache.set(path, v);
+			inflight.delete(path);
+			return v;
+		})
+		.catch((e) => {
+			inflight.delete(path);
+			throw e;
+		});
+	inflight.set(path, p as Promise<unknown>);
+	return p;
+}
+
 // ----------------------------------------------------------------------------
 // ModelMeta org/displayName enrichment
 //
@@ -81,7 +106,7 @@ export async function loadBenchmarkMenu(): Promise<MenuEntry[]> {
 		if (!USE_MOCK) throw noApiError('loadBenchmarkMenu');
 		return BENCHMARK_MENU;
 	}
-	return http<MenuEntry[]>('/benchmarks/menu');
+	return cachedHttp<MenuEntry[]>('/benchmarks/menu');
 }
 
 export async function loadBenchmark(name: string): Promise<Benchmark> {
@@ -91,7 +116,7 @@ export async function loadBenchmark(name: string): Promise<Benchmark> {
 		if (!benchmark) throw new Error(`Unknown benchmark: ${name}`);
 		return benchmark;
 	}
-	return http<Benchmark>(`/benchmarks/${encodeURIComponent(name)}`);
+	return cachedHttp<Benchmark>(`/benchmarks/${encodeURIComponent(name)}`);
 }
 
 export async function loadSummary(benchmarkName: string): Promise<BenchmarkSummary> {
@@ -103,7 +128,7 @@ export async function loadSummary(benchmarkName: string): Promise<BenchmarkSumma
 	// /models/{name}/scores). The backend keeps `/summary` as a
 	// deprecated alias for one frontend deploy window.
 	return enrichSummary(
-		await http<BenchmarkSummary>(`/benchmarks/${encodeURIComponent(benchmarkName)}/scores`)
+		await cachedHttp<BenchmarkSummary>(`/benchmarks/${encodeURIComponent(benchmarkName)}/scores`)
 	);
 }
 
@@ -134,7 +159,7 @@ export async function loadTasks(filters: TaskFilters = {}): Promise<TaskMeta[]> 
 		if (!USE_MOCK) throw noApiError('loadTasks');
 		return buildMockSummary(DEFAULT_BENCHMARK_NAME).tasksMeta;
 	}
-	return http<TaskMeta[]>(`/tasks${buildQuery(filters as Record<string, unknown>)}`);
+	return cachedHttp<TaskMeta[]>(`/tasks${buildQuery(filters as Record<string, unknown>)}`);
 }
 
 export async function loadTask(name: string): Promise<TaskMeta> {
@@ -144,7 +169,7 @@ export async function loadTask(name: string): Promise<TaskMeta> {
 		if (!meta) throw new Error(`Unknown task: ${name}`);
 		return meta;
 	}
-	return http<TaskMeta>(`/tasks/${encodeURIComponent(name)}`);
+	return cachedHttp<TaskMeta>(`/tasks/${encodeURIComponent(name)}`);
 }
 
 export async function loadTaskScores(name: string): Promise<TaskScores> {
@@ -166,7 +191,9 @@ export async function loadTaskScores(name: string): Promise<TaskScores> {
 		rows.forEach((r, i) => (r.rank = i + 1));
 		return { task: meta, benchmarks: [summary.benchmarkName], subsets: [], rows };
 	}
-	return enrichTaskScores(await http<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`));
+	return enrichTaskScores(
+		await cachedHttp<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`)
+	);
 }
 
 export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[]> {
@@ -174,7 +201,9 @@ export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[
 		if (!USE_MOCK) throw noApiError('loadModels');
 		return buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.map((r) => r.model);
 	}
-	const out = await http<ModelMeta[]>(`/models${buildQuery(filters as Record<string, unknown>)}`);
+	const out = await cachedHttp<ModelMeta[]>(
+		`/models${buildQuery(filters as Record<string, unknown>)}`
+	);
 	for (const m of out) fillOrgAndDisplay(m);
 	return out;
 }
@@ -189,7 +218,7 @@ export async function loadModel(name: string): Promise<ModelMeta> {
 		return meta;
 	}
 	return fillOrgAndDisplay(
-		await http<ModelMeta>(`/models/${encodeURIComponent(name)}`)
+		await cachedHttp<ModelMeta>(`/models/${encodeURIComponent(name)}`)
 	) as ModelMeta;
 }
 
@@ -215,7 +244,9 @@ export async function loadModelScores(name: string): Promise<ModelScores> {
 			]
 		};
 	}
-	return enrichModelScores(await http<ModelScores>(`/models/${encodeURIComponent(name)}/scores`));
+	return enrichModelScores(
+		await cachedHttp<ModelScores>(`/models/${encodeURIComponent(name)}/scores`)
+	);
 }
 
 export { DEFAULT_BENCHMARK_NAME };

@@ -64,12 +64,23 @@
 <div class="shell">
 	<header class="bar">
 		<a class="brand" href={resolve('/')}>
-			<img class="brand-icon" src="{base}/dots-icon.png" alt="" />
+			<img class="brand-icon" src="{base}/dots-icon.png" alt="MTEB logo" width="22" height="22" />
 			<span class="name">MTEB</span>
 		</a>
 		<nav class="subnav" aria-label="Sections">
 			{#each NAV as item (item.href)}
-				<a href={item.href} class:active={item.match(path)} data-sveltekit-preload-data="hover">
+				<!-- `preload-code="eager"` parses the route module on first paint.
+				     `preload-data="hover"` keeps the data fetch on hover (SvelteKit
+				     only accepts hover/tap/off/false for data preload). Combined
+				     with `cachedHttp` the data cost is still amortised — the data
+				     fetch on hover populates the cache; subsequent SPA nav clicks
+				     find it warm. -->
+				<a
+					href={item.href}
+					class:active={item.match(path)}
+					data-sveltekit-preload-code="eager"
+					data-sveltekit-preload-data="hover"
+				>
 					<span>{item.label}</span>
 				</a>
 			{/each}

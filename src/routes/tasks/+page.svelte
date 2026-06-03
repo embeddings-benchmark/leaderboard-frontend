@@ -257,6 +257,49 @@
 		});
 		return list;
 	});
+
+	// Progressive render: paint the first chunk synchronously so the user
+	// sees content within one frame, then push the rest in idle slots so
+	// the heavy DOM creation never blocks the initial paint. The effect
+	// fires on every `filtered.length` change — including the rapid burst
+	// of filter-set seeding during data load. We coalesce restarts with a
+	// 80 ms debounce so a storm of mutations doesn't permanently reset
+	// the grow chain to its initial chunk.
+	const INITIAL_CHUNK = 60;
+	const CHUNK_STEP = 200;
+	let visibleCount = $state(INITIAL_CHUNK);
+	let growVersion = 0;
+	let lastFilteredSignature = '';
+	let kickoffTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		const total = filtered.length;
+		// Signature = length + first/last row name. Catches all real filter
+		// changes (count change OR same count but different rows from sort)
+		// while letting our own writes to `visibleCount` re-fire the effect
+		// harmlessly (signature unchanged → bail, chain keeps growing).
+		const signature = `${total}|${filtered[0]?.name ?? ''}|${filtered[total - 1]?.name ?? ''}`;
+		if (signature === lastFilteredSignature) return;
+		lastFilteredSignature = signature;
+		const myVersion = ++growVersion;
+		visibleCount = Math.min(INITIAL_CHUNK, total);
+		if (visibleCount >= total) return;
+		if (kickoffTimer) clearTimeout(kickoffTimer);
+		kickoffTimer = setTimeout(() => {
+			kickoffTimer = null;
+			if (myVersion !== growVersion) return;
+			const idle = (cb: () => void): number =>
+				'requestIdleCallback' in window
+					? window.requestIdleCallback(cb, { timeout: 500 })
+					: (setTimeout(cb, 0) as unknown as number);
+			const grow = () => {
+				if (myVersion !== growVersion) return;
+				visibleCount = Math.min(visibleCount + CHUNK_STEP, total);
+				if (visibleCount < total) idle(grow);
+			};
+			idle(grow);
+		}, 80);
+	});
+	let visibleTasks = $derived(filtered.slice(0, visibleCount));
 </script>
 
 <div class="app">
@@ -324,7 +367,7 @@
 				<p class="empty">No tasks match those filters.</p>
 			{:else}
 				<div class="grid" data-loaded>
-					{#each filtered as t (t.name)}
+					{#each visibleTasks as t (t.name)}
 						<a
 							class="card"
 							href={resolve('/tasks/[name]', { name: slug(t.name) })}

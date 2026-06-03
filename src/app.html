@@ -8,6 +8,35 @@
 		     The inline script below pins it to the user's saved choice (if any)
 		     before first paint to avoid a flash of un-themed content. -->
 		<meta name="color-scheme" content="light dark" />
+		<!-- Open the TLS handshake to the mteb FastAPI host (Hugging Face Space) in
+		     parallel with the HTML parse — every page makes at least one fetch
+		     against it, so the first request lands ~150 ms faster on cold hits. -->
+		<link rel="preconnect" href="https://mteb-leaderboardv2-api.hf.space" crossorigin />
+		<link rel="dns-prefetch" href="https://mteb-leaderboardv2-api.hf.space" />
+		<!-- Speculation Rules: prefetch the top-nav routes once the user shows
+		     intent (moderate eagerness = ~200 ms hover). Pairs with the
+		     `data-sveltekit-preload-data="hover"` on <body> which warms the
+		     SvelteKit route module + load functions. Together: same-origin
+		     code is ready, and the page's API responses land in the service
+		     cache (cachedHttp) on first activation. -->
+		<script type="speculationrules">
+			{
+				"prefetch": [
+					{
+						"where": {
+							"or": [
+								{ "href_matches": "/" },
+								{ "href_matches": "/benchmarks" },
+								{ "href_matches": "/models" },
+								{ "href_matches": "/tasks" },
+								{ "href_matches": "/compare" }
+							]
+						},
+						"eagerness": "moderate"
+					}
+				]
+			}
+		</script>
 		<script>
 			{
 				try {

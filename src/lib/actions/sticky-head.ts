@@ -5,7 +5,15 @@
  * main column. Browsers coerce overflow-y to `auto` too, which forms a scroll
  * container on both axes — `position: sticky` on `<thead>` therefore anchors
  * within the wrapper, not the page viewport, and scrolls out of view with
- * the wrapper. There is no CSS-only fix.
+ * the wrapper.
+ *
+ * Tried (and rejected) CSS-only alternative: `overflow-x: auto; overflow-y: clip`
+ * on `.tbl-scroll`. The spec says `clip` doesn't form a scroll container, so
+ * in theory the thead's sticky positioning would escape the wrapper and
+ * anchor to the viewport. In practice every browser still treats the wrapper
+ * as the sticky scroll context for both axes once `overflow-x: auto` is set,
+ * so the thead scrolls away with the wrapper just like before. Tested 2026-06,
+ * Chrome 137. Don't bother re-trying without verifying browsers fixed this.
  *
  * What: this action clones the `<thead>` into a `position: fixed` overlay
  * pinned at `top: STICKY_TOP_PX` (under the explorer top bar). It mirrors

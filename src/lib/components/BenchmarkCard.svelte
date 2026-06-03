@@ -22,7 +22,16 @@
 	<div class="card-head">
 		{#if b.icon}
 			{#if isIconUrl(b.icon)}
-				<img class="card-icon" src={apiUrl(b.icon)} alt="" loading="lazy" />
+				<img
+					class="card-icon"
+					src={apiUrl(b.icon)}
+					alt="{b.displayName} icon"
+					width="28"
+					height="28"
+					loading="lazy"
+					decoding="async"
+					fetchpriority="low"
+				/>
 			{:else}
 				<span class="card-icon card-icon-text" aria-hidden="true">{b.icon}</span>
 			{/if}

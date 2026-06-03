@@ -27,7 +27,9 @@
 
 .tbl-scroll {
 	/* `overflow-x: auto` contains wide tables; browsers coerce overflow-y to
-	   auto too, so sticky thead anchors here rather than the page viewport. */
+	   auto too, so sticky thead anchors here rather than the page viewport.
+	   The `stickyHead` action clones the thead into a viewport-pinned overlay
+	   to work around that — see src/lib/actions/sticky-head.ts. */
 	overflow-x: auto;
 	border: 1px solid var(--border);
 	border-radius: 8px;
@@ -74,26 +76,32 @@
 .tbl td {
 	padding: 8px 12px;
 }
-/* Heat-shading: cells that carry a `--heat-pct` custom prop (set inline
-   by `heat()` in lib/format.ts) get the shared `color-mix` background.
-   One CSS rule instead of N inline `background-color: color-mix(...)`
-   strings — the browser caches the property lookup. */
-.tbl td[style*='--heat-pct'] {
-	background-color: color-mix(in srgb, var(--heat) var(--heat-pct), transparent);
-}
 .tbl thead th {
 	background: var(--surface-muted);
 	color: var(--text-muted);
 	font-weight: 600;
 	padding: 0;
-	/* Sticky to the top of .tbl-scroll. Anchoring to the page viewport would
-	   require .tbl-scroll to NOT be a scroll container, which conflicts with
-	   keeping wide tables horizontally contained in the wrapper. */
+	/* Sticky inside .tbl-scroll (browsers coerce overflow-y to auto when
+	   overflow-x is auto). The `stickyHead` action provides the viewport-
+	   pinned overlay; this base sticky stays as a fallback. */
 	position: sticky;
 	top: 0;
 	z-index: 1;
 }
 
+/* Skip render/paint for off-screen rows on long tables (SummaryTable can
+   have 200+, PerTaskTab 200+ rows × 200+ columns). Browser materialises a
+   row only as it scrolls into view; `contain-intrinsic-size` gives a 36 px
+   placeholder so the scrollport height — and the sticky-head / floating
+   hscroll overlays measured against it — stay stable.
+
+   Note: this is on `<tr>`, which establishes its own table-row formatting
+   context. Sticky cells inside a row anchor to the `.tbl-scroll` wrapper
+   (the scroll container), not the row itself, so they keep working. */
+.tbl tbody tr {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 36px;
+}
 .tbl tbody tr:nth-child(even) td {
 	background: var(--row-alt);
 }
