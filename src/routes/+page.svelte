@@ -150,10 +150,9 @@
 		margin: 0 0 14px;
 		color: var(--ink-strong);
 	}
+	/* Base `.lead` (color + margin) lives in src/app.css. */
 	.lead {
 		font-size: 16px;
-		color: var(--text-muted);
-		margin: 0;
 	}
 	.lead-link {
 		color: var(--ink-strong);
@@ -359,8 +358,8 @@
 	.stats-line .dot {
 		color: var(--border-strong);
 	}
+	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
-		color: var(--text-muted);
 		padding: 20px 0;
 	}
 	.cta {

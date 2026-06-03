@@ -818,10 +818,10 @@
 		margin: 0 auto;
 	}
 
+	/* Base `.page` (1280 px centred, 18/28/56 padding) is in app.css —
+	   only the top padding differs here. */
 	.page {
-		max-width: 1280px;
-		margin: 0 auto;
-		padding: 24px 28px 56px;
+		padding-top: 24px;
 	}
 	.loading {
 		color: var(--text-muted);

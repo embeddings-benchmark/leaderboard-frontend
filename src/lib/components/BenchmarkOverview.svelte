@@ -134,9 +134,8 @@
 		gap: 14px;
 		padding-top: 4px;
 	}
+	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
-		color: var(--text-muted);
-		margin: 0;
 		font-size: 13px;
 	}
 

@@ -163,6 +163,21 @@
 	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
 	let allFullTypes = $derived(fullTypeFilter.size === FULL_TYPES_PRESENT.length);
 
+	// Mobile-only collapse for the Task type strip. The full list runs
+	// 30+ pills and used to scroll inside a fixed-height window that
+	// fought page scroll; expose a "More" toggle instead and only
+	// render the long tail when the user asks for it.
+	let showAllFullTypes = $state(false);
+	const FULL_TYPES_PREVIEW = 6;
+	let visibleFullTypes = $derived(
+		showAllFullTypes
+			? FULL_TYPES_PRESENT
+			: FULL_TYPES_PRESENT.slice(0, FULL_TYPES_PREVIEW)
+	);
+	let hiddenFullTypeCount = $derived(
+		Math.max(0, FULL_TYPES_PRESENT.length - FULL_TYPES_PREVIEW)
+	);
+
 	// Rank within the curated palette so the "Type" sort groups cards by
 	// colour bucket (retrieval first, then classification, …).
 	const SIMPLIFIED_RANK: Record<string, number> = Object.fromEntries(
@@ -311,7 +326,7 @@
 					</button>
 				</div>
 				<div class="pills scroll">
-					{#each FULL_TYPES_PRESENT as t (t)}
+					{#each visibleFullTypes as t (t)}
 						<label class="pill type-fill" data-type={t}>
 							<input
 								type="checkbox"
@@ -321,6 +336,16 @@
 							<span>{humanizeType(t)}</span>
 						</label>
 					{/each}
+					{#if hiddenFullTypeCount > 0}
+						<button
+							type="button"
+							class="pill more-btn"
+							onclick={() => (showAllFullTypes = !showAllFullTypes)}
+							aria-expanded={showAllFullTypes}
+						>
+							{showAllFullTypes ? 'Show less' : `+${hiddenFullTypeCount} more`}
+						</button>
+					{/if}
 				</div>
 			</div>
 
@@ -393,10 +418,10 @@
 </div>
 
 <style>
+	/* Base `.page` (1280 px centred, 18/28/56 padding) is in app.css. */
 	.page {
-		max-width: 1280px;
-		margin: 0 auto;
-		padding: 28px 28px 64px;
+		padding-top: 28px;
+		padding-bottom: 64px;
 	}
 	.hero {
 		padding: 24px 0 16px;
@@ -406,10 +431,8 @@
 		margin: 0 0 10px;
 		letter-spacing: -0.01em;
 	}
-	.lead {
-		color: var(--text-muted);
-		margin: 0;
-	}
+	/* `.lead`, `.sort*`, `.dir-btn*` live in src/app.css — same
+	   markup is on /models so the rules were exact duplicates. */
 
 	/* Toolbar -------------------------------------------------------------- */
 	.toolbar {
@@ -509,39 +532,6 @@
 		cursor: pointer;
 	}
 
-	.sort {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-		margin-left: auto;
-	}
-	.sort select {
-		padding: 6px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		font-size: 12px;
-		background: var(--surface);
-		font-family: inherit;
-		color: var(--text);
-	}
-	.dir-btn {
-		padding: 6px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		font-size: 13px;
-		font-weight: 700;
-		line-height: 1;
-		background: var(--surface);
-		color: var(--text-muted);
-		cursor: pointer;
-		font-variant-numeric: tabular-nums;
-	}
-	.dir-btn:hover {
-		color: var(--text);
-		border-color: var(--border-strong);
-	}
 	.count {
 		font-size: 12px;
 		color: var(--text-subtle);
@@ -580,6 +570,17 @@
 		cursor: pointer;
 		user-select: none;
 	}
+	/* "+N more" / "Show less" toggle inside the Task type strip. Same
+	   chip shape but in the link colour so it doesn't read as a
+	   filter pill the user might accidentally try to select. */
+	.more-btn {
+		color: var(--link);
+		font-weight: 600;
+		font-family: inherit;
+	}
+	.more-btn:hover {
+		border-color: color-mix(in srgb, var(--link) 50%, var(--border));
+	}
 	/* Mobile: stack the three filter groups vertically. Side-by-side
 	   on a 375 px viewport gave each group ~120 px of width, which
 	   forced even short pills to wrap to one-per-row. Stacking lets
@@ -600,11 +601,11 @@
 		.group {
 			flex: 0 0 auto;
 		}
+		/* No vertical scroll on mobile — the "More" button reveals the
+		   hidden pills inline instead. */
 		.pills.scroll {
-			max-height: 80px;
-			overflow-y: auto;
-			-webkit-overflow-scrolling: touch;
-			overscroll-behavior-y: contain;
+			max-height: none;
+			overflow: visible;
 		}
 	}
 	.pill input {
@@ -900,12 +901,5 @@
 		border-color: color-mix(in srgb, var(--tint-teal-fg) 35%, transparent);
 	}
 
-	.empty {
-		text-align: center;
-		color: var(--text-muted);
-		padding: 40px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-	}
+	/* `.empty` lives in src/app.css. */
 </style>

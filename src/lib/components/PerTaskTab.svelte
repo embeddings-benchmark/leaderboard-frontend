@@ -210,8 +210,8 @@
 	.wrap {
 		padding-top: 8px;
 	}
+	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
-		color: var(--text-muted);
 		margin: 0 0 12px;
 	}
 	/* Task column headers can be long ("AmazonReviewsClassification…") — clip

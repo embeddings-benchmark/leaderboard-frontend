@@ -242,11 +242,8 @@
 		margin: 0 0 10px;
 		letter-spacing: -0.01em;
 	}
-	.lead {
-		color: var(--text-muted);
-		margin: 0;
-	}
-
+	/* `.lead`, `.sort*`, `.dir-btn*` live in src/app.css — same
+	   markup is on /tasks so the rules were exact duplicates. */
 	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
@@ -254,40 +251,6 @@
 		align-items: center;
 		margin: 8px 0 18px;
 	}
-	.sort {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-		margin-left: auto;
-	}
-	.sort select {
-		padding: 6px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		font-size: 12px;
-		background: var(--surface);
-		font-family: inherit;
-		color: var(--text);
-	}
-	.dir-btn {
-		padding: 6px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		font-size: 13px;
-		font-weight: 700;
-		line-height: 1;
-		background: var(--surface);
-		color: var(--text-muted);
-		cursor: pointer;
-		font-variant-numeric: tabular-nums;
-	}
-	.dir-btn:hover {
-		color: var(--text);
-		border-color: var(--border-strong);
-	}
-
 	/* Cards ---------------------------------------------------------------- */
 	.grid {
 		display: grid;
@@ -462,12 +425,5 @@
 		color: var(--text-muted);
 	}
 
-	.empty {
-		text-align: center;
-		color: var(--text-muted);
-		padding: 40px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-	}
+	/* `.empty` lives in src/app.css. */
 </style>

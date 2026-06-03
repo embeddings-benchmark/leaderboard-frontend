@@ -214,3 +214,105 @@ code {
 	font-size: 13px;
 	color: var(--text-subtle);
 }
+
+/* Hero lead paragraph used by every top-level index hero (/, /tasks,
+   /models, /benchmarks). Pages override font-size where they want a
+   larger / smaller block. */
+.lead {
+	margin: 0;
+	color: var(--text-muted);
+}
+
+/* Sort + direction-toggle widget shared by the /models and /tasks
+   index toolbars. */
+.sort {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.sort select {
+	padding: 6px 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+	font-family: inherit;
+	font-size: 12px;
+	color: var(--text);
+}
+.dir-btn {
+	padding: 6px 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+	color: var(--text-muted);
+	font-size: 13px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	cursor: pointer;
+}
+.dir-btn:hover {
+	color: var(--text);
+	border-color: var(--border-strong);
+}
+
+/* Breadcrumb strip used by every detail page (/benchmark/[name],
+   /models/[name], /tasks/[name]) and by /benchmarks. Same shape
+   each time: small muted text, "/"-style separator, last item in
+   --text weight. */
+.breadcrumb {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 14px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.breadcrumb a {
+	color: var(--text-muted);
+	text-decoration: none;
+}
+.breadcrumb a:hover {
+	color: var(--text);
+}
+.breadcrumb .sep {
+	color: var(--border-strong);
+}
+.breadcrumb .current {
+	color: var(--text);
+	font-weight: 600;
+}
+
+/* Centered page container used by every standalone route (no sidebar):
+   /benchmarks, /tasks, /tasks/[name], /models/[name], /compare. The
+   sidebar-bearing /benchmark/[name] has its own .app + .main shell. */
+.page {
+	max-width: 1280px;
+	margin: 0 auto;
+	padding: 18px 28px 56px;
+}
+
+/* "Muted" paragraph helper — used by ~12 components for the small
+   gray text below a section title or beside a label. Each variant
+   tweaks margin / padding / font-size in its scoped block; the
+   colour itself lives here so a future palette change is one edit. */
+.muted {
+	margin: 0;
+	color: var(--text-muted);
+}
+
+/* Empty-state placeholder used by /models and /tasks when the user's
+   filters produce no matches. `compare/+page.svelte` overrides this
+   with its own dashed-border variant via scoped CSS (higher
+   specificity). */
+.empty {
+	padding: 40px;
+	text-align: center;
+	color: var(--text-muted);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+}

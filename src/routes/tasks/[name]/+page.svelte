@@ -502,33 +502,8 @@
 </div>
 
 <style>
-	.page {
-		max-width: 1280px;
-		margin: 0 auto;
-		padding: 18px 28px 56px;
-	}
-	.breadcrumb {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-		margin-bottom: 14px;
-	}
-	.breadcrumb a {
-		color: var(--text-muted);
-		text-decoration: none;
-	}
-	.breadcrumb a:hover {
-		color: var(--text);
-	}
-	.sep {
-		color: var(--border-strong);
-	}
-	.current {
-		color: var(--text);
-		font-weight: 600;
-	}
+	/* `.page` (1280 px centred, 18/28/56 padding) and `.breadcrumb`
+	   family live in src/app.css. */
 
 	.card {
 		background: var(--surface);
@@ -859,8 +834,8 @@
 		font-weight: 700;
 		margin: 0;
 	}
+	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
-		color: var(--text-muted);
 		font-size: 13px;
 	}
 	.task-table {

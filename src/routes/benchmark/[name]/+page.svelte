@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
+	import { pinnedModels } from '$lib/stores/pinned.svelte';
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
@@ -83,6 +84,21 @@
 		if (needsSwitch || needsInitialLoad) {
 			leaderboard.select(benchmarkName);
 		}
+	});
+
+	// Pinned models are scoped to the current benchmark — pinning persists
+	// across tab switches (Summary ↔ Per task ↔ Per language) but a
+	// navigation to a different benchmark resets the set so stale pins
+	// don't shadow rows in a list that may not even contain them. First
+	// mount keeps whatever the `?pin=` URL hydrated; we only clear when
+	// the benchmark name actually changes.
+	let prevBenchmarkForPins: string | null = null;
+	$effect(() => {
+		const current = benchmarkName;
+		if (prevBenchmarkForPins !== null && prevBenchmarkForPins !== current) {
+			pinnedModels.clear();
+		}
+		prevBenchmarkForPins = current;
 	});
 	$effect(() => {
 		filters.initFor(leaderboard.summary);
@@ -315,42 +331,15 @@
 	.main {
 		flex: 1;
 		min-width: 0;
-		max-width: 1400px;
-		/* Don't centre inside the flex track. With `margin: 0 auto`,
-		   collapsing the filter sidebar would split the freed width
-		   equally on both sides of `.main`, leaving a big empty strip
-		   on the right. Anchoring to the left keeps content snug
-		   against the page edge and the gap shrinks naturally as the
-		   sidebar expands/collapses. */
-		margin: 0;
-		/* 12 px right padding gives the hero card / table a small gap
-		   from the filter sidebar (or the overlay toggle button when
-		   the sidebar is collapsed) — wide enough to read as
-		   intentional, narrow enough that the previous 28 px dead
-		   zone next to the filter content doesn't return. */
+		/* Fill all the slack between the page edge and the filter
+		   sidebar — no max-width cap so the table can stretch full
+		   width on ultrawide displays. 12 px right padding gives a
+		   small gap to the sidebar (or the overlay toggle button
+		   when the sidebar is collapsed). */
 		padding: 18px 12px 40px 28px;
 	}
-	.breadcrumb {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-		margin-bottom: 12px;
-	}
-	.breadcrumb a {
-		color: var(--text-muted);
-	}
-	.breadcrumb a:hover {
-		color: var(--text);
-	}
-	.sep {
-		color: var(--border-strong);
-	}
-	.current {
-		color: var(--text);
-		font-weight: 600;
-	}
+	/* `.breadcrumb`, `.breadcrumb a`, `.breadcrumb .sep`,
+	   `.breadcrumb .current` live in src/app.css. */
 
 	.card {
 		background: var(--surface);
@@ -509,9 +498,7 @@
 		min-width: 0;
 		margin: 8px 0;
 	}
-	.muted {
-		color: var(--text-muted);
-	}
+	/* `.muted` (color + margin: 0) lives in src/app.css. */
 
 	.empty {
 		background: var(--surface);

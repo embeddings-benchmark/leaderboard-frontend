@@ -11,10 +11,14 @@
 # ---------- Stage 1: build the static bundle from a fresh clone ----------
 FROM node:22-alpine AS build
 
-# Backend URL the prerendered bundle will call. Replace with your own
-# backend Space hostname before the first build.
-ENV PUBLIC_API_URL=https://embeddings-benchmark-mteb-api.hf.space \
-    BASE_PATH= \
+# Backend URL the prerendered bundle will call. The HF Space hardcodes
+# the production hub URL via these defaults; pass `--build-arg
+# PUBLIC_API_URL=http://host.docker.internal:8000` to point a local
+# image at a backend running on the host machine.
+ARG PUBLIC_API_URL=https://mteb-leaderboard-backend.hf.space
+ARG BASE_PATH=
+ENV PUBLIC_API_URL=${PUBLIC_API_URL} \
+    BASE_PATH=${BASE_PATH} \
     CI=1
 
 RUN apk add --no-cache git
@@ -46,7 +50,13 @@ server {
     }
 
     location / {
-        try_files $uri $uri/ /index.html /404.html =404;
+        # Adapter-static emits `404.html` as the SPA fallback shell
+        # (configured in svelte.config.js via `fallback: '404.html'`).
+        # Falling through to `/index.html` instead would serve the
+        # prerendered HOME page for every unknown URL — the address
+        # bar would still read `/benchmark/<name>/` but the rendered
+        # content is the home, which looks like a redirect.
+        try_files $uri $uri/ /404.html =404;
     }
 }
 NGINX

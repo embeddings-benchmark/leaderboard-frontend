@@ -40,6 +40,12 @@
 		flex: 0 0 300px;
 		min-width: 280px;
 		max-width: 340px;
+		/* Pin to the right edge of the page when the viewport is wider
+		   than `.main`'s 1400 px max. Without this the sidebar sits
+		   immediately after `.main` (e.g. at x ≈ 1400 on a 2000 px
+		   screen) and leaves a dead strip between it and the viewport
+		   edge — sticky still works, it just looks off-centre. */
+		margin-left: auto;
 		border-left: 1px solid var(--border);
 		background: var(--surface);
 		/* Anchor below the sticky page header (z-index: 10 in

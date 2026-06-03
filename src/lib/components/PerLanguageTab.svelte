@@ -272,10 +272,7 @@
 	.wrap {
 		padding-top: 8px;
 	}
-	.muted {
-		color: var(--text-muted);
-		margin: 0;
-	}
+	/* `.muted` (color + margin: 0) lives in src/app.css. */
 	.head-note {
 		margin: 0 0 12px;
 	}

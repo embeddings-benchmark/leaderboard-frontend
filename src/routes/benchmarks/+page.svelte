@@ -190,33 +190,13 @@
 {/snippet}
 
 <style>
+	/* Base `.page` (1280 px centred, 18/28/56 padding) is in app.css —
+	   only the bottom padding differs here. */
 	.page {
-		max-width: 1280px;
-		margin: 0 auto;
-		padding: 18px 28px 64px;
+		padding-bottom: 64px;
 	}
-	.breadcrumb {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-		margin-bottom: 14px;
-	}
-	.breadcrumb a {
-		color: var(--text-muted);
-		text-decoration: none;
-	}
-	.breadcrumb a:hover {
-		color: var(--text);
-	}
-	.sep {
-		color: var(--border-strong);
-	}
-	.current {
-		color: var(--text);
-		font-weight: 600;
-	}
+	/* `.breadcrumb`, `.breadcrumb a`, `.breadcrumb .sep`,
+	   `.breadcrumb .current` live in src/app.css. */
 	.hero {
 		padding: 28px 0 18px;
 		position: relative;
@@ -239,9 +219,8 @@
 		background: var(--primary);
 		border-radius: 2px;
 	}
+	/* Base `.lead` (color + margin) lives in src/app.css. */
 	.lead {
-		color: var(--text-muted);
-		margin: 0;
 		font-size: 15px;
 		line-height: 1.55;
 	}
@@ -440,8 +419,8 @@
 		line-clamp: 3;
 		-webkit-box-orient: vertical;
 	}
+	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
-		color: var(--text-muted);
 		padding: 20px 0;
 	}
 </style>

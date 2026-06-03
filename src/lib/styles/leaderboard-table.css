@@ -72,10 +72,19 @@
 	background: var(--row-alt);
 }
 .tbl tbody tr:hover td {
-	background: var(--row-hover);
+	/* Layer a translucent dark over the cell instead of swapping
+	   the background. Heat-shaded score cells set their own
+	   `background-color: color-mix(...)`, which has higher
+	   specificity than a row-level `background` swap, so the old
+	   rule only registered on cells without per-cell colours. An
+	   inset shadow paints on top of whatever background sits
+	   underneath (heat tint, alt-row, type tint, …) so every cell
+	   visibly highlights. The 100vmax spread is the standard
+	   "fill the box" trick. */
+	box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 7%, transparent);
 }
 .tbl tbody tr.pinned td {
-	background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
+	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
 }
 .tbl tbody tr.pinned + tr:not(.pinned) td {
 	border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
@@ -162,7 +171,7 @@
 	background: var(--row-hover);
 }
 .tbl tbody tr.pinned td.tbl-sticky-pin {
-	background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
+	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
 }
 
 .tbl-pin-btn {
@@ -220,7 +229,7 @@
 	background: var(--row-hover);
 }
 .tbl tbody tr.pinned td.tbl-sticky-col {
-	background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
+	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
 }
 
 /* Mobile: a 220 px sticky Model column behind a 32 px pin column

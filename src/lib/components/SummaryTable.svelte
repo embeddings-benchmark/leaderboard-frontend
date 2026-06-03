@@ -746,17 +746,9 @@
 	.sticky-model[data-model-type='router'] .tbl-model-name {
 		color: var(--tint-purple-fg);
 	}
-	/* Whole-row hover feedback. Score cells own a `background-color`
-	   (the heat-shading `color-mix(...)`) that overrides the shared
-	   `tr:hover td { background }` rule, so a plain background swap
-	   only registers on the first three columns. Painting an inset
-	   box-shadow across the cell layers a translucent dark over
-	   whatever background is underneath (heat tint, --row-alt, type
-	   tint, …) so every cell visibly highlights. The 100vmax spread
-	   is the standard "fill the box" trick. */
-	tbody tr:hover td {
-		box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 7%, transparent);
-	}
+	/* Whole-row hover feedback lives in src/lib/styles/leaderboard-table.css
+	   so PerTaskTab / PerLanguageTab / model + task detail tables all
+	   share the same inset-shadow treatment. */
 	/* Subtle dotted underline on the model link cues that hovering shows more. */
 	.has-tip a {
 		text-decoration: underline dotted color-mix(in srgb, var(--link) 50%, transparent);

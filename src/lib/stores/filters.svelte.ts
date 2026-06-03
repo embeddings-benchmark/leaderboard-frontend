@@ -497,18 +497,42 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				taskTypesOut.length > 0 && typeN === taskTypesOut.length ? typeSum / typeN : null;
 
 			return { ...row, meanTask, meanTaskType };
+		});
+
+	// Re-rank over the visible-task slice via Borda count, matching the
+	// API's own ranking algorithm. The API rank is for the full
+	// benchmark — once the user filters tasks down, that rank no longer
+	// reflects the filtered subset. A naive sort by Mean(Task) would
+	// over-promote single-task specialists; Borda points (per task:
+	// (n - position)) cancel that bias the same way the backend does.
+	const bordaPoints = new Map<string, number>();
+	for (const taskName of taskNamesOut) {
+		const ranked = rows
+			.map((r) => ({ name: r.model.name, v: r.scoresByTask[taskName] }))
+			.filter((r): r is { name: string; v: number } => r.v !== undefined)
+			.sort((a, b) => b.v - a.v);
+		ranked.forEach((r, i) => {
+			bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (ranked.length - i));
+		});
+	}
+
+	const rankedRows = rows
+		.map((row) => ({ row, borda: bordaPoints.get(row.model.name) ?? 0 }))
+		.sort((a, b) => {
+			if (a.borda !== b.borda) return b.borda - a.borda;
+			// Tiebreak: higher Mean(Task) first; nulls (incomplete coverage)
+			// land at the bottom of any tie.
+			const am = a.row.meanTask ?? -Infinity;
+			const bm = b.row.meanTask ?? -Infinity;
+			return bm - am;
 		})
-		// Keep the API's Borda rank order. Re-sorting by Mean(Task) would
-		// promote models that score very high on a single task above the
-		// genuine leaders — which is exactly the kind of mismatch the user
-		// noticed against the old (Borda-ranked) leaderboard.
-		.sort((a, b) => a.rank - b.rank);
+		.map(({ row }, i) => ({ ...row, rank: i + 1 }));
 
 	return {
 		...summary,
 		taskTypes: taskTypesOut,
 		tasks: taskNamesOut,
 		tasksMeta: visibleTasks,
-		rows
+		rows: rankedRows
 	};
 }
