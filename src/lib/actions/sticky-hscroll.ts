@@ -28,6 +28,16 @@ import type { Action } from 'svelte/action';
 const BAR_HEIGHT_PX = 14;
 
 export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
+	// On narrow viewports the native touch-swipe already scrolls the
+	// table horizontally and there's no mouse cursor to drag a floating
+	// scrollbar — the overlay just covers the bottom edge of content
+	// without adding affordance. Skip the whole setup (observers,
+	// listeners, DOM nodes) below 640 px to match the mobile breakpoint
+	// used elsewhere in the project. We don't react to later rotation;
+	// orientation changes typically come with a reload on phones.
+	if (typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches) {
+		return;
+	}
 	const overlay = document.createElement('div');
 	overlay.setAttribute('aria-hidden', 'true');
 	overlay.className = 'sticky-hscroll-overlay';
