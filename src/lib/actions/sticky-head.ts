@@ -121,14 +121,15 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		}
 	}
 
+	// Bail when our table lives in any inactive `.tab-pane`. Both
+	// `data-prepaint` panes (clip-path hidden, still laid out) and
+	// regular `content-visibility: hidden` panes (skipped from paint
+	// but `getBoundingClientRect` may still return last-laid-out
+	// coords) would otherwise stack their own thead overlays at the
+	// top — showing columns from the wrong tab.
 	function update() {
-		// Bail when our table lives in a `data-prepaint` pane that isn't
-		// active. The pane stays fully laid out (clip-path hides the
-		// paint), so `getBoundingClientRect` still returns valid bounds
-		// — without this check every inactive table would also stack its
-		// own thead overlay at the top, showing columns from every tab.
-		const inactivePane = table.closest('.tab-pane[data-prepaint]:not(.active)');
-		if (inactivePane) {
+		const pane = table.closest('.tab-pane');
+		if (pane && !pane.classList.contains('active')) {
 			overlay.style.display = 'none';
 			return;
 		}
