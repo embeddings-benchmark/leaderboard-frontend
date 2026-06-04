@@ -70,36 +70,80 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		syncing = false;
 	}
 
-	function update() {
+	// Layout cache — same pattern as sticky-head. Wrapper geometry only
+	// shifts on resize / DOM change, so caching it once means the scroll
+	// hot-path can derive viewport coordinates from cheap `scrollY` reads
+	// without firing per-frame `getBoundingClientRect()` calls (3-per-frame
+	// across the three tab tables — the main source of phone-Firefox jank).
+	let layoutDirty = true;
+	let cachedWrapperLeft = 0;
+	let cachedWrapperWidth = 0;
+	let cachedWrapperDocTop = 0;
+	let cachedWrapperDocBottom = 0;
+	let cachedScrollWidth = 0;
+	let cachedClientWidth = 0;
+	let appliedLeft = -1;
+	let appliedWidth = -1;
+	let appliedSpacer = -1;
+	let overlayDisplayed = false;
+	function readLayout() {
+		const wr = wrapper.getBoundingClientRect();
+		const sx = window.scrollX;
+		const sy = window.scrollY;
+		cachedWrapperLeft = wr.left + sx;
+		cachedWrapperWidth = wr.width;
+		cachedWrapperDocTop = wr.top + sy;
+		cachedWrapperDocBottom = wr.bottom + sy;
 		const table = wrapper.firstElementChild as HTMLElement | null;
-		const scrollWidth = table ? table.scrollWidth : wrapper.scrollWidth;
-		const wrapperRect = wrapper.getBoundingClientRect();
-		const viewportH = window.innerHeight;
+		cachedScrollWidth = table ? table.scrollWidth : wrapper.scrollWidth;
+		cachedClientWidth = wrapper.clientWidth;
+		layoutDirty = false;
+	}
+	function markLayoutDirty() {
+		layoutDirty = true;
+	}
 
+	function update() {
+		if (layoutDirty) readLayout();
 		// Hide when the wrapper isn't horizontally scrollable.
-		if (scrollWidth <= wrapper.clientWidth) {
-			overlay.style.display = 'none';
+		if (cachedScrollWidth <= cachedClientWidth) {
+			if (overlayDisplayed) {
+				overlay.style.display = 'none';
+				overlayDisplayed = false;
+			}
 			return;
 		}
-
-		// The wrapper's own bottom-edge scrollbar is on-screen when the
-		// wrapper's bottom is inside the viewport. In that case the
-		// native bar is reachable, so the floating overlay is redundant.
-		// Also hide when the wrapper has scrolled entirely off-screen
-		// (top is past the bottom of the viewport).
-		const wrapperBottomVisible = wrapperRect.bottom <= viewportH;
-		const wrapperOffscreen = wrapperRect.top >= viewportH;
-		if (wrapperBottomVisible || wrapperOffscreen) {
-			overlay.style.display = 'none';
+		const sy = window.scrollY;
+		const wrapperTop = cachedWrapperDocTop - sy;
+		const wrapperBottom = cachedWrapperDocBottom - sy;
+		const viewportH = window.innerHeight;
+		// Hide while the native bottom scrollbar is on-screen (wrapper
+		// bottom inside viewport) or the wrapper has scrolled past.
+		if (wrapperBottom <= viewportH || wrapperTop >= viewportH) {
+			if (overlayDisplayed) {
+				overlay.style.display = 'none';
+				overlayDisplayed = false;
+			}
 			return;
 		}
-
-		overlay.style.display = 'block';
-		overlay.style.left = `${wrapperRect.left}px`;
-		overlay.style.width = `${wrapperRect.width}px`;
-		spacer.style.width = `${scrollWidth}px`;
-
-		// Keep the floating bar's scroll position aligned with the real one.
+		// Only write static-position styles when they actually change.
+		const left = cachedWrapperLeft - window.scrollX;
+		if (appliedLeft !== left) {
+			overlay.style.left = `${left}px`;
+			appliedLeft = left;
+		}
+		if (appliedWidth !== cachedWrapperWidth) {
+			overlay.style.width = `${cachedWrapperWidth}px`;
+			appliedWidth = cachedWrapperWidth;
+		}
+		if (appliedSpacer !== cachedScrollWidth) {
+			spacer.style.width = `${cachedScrollWidth}px`;
+			appliedSpacer = cachedScrollWidth;
+		}
+		if (!overlayDisplayed) {
+			overlay.style.display = 'block';
+			overlayDisplayed = true;
+		}
 		if (overlay.scrollLeft !== wrapper.scrollLeft) {
 			syncing = true;
 			overlay.scrollLeft = wrapper.scrollLeft;
@@ -117,8 +161,13 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 			update();
 		});
 	}
+	// Resize / DOM growth invalidates the cached layout values.
+	function scheduleResync() {
+		markLayoutDirty();
+		scheduleUpdate();
+	}
 
-	const ro = new ResizeObserver(scheduleUpdate);
+	const ro = new ResizeObserver(scheduleResync);
 	ro.observe(wrapper);
 	const table = wrapper.firstElementChild;
 	if (table) ro.observe(table);
@@ -126,7 +175,7 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 	window.addEventListener('scroll', scheduleUpdate, { passive: true });
 	wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
 	overlay.addEventListener('scroll', onOverlayScroll, { passive: true });
-	window.addEventListener('resize', scheduleUpdate);
+	window.addEventListener('resize', scheduleResync);
 
 	update();
 
@@ -137,7 +186,7 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 			window.removeEventListener('scroll', scheduleUpdate);
 			wrapper.removeEventListener('scroll', onWrapperScroll);
 			overlay.removeEventListener('scroll', onOverlayScroll);
-			window.removeEventListener('resize', scheduleUpdate);
+			window.removeEventListener('resize', scheduleResync);
 			overlay.remove();
 		}
 	};
