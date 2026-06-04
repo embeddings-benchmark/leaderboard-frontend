@@ -1,0 +1,81 @@
+name: Build & publish Docker image
+
+on:
+  push:
+    branches: [main, integration]
+    tags: ['v*']
+  pull_request:
+    branches: [main, integration]
+  workflow_dispatch:
+
+# Cancel in-progress runs on the same ref so a rapid push sequence
+# doesn't queue up redundant builds.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required so `docker login ghcr.io` succeeds with the bot token.
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Skip the login step for PRs from forks — they don't get write
+      # access to the registry, so we still build the image (to catch
+      # Dockerfile regressions) but don't push.
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate tags + labels from the ref. `branch` keeps a moving
+      # tag per branch (e.g. ghcr.io/.../leaderboardv2:integration);
+      # `sha` pins to the exact commit; `semver` matches `v*` tags;
+      # `latest` only on default branch.
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Only push on real refs — PR builds verify the Dockerfile
+          # but stay local to the runner.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GitHub Actions cache for buildx — keyed automatically by
+          # the workflow run; `mode=max` saves every layer (slower
+          # first build, much faster steady-state).
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Pass the same defaults the Dockerfile bakes in; override
+          # by editing the Dockerfile or by setting secrets/vars in
+          # the repo settings and referencing them here.
+          build-args: |
+            PUBLIC_API_URL=https://mteb-leaderboard-backend.hf.space
+            BASE_PATH=

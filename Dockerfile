@@ -1,39 +1,38 @@
-# Hugging Face Spaces Dockerfile for the SvelteKit leaderboard.
+# Hugging Face Spaces / GHCR Dockerfile for the SvelteKit leaderboard.
 #
-# Clones embeddings-benchmark/leaderboardv2 @ integration, builds the
-# static bundle (with PUBLIC_API_URL baked in), and serves it on :7860
-# behind nginx-unprivileged so it runs without root inside the Space.
+# Copies the local source tree, builds the static bundle (with
+# PUBLIC_API_URL baked in), and serves it on :7860 behind
+# nginx-unprivileged so it runs without root inside the Space.
 #
-# Everything is hardcoded — Spaces does not pass build args, and there
-# is no docker-compose layer. Edit this file and rebuild to change repo,
-# branch, or the backend URL.
+# Build args (`--build-arg`) override the backend URL and base path:
+#   --build-arg PUBLIC_API_URL=http://host.docker.internal:8000
+#   --build-arg BASE_PATH=/leaderboardv2
+# Defaults match the production HF Space.
 
-# ---------- Stage 1: build the static bundle from a fresh clone ----------
+# ---------- Stage 1: build the static bundle ----------
 FROM node:24-alpine AS build
 
-# Backend URL the prerendered bundle will call. The HF Space hardcodes
-# the production hub URL via these defaults; pass `--build-arg
-# PUBLIC_API_URL=http://host.docker.internal:8000` to point a local
-# image at a backend running on the host machine.
+# Backend URL the prerendered bundle will call.
 ARG PUBLIC_API_URL=https://mteb-leaderboard-backend.hf.space
 ARG BASE_PATH=
 ENV PUBLIC_API_URL=${PUBLIC_API_URL} \
     BASE_PATH=${BASE_PATH} \
     CI=1
 
-RUN apk add --no-cache git
 WORKDIR /src
-# Cache-bust the clone whenever upstream `integration` advances. ADD on
-# an HTTP URL re-runs (and so re-invalidates every layer below) only
-# when the response body changes — the GitHub commits API returns the
-# latest SHA, so a new push automatically busts the cache. Without
-# this, Docker keys the `git clone` layer purely on the command string
-# and reuses a stale /src tree across rebuilds.
-ADD https://api.github.com/repos/embeddings-benchmark/leaderboardv2/commits/integration /tmp/integration-sha
-RUN git clone --depth=1 --branch integration \
-        https://github.com/embeddings-benchmark/leaderboardv2.git .
 
+# Install deps first so a source-only change doesn't bust the npm
+# install layer. Copy package.json + package-lock.json in isolation,
+# then `npm ci` (falling back to `npm install` when the lockfile is
+# missing — matches local dev).
+COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# Now the rest of the source. `.dockerignore` keeps node_modules /
+# build / .svelte-kit / .git out of the context so this stays a thin
+# copy even on a large working tree.
+COPY . .
+
 RUN npm run build
 
 # ---------- Stage 2: serve the prerendered output on :7860 ----------

@@ -1,0 +1,42 @@
+name: E2E
+
+on:
+  push:
+    branches: [main, integration]
+  pull_request:
+    branches: [main, integration]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/common
+
+      # Pin the Playwright browser archives to the version declared by
+      # `@playwright/test` in the lockfile (the binary already knows
+      # which version to fetch). `--with-deps` pulls system libraries
+      # Chromium / Firefox / WebKit need on the ubuntu-latest runner.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      # `playwright.config.ts` runs `npm run build && npm run preview`
+      # as its webServer; `PUBLIC_USE_MOCK=1` is already wired in
+      # there so no backend dependency is needed in CI.
+      - name: Run Playwright tests
+        run: npx playwright test
+
+      # Always upload the report so a failed run is debuggable from
+      # GitHub even without re-running locally.
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 14

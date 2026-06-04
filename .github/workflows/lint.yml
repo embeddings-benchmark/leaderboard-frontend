@@ -1,0 +1,22 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, integration]
+  pull_request:
+    branches: [main, integration]
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/common
+      # `npm run lint` = `prettier --check . && eslint .`
+      - name: prettier + eslint
+        run: npm run lint

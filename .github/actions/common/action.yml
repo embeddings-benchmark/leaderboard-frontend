@@ -1,0 +1,25 @@
+name: Common setup
+description: Set up Node and install npm dependencies. The repo must
+  already be checked out before this action runs (it's a local
+  composite action, so the checkout step is required upstream).
+
+inputs:
+  node-version:
+    description: Node version to install. The project's minimum is 24,
+      bumped here in lockstep with `engines.node` in package.json.
+    required: false
+    default: '24'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    # `npm ci` over `npm install` so the lockfile is the source of truth
+    # on CI — same as Make's local commands.
+    - name: Install dependencies
+      run: npm ci
+      shell: bash
