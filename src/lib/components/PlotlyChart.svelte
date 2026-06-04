@@ -30,7 +30,7 @@
 	 *  CSS color on a probe element and reading the computed style back. */
 	function themeColors() {
 		if (typeof window === 'undefined') {
-			return { text: '#1f2329', muted: '#5a6470', grid: '#cdd0d6', surface: '#ffffff' };
+			return { text: 'var(--tip-bg)', muted: '#5a6470', grid: '#cdd0d6', surface: '#ffffff' };
 		}
 		const probe = document.createElement('span');
 		probe.style.position = 'absolute';
@@ -43,7 +43,7 @@
 			return v && v !== 'rgb(0, 0, 0)' ? v : fallback;
 		};
 		const text = resolve('--ink-strong', '#0e1116');
-		const muted = resolve('--text', '#1f2329');
+		const muted = resolve('--text', 'var(--tip-bg)');
 		const grid = resolve('--border', '#cdd0d6');
 		const surface = resolve('--surface', '#ffffff');
 		probe.remove();

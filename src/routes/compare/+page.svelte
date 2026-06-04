@@ -972,7 +972,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		box-shadow: 0 16px 36px rgb(15, 23, 42, 0.16);
+		box-shadow: 0 16px 36px rgb(var(--shadow-tint) / 0.16);
 		z-index: 30;
 		display: flex;
 		flex-direction: column;

@@ -229,7 +229,7 @@
 		max-width: none;
 		margin-left: 0;
 		z-index: 30;
-		box-shadow: -8px 0 24px rgb(15, 23, 42, 0.18);
+		box-shadow: -8px 0 24px rgb(var(--shadow-tint) / 0.18);
 	}
 	.sidebar.collapsed {
 		width: 0;

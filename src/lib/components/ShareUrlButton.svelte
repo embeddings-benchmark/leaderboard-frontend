@@ -77,7 +77,9 @@
 			border-color 0.14s,
 			color 0.14s,
 			box-shadow 0.14s,
-			transform 0.14s;
+			transform 0.14s,
+			right 0.18s ease,
+			opacity 0.18s ease;
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
@@ -92,7 +94,7 @@
 		border-radius: 999px;
 		box-shadow:
 			0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
-			0 6px 18px rgb(15, 23, 42, 0.12);
+			0 6px 18px rgb(var(--shadow-tint) / 0.12);
 		cursor: pointer;
 	}
 	.share-btn:hover {
@@ -100,7 +102,7 @@
 		border-color: var(--primary-strong);
 		box-shadow:
 			0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent),
-			0 10px 22px rgb(15, 23, 42, 0.16);
+			0 10px 22px rgb(var(--shadow-tint) / 0.16);
 		transform: translateY(-1px);
 	}
 	.share-btn:focus-visible {
@@ -129,6 +131,23 @@
 			padding: 0;
 			width: 38px;
 			justify-content: center;
+		}
+	}
+	/* When the FilterSidebar is expanded it sits at the right edge in
+	   every layout — in-flow 340 px on desktop, a fixed-position drawer
+	   of the same width on mobile — so the share pill at right: 22 px
+	   would always paint on top of it. Detect the open state via
+	   :has() on the body and slide the pill clear of the panel. */
+	:global(body:has(.sidebar:not(.collapsed))) .share-btn {
+		right: calc(min(340px, 100vw) + 14px);
+	}
+	/* Drawer covers ~entire viewport on the smallest screens — pushing
+	   the button left would put it offscreen, fade it out instead so
+	   the transition stays smooth (display:none can't animate). */
+	@media (max-width: 380px) {
+		:global(body:has(.sidebar:not(.collapsed))) .share-btn {
+			opacity: 0;
+			pointer-events: none;
 		}
 	}
 </style>

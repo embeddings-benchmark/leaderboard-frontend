@@ -409,7 +409,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 14px;
-		box-shadow: 0 1px 3px rgb(15, 23, 42, 0.04);
+		box-shadow: 0 1px 3px rgb(var(--shadow-tint) / 0.04);
 	}
 
 	/* Hero ----------------------------------------------------------------- */

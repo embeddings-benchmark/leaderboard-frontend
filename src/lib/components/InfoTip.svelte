@@ -28,8 +28,8 @@
 		min-width: 220px;
 		max-width: 320px;
 		padding: 10px 12px;
-		background: #1f2329;
-		color: #f1f3f5;
+		background: var(--tip-bg);
+		color: var(--tip-fg);
 		border-radius: 8px;
 		font-size: 12px;
 		font-weight: 400;
@@ -44,7 +44,7 @@
 			opacity 0.12s ease,
 			transform 0.12s ease;
 		z-index: 50;
-		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
+		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
 		white-space: normal;
 	}
 	.tip[data-placement='top'] {
@@ -58,7 +58,7 @@
 		transform: translateX(-50%) rotate(45deg);
 		width: 8px;
 		height: 8px;
-		background: #1f2329;
+		background: var(--tip-bg);
 	}
 	.tip[data-placement='top']::before {
 		top: auto;

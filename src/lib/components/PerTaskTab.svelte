@@ -223,9 +223,83 @@
 		const isPinned = (r: SummaryRow) => pinnedModels.has(r.model.name);
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
+
+	// Progressive row render — this is the heaviest table on the
+	// benchmark page (250+ task columns × all rows ≈ 100k cells), so we
+	// stream rows in idle slots during the offscreen pre-paint to keep
+	// the main thread responsive. The moment the pane becomes `.active`
+	// we force visibleRows = total so the user never sees a partial
+	// table on tab click — the pre-paint contract is preserved.
+	// `lastRowSignature` lets the $effect bail on its own writes
+	// (Svelte 5 re-fires the effect on every state change inside it).
+	const INITIAL_ROW_CHUNK = 60;
+	const ROW_CHUNK_STEP = 80;
+	let visibleRows = $state(INITIAL_ROW_CHUNK);
+	let growVersion = 0;
+	let lastRowSignature = '';
+	let rowKickoffTimer: ReturnType<typeof setTimeout> | null = null;
+	let wrapEl: HTMLDivElement | undefined = $state();
+	let paneActiveMo: MutationObserver | null = null;
+
+	$effect(() => {
+		const total = sortedRows.length;
+		const signature = `${total}|${sortedRows[0]?.model.name ?? ''}|${sortedRows[total - 1]?.model.name ?? ''}`;
+		if (signature === lastRowSignature) return;
+		lastRowSignature = signature;
+		const myVersion = ++growVersion;
+		// If the pane is already active when this mounts (e.g. user
+		// deep-linked to ?tab=perf_task), skip progressive and render
+		// everything immediately — partial tables only make sense
+		// during the hidden pre-paint.
+		const pane = wrapEl?.closest('.tab-pane');
+		if (!pane || pane.classList.contains('active')) {
+			visibleRows = total;
+			return;
+		}
+		visibleRows = Math.min(INITIAL_ROW_CHUNK, total);
+		if (visibleRows >= total) return;
+		if (rowKickoffTimer) clearTimeout(rowKickoffTimer);
+		rowKickoffTimer = setTimeout(() => {
+			rowKickoffTimer = null;
+			if (myVersion !== growVersion) return;
+			const idle = (cb: () => void): number =>
+				'requestIdleCallback' in window
+					? window.requestIdleCallback(cb, { timeout: 500 })
+					: (setTimeout(cb, 0) as unknown as number);
+			const grow = () => {
+				if (myVersion !== growVersion) return;
+				visibleRows = Math.min(visibleRows + ROW_CHUNK_STEP, total);
+				if (visibleRows < total) idle(grow);
+			};
+			idle(grow);
+		}, 60);
+	});
+
+	// Watch the containing pane's class — the moment `.active` is added
+	// (user clicked the tab), force-finish so they never see a partial
+	// table. The MutationObserver replaces itself per `wrapEl` change.
+	$effect(() => {
+		if (!wrapEl) return;
+		const pane = wrapEl.closest('.tab-pane');
+		if (!pane) return;
+		paneActiveMo?.disconnect();
+		paneActiveMo = new MutationObserver(() => {
+			if (pane.classList.contains('active')) {
+				visibleRows = sortedRows.length;
+				growVersion++; // abort any in-flight grow chain
+			}
+		});
+		paneActiveMo.observe(pane, { attributes: true, attributeFilter: ['class'] });
+		return () => {
+			paneActiveMo?.disconnect();
+			paneActiveMo = null;
+		};
+	});
+
+	let renderedRows = $derived(sortedRows.slice(0, visibleRows));
 </script>
 
-<div class="wrap">
+<div class="wrap" bind:this={wrapEl}>
 	{#if summary.tasks.length === 0}
 		<p class="muted">This benchmark has no tasks defined in the mock data.</p>
 	{:else}
@@ -263,7 +337,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each sortedRows as row (row.model.name)}
+					{#each renderedRows as row (row.model.name)}
 						<tr class:pinned={pinnedModels.has(row.model.name)}>
 							<td class="tbl-pin-col tbl-sticky-pin">
 								<button
@@ -421,10 +495,10 @@
 		font-size: 11px;
 		font-weight: 500;
 		line-height: 1.4;
-		color: #f1f3f5;
-		background: #1f2329;
+		color: var(--tip-fg);
+		background: var(--tip-bg);
 		border-radius: 6px;
-		box-shadow: 0 8px 18px rgb(15, 23, 42, 0.22);
+		box-shadow: 0 8px 18px rgb(var(--shadow-tint) / 0.22);
 		text-align: left;
 		white-space: normal;
 		z-index: 1000;
@@ -448,10 +522,10 @@
 		font-size: 12px;
 		font-weight: 400;
 		line-height: 1.5;
-		color: #f1f3f5;
-		background: #1f2329;
+		color: var(--tip-fg);
+		background: var(--tip-bg);
 		border-radius: 8px;
-		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
+		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
 		text-align: left;
 		white-space: normal;
 		z-index: 1000;
@@ -461,7 +535,7 @@
 		display: block;
 		font-size: 12px;
 		font-weight: 700;
-		color: #f1f3f5;
+		color: var(--tip-fg);
 		margin-bottom: 2px;
 		word-break: break-word;
 	}
@@ -479,7 +553,7 @@
 	}
 	.task-tip-empty {
 		display: block;
-		color: #9aa3ad;
+		color: var(--tip-label);
 		font-style: italic;
 	}
 </style>

@@ -63,7 +63,7 @@
 		border-radius: 999px;
 		box-shadow:
 			0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
-			0 6px 18px rgb(15, 23, 42, 0.12);
+			0 6px 18px rgb(var(--shadow-tint) / 0.12);
 		cursor: pointer;
 		opacity: 0;
 		pointer-events: none;
@@ -86,7 +86,7 @@
 		border-color: var(--primary-strong);
 		box-shadow:
 			0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent),
-			0 10px 22px rgb(15, 23, 42, 0.16);
+			0 10px 22px rgb(var(--shadow-tint) / 0.16);
 		transform: translateY(-1px);
 	}
 	.top-btn:focus-visible {

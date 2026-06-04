@@ -75,8 +75,8 @@
 		min-width: 220px;
 		max-width: 340px;
 		padding: 10px 12px;
-		background: #1f2329;
-		color: #f1f3f5;
+		background: var(--tip-bg);
+		color: var(--tip-fg);
 		border-radius: 8px;
 		font-size: 12px;
 		font-weight: 400;
@@ -86,7 +86,7 @@
 		line-height: 1.5;
 		text-align: left;
 		z-index: 1000;
-		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
+		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
 		white-space: normal;
 		pointer-events: none;
 	}
@@ -98,7 +98,7 @@
 		transform: translateX(-50%) rotate(45deg);
 		width: 8px;
 		height: 8px;
-		background: #1f2329;
+		background: var(--tip-bg);
 	}
 	.title {
 		display: block;
@@ -122,7 +122,7 @@
 		font-size: 10px;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: #9aa3ad;
+		color: var(--tip-label);
 		font-weight: 600;
 		align-self: center;
 	}
@@ -130,6 +130,6 @@
 		margin: 0;
 		font-variant-numeric: tabular-nums;
 		font-weight: 500;
-		color: #f1f3f5;
+		color: var(--tip-fg);
 	}
 </style>

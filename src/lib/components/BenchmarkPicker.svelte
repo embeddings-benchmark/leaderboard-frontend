@@ -107,7 +107,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.12);
+		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.12);
 		z-index: 50;
 		animation: drop 0.14s ease;
 	}

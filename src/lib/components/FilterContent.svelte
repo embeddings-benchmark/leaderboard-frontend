@@ -935,7 +935,7 @@
 	.seg.on {
 		background: var(--surface);
 		color: var(--text);
-		box-shadow: 0 1px 2px rgb(15, 23, 42, 0.08);
+		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.08);
 	}
 
 	/* Multi-select pills ------------------------------------------------------ */
@@ -1055,7 +1055,7 @@
 		height: 16px;
 		background: #fff;
 		border-radius: 50%;
-		box-shadow: 0 1px 2px rgb(15, 23, 42, 0.2);
+		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.2);
 		transition: transform 0.16s;
 	}
 	.switch input:checked + .switch-track {

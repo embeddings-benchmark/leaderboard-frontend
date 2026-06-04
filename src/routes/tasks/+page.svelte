@@ -636,7 +636,7 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(15, 23, 42, 0.08);
+		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
 	}
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));

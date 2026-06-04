@@ -467,7 +467,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 14px;
-		box-shadow: 0 1px 3px rgb(15, 23, 42, 0.04);
+		box-shadow: 0 1px 3px rgb(var(--shadow-tint) / 0.04);
 	}
 
 	/* Hero ----------------------------------------------------------------- */
@@ -810,10 +810,10 @@
 		font-size: 12px;
 		font-weight: 400;
 		line-height: 1.45;
-		color: #f1f3f5;
-		background: #1f2329;
+		color: var(--tip-fg);
+		background: var(--tip-bg);
 		border-radius: 6px;
-		box-shadow: 0 8px 18px rgb(15, 23, 42, 0.22);
+		box-shadow: 0 8px 18px rgb(var(--shadow-tint) / 0.22);
 		text-align: left;
 		white-space: normal;
 		z-index: 1000;
@@ -849,7 +849,7 @@
 		padding: 1px 6px;
 		background: rgb(255, 255, 255, 0.08);
 		border-radius: 4px;
-		color: #f1f3f5;
+		color: var(--tip-fg);
 		white-space: nowrap;
 	}
 	.info-tip-list dd {

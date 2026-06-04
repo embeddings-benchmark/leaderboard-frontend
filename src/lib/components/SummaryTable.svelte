@@ -184,13 +184,13 @@
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
 
-	// Progressive row render — same pattern as /tasks and /models. Paint
-	// the first 80 rows immediately (covers ~1 viewport on desktop), then
-	// stream the rest in `requestIdleCallback` chunks of 200 so the main
-	// thread isn't blocked creating 400+ rows of cells on first paint.
-	// `lastRowSignature` lets Svelte 5's $effect bail on its own writes
-	// to `visibleRows` (otherwise the effect re-fires on every chunk
-	// increment and pins the table at 80).
+	// Progressive row render — Firefox benefits a lot (cold first-paint
+	// drops ~50%) because its layout engine streams large tbodies
+	// incrementally and our 80-row first chunk paints before the rest of
+	// the layer's columns get reflowed. Chromium / WebKit also see a
+	// modest win. `lastRowSignature` lets the $effect bail on its own
+	// writes to `visibleRows` (Svelte 5 re-fires the effect on every
+	// state change inside it).
 	const INITIAL_ROW_CHUNK = 80;
 	const ROW_CHUNK_STEP = 200;
 	let visibleRows = $state(INITIAL_ROW_CHUNK);
@@ -769,8 +769,8 @@
 		   contiguous with the cell — no dead zone to traverse on the way
 		   to a clickable link inside the tip. */
 		padding: 16px 12px 10px;
-		background: #1f2329;
-		color: #f1f3f5;
+		background: var(--tip-bg);
+		color: var(--tip-fg);
 		border-radius: 8px;
 		background-clip: padding-box;
 		font-size: 12px;
@@ -781,7 +781,7 @@
 		line-height: 1.5;
 		text-align: left;
 		z-index: 1000;
-		box-shadow: 0 12px 28px rgb(15, 23, 42, 0.22);
+		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
 		white-space: normal;
 		pointer-events: auto;
 	}
@@ -810,7 +810,7 @@
 		font-size: 10px;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: #9aa3ad;
+		color: var(--tip-label);
 		font-weight: 600;
 		align-self: center;
 	}
@@ -818,7 +818,7 @@
 		margin: 0;
 		font-variant-numeric: tabular-nums;
 		font-weight: 500;
-		color: #f1f3f5;
+		color: var(--tip-fg);
 	}
 
 	/* `.type-icon` + per-model-type tints, plus shared row hover, live in

@@ -46,8 +46,19 @@
 	--row-alt-dark: #1f2229;
 	--row-hover-light: #eaedf3;
 	--row-hover-dark: #2a2d36;
-	--shadow-sm-light: 0 1px 2px rgb(15, 23, 42, 0.04);
+	--shadow-sm-light: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
 	--shadow-sm-dark: 0 1px 2px rgb(0, 0, 0, 0.4);
+	/* Raw triplet for every navy-tinted shadow on the site — plug into
+	   `rgb(var(--shadow-tint) / X)` so depth/blur stay per-call but the
+	   underlying tint is one source of truth (was `rgb(15, 23, 42, X)`
+	   duplicated across 20+ files). */
+	--shadow-tint: 15 23 42;
+	/* Dark portal tooltip — intentionally not themed. Tooltips are
+	   always dark for legibility against either the light or dark
+	   table cells they overlay. */
+	--tip-bg: #1f2329;
+	--tip-fg: #f1f3f5;
+	--tip-label: #9aa3ad;
 	/* Top-bar background — translucent so the page surface peeks through the
 	   blur. Pair per theme rather than mixing the same alpha both ways. */
 	--bar-bg-light: rgb(255, 255, 255, 0.82);

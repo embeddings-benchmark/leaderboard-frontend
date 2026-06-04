@@ -110,7 +110,7 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(15, 23, 42, 0.08);
+		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
 		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 50%, var(--border));
 	}
 	.card:hover .title {
