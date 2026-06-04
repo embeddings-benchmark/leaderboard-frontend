@@ -48,6 +48,27 @@
 	function formatLog(v: number): string {
 		return formatParams(logToParams(v));
 	}
+	// Inverse of `formatParams` — accepts "500K", "5M", "1.2 B", "3T",
+	// or a bare number (treated as millions, matching the underlying
+	// `minModelSizeM` store unit). Returns log-space units so it slots
+	// directly into the slider's value space. Returns null for
+	// unparseable input so the slider snaps back to the previous value.
+	function parseLog(s: string): number | null {
+		const m = s.trim().match(/^([0-9]*\.?[0-9]+)\s*([KMBT]?)$/i);
+		if (!m) return null;
+		const n = parseFloat(m[1]);
+		if (Number.isNaN(n)) return null;
+		const unit = m[2].toUpperCase();
+		const inMillions =
+			unit === 'K'
+				? n / 1000
+				: unit === 'B'
+					? n * 1000
+					: unit === 'T'
+						? n * 1_000_000
+						: n; // bare or 'M' → already in millions
+		return paramsToLog(inMillions);
+	}
 
 	// Distribute ~4 tick marks across the benchmark's log-size window. Both
 	// endpoints are pinned so the rightmost tick aligns with the slider's
@@ -363,6 +384,7 @@
 				onMinChange={(v) => (filters.minModelSizeM = logToParams(v))}
 				onMaxChange={(v) => (filters.maxModelSizeM = logToParams(v))}
 				format={formatLog}
+				parse={parseLog}
 				ticks={sizeTicks}
 			/>
 		</div>
