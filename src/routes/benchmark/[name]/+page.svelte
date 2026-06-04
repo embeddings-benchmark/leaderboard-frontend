@@ -599,6 +599,13 @@
 		inset: 0;
 		clip-path: inset(100%);
 		pointer-events: none;
+		/* `clip-path` hides the paint, but the absolutely-positioned
+		   pane's inner table (PerTask is ~19 000 px tall) still
+		   overflows its bounds — which expands document scrollHeight
+		   and adds ~1850 px of empty space after the footer on the
+		   shorter Summary tab. Clip the overflow so the layout box
+		   stops at the pane's `inset: 0` rect. */
+		overflow: hidden;
 	}
 	.tab-pane[data-prepaint].active {
 		position: static;
