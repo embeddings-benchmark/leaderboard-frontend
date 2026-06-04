@@ -22,6 +22,9 @@
 
 import type { Action } from 'svelte/action';
 
+// Same `::-webkit-scrollbar { height: 10px }` rule that `.tbl-scroll`
+// uses (see leaderboard-table.css). Pad the overlay slightly above so
+// the thumb has breathing room from the border-top.
 const BAR_HEIGHT_PX = 14;
 
 export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
@@ -42,8 +45,6 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		backdrop-filter: blur(14px) saturate(140%);
 		-webkit-backdrop-filter: blur(14px) saturate(140%);
 		display: none;
-		scrollbar-width: thin;
-		scrollbar-color: var(--border-strong) transparent;
 	`;
 
 	// Inner spacer just gives the overlay something with the table's
@@ -104,6 +105,19 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 	}
 
 	function update() {
+		// Bail when our wrapper lives in any inactive `.tab-pane` — without
+		// this both Summary's and Per Task's overlays paint at the same
+		// `bottom: 0` position and stack, intercepting horizontal-scroll
+		// gestures meant for whichever overlay sits underneath. Mirrors
+		// the same guard in sticky-head.
+		const pane = wrapper.closest('.tab-pane');
+		if (pane && !pane.classList.contains('active')) {
+			if (overlayDisplayed) {
+				overlay.style.display = 'none';
+				overlayDisplayed = false;
+			}
+			return;
+		}
 		if (layoutDirty) readLayout();
 		// Hide when the wrapper isn't horizontally scrollable.
 		if (cachedScrollWidth <= cachedClientWidth) {
@@ -172,6 +186,19 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 	const table = wrapper.firstElementChild;
 	if (table) ro.observe(table);
 
+	// Mirror sticky-head — flush + re-evaluate the moment the containing
+	// pane is activated, so the overlay appears immediately rather than
+	// waiting for the next scroll/resize event.
+	const paneAncestor = wrapper.closest('.tab-pane');
+	let paneMo: MutationObserver | null = null;
+	if (paneAncestor) {
+		paneMo = new MutationObserver(() => {
+			markLayoutDirty();
+			scheduleUpdate();
+		});
+		paneMo.observe(paneAncestor, { attributes: true, attributeFilter: ['class'] });
+	}
+
 	window.addEventListener('scroll', scheduleUpdate, { passive: true });
 	wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
 	overlay.addEventListener('scroll', onOverlayScroll, { passive: true });
@@ -183,6 +210,7 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		destroy() {
 			if (rafId) cancelAnimationFrame(rafId);
 			ro.disconnect();
+			paneMo?.disconnect();
 			window.removeEventListener('scroll', scheduleUpdate);
 			wrapper.removeEventListener('scroll', onWrapperScroll);
 			overlay.removeEventListener('scroll', onOverlayScroll);

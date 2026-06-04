@@ -37,29 +37,10 @@
 	box-shadow: var(--shadow-sm);
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior-x: contain;
-	/* Persistent slim scrollbar (macOS / iOS hide overlay bars between
-	   interactions). Defining `::-webkit-scrollbar` flips to classic mode. */
-	scrollbar-width: thin;
-	scrollbar-color: var(--border-strong) transparent;
 	/* `contain: layout style` isolates the table's layout/style cost from the
 	   rest of the page — a hover or sort-indicator change inside the table
 	   no longer forces the page to recompute its own layout. */
 	contain: layout style;
-}
-.tbl-scroll::-webkit-scrollbar {
-	height: 10px;
-	width: 10px;
-	background: transparent;
-}
-.tbl-scroll::-webkit-scrollbar-track {
-	background: transparent;
-}
-.tbl-scroll::-webkit-scrollbar-thumb {
-	background: var(--border-strong);
-	border-radius: 6px;
-}
-.tbl-scroll::-webkit-scrollbar-thumb:hover {
-	background: var(--text-subtle);
 }
 
 .tbl {
