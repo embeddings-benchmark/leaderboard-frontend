@@ -2,9 +2,7 @@
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import {
-		ariaSort as ariaSortFor,
 		bestPerColumn,
-		defaultDirFor,
 		fmtParamsUnit,
 		fmtParamsValue,
 		fmtPct,
@@ -12,18 +10,16 @@
 		humanizeType,
 		maxOf,
 		minOf,
-		nextSort,
-		slug,
-		sortIcon as sortIconFor,
 		worstPerColumn
 	} from '$lib/format';
-	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
-	import ModelTypeIcon from './ModelTypeIcon.svelte';
+	import { createSortState } from '$lib/stores/sort.svelte';
+	import { isBoundaryCross } from '$lib/cell-hover';
+	import ModelCellName from './ModelCellName.svelte';
+	import PinButton from './PinButton.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 	import HoverPortal from './HoverPortal.svelte';
-	import { getParam, updateUrl } from '$lib/url-state';
 	import MarkdownText from './MarkdownText.svelte';
 
 	const INFO = {
@@ -105,31 +101,16 @@
 		| 'meanPublic'
 		| 'meanPrivate'
 		| `tt:${string}`;
-	type Dir = 'asc' | 'desc';
 
-	// Hydrate sort from `?s.summary=<key>` + `?d.summary=<asc|desc>` so a
-	// shared link restores the user's ordering. Per-table namespace keeps the
-	// per-task / per-language tabs independent.
-	const initialKey = getParam('s.summary');
-	const initialDir = getParam('d.summary');
-	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
-	let sortDir = $state<Dir>(initialDir === 'asc' ? 'asc' : 'desc');
-	$effect(() => {
-		updateUrl({
-			's.summary': sortKey,
-			'd.summary': sortKey ? sortDir : null
-		});
+	// Per-summary-tab sort. URL prefix `s.summary` / `d.summary` keeps
+	// the per-task and per-language tabs independent (each has its own
+	// namespace). `↕` is the resting indicator when no column is the
+	// active sort.
+	const sort = createSortState<SortKey>({
+		urlKeys: ['s.summary', 'd.summary'],
+		ascKeys: ['rank', 'model'],
+		defaultIcon: '↕'
 	});
-
-	// Score-like columns default to descending (best first); rank and name default to ascending.
-	const ASC_KEYS: readonly SortKey[] = ['rank', 'model'];
-	const defaultDir = (key: SortKey) => defaultDirFor(key, ASC_KEYS);
-
-	function clickSort(key: SortKey) {
-		const next = nextSort(key, sortKey, sortDir, defaultDir);
-		sortKey = next.key;
-		sortDir = next.dir;
-	}
 
 	function getValue(row: SummaryRow, key: SortKey): { v: number | string; missing: boolean } {
 		switch (key) {
@@ -166,9 +147,9 @@
 
 	let sortedRows = $derived.by(() => {
 		let rows = summary.rows;
-		if (sortKey) {
-			const dir = sortDir === 'asc' ? 1 : -1;
-			const key = sortKey;
+		if (sort.key) {
+			const dir = sort.dir === 'asc' ? 1 : -1;
+			const key = sort.key;
 			rows = [...rows].sort((a, b) => {
 				const va = getValue(a, key);
 				const vb = getValue(b, key);
@@ -302,11 +283,6 @@
 		return row.scoresByTaskType[taskType] === best[taskType];
 	}
 
-	// SummaryTable uses '' for inactive sort, not '↕' like the
-	// per-task / per-language tables.
-	const sortIcon = (key: SortKey) => sortIconFor(key, sortKey, sortDir, '');
-	const ariaSort = (key: SortKey) => ariaSortFor(key, sortKey, sortDir);
-
 	// Tooltip portal: we render a single tooltip element at the SummaryTable's
 	// root (outside the <table> + .scroll wrapper) and update its position/content
 	// on hover. Putting it inside a `<th>` would trap it inside that th's sticky
@@ -373,16 +349,6 @@
 		};
 	}
 
-	// True for pointer events that just crossed the cell's outer boundary
-	// (entry/exit). False for internal traversal (cursor moved between
-	// children of the same cell). Lets `pointerover`/`pointerout` — which
-	// Svelte 5 delegates to the document — stand in for `pointerenter`/
-	// `pointerleave`, which would force a per-cell listener.
-	function isBoundaryCross(e: PointerEvent | FocusEvent): boolean {
-		const cell = e.currentTarget as HTMLElement | null;
-		const other = (e as PointerEvent).relatedTarget as Node | null;
-		return !!cell && !(other && cell.contains(other));
-	}
 
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
 		if (!isBoundaryCross(e)) return;
@@ -433,16 +399,16 @@
 						onpointerleave={hideTip}
 						onfocusin={showTip}
 						onfocusout={hideTip}
-						aria-sort={ariaSort('rank')}
+						aria-sort={sort.aria('rank')}
 					>
-						<button class="sort-btn tbl-num" onclick={() => clickSort('rank')}>
+						<button class="sort-btn tbl-num" onclick={() => sort.click('rank')}>
 							<span>Rank</span>
-							<span class="ind" class:on={sortKey === 'rank'}>{sortIcon('rank') || '↕'}</span>
+							<span class="ind" class:on={sort.key === 'rank'}>{sort.icon('rank')}</span>
 						</button>
 					</th>
 					<th
 						class="sticky-model"
-						aria-sort={ariaSort('model')}
+						aria-sort={sort.aria('model')}
 						data-tip-title={INFO.model.title}
 						data-tip={INFO.model.text}
 						onpointerenter={showTip}
@@ -450,9 +416,9 @@
 						onfocusin={showTip}
 						onfocusout={hideTip}
 					>
-						<button class="sort-btn" onclick={() => clickSort('model')}>
+						<button class="sort-btn" onclick={() => sort.click('model')}>
 							<span>Model</span>
-							<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model') || '↕'}</span>
+							<span class="ind" class:on={sort.key === 'model'}>{sort.icon('model')}</span>
 						</button>
 					</th>
 					<th
@@ -463,12 +429,12 @@
 						onpointerleave={hideTip}
 						onfocusin={showTip}
 						onfocusout={hideTip}
-						aria-sort={ariaSort('totalParams')}
+						aria-sort={sort.aria('totalParams')}
 					>
-						<button class="sort-btn tbl-num" onclick={() => clickSort('totalParams')}>
+						<button class="sort-btn tbl-num" onclick={() => sort.click('totalParams')}>
 							<span>Total Params</span>
-							<span class="ind" class:on={sortKey === 'totalParams'}
-								>{sortIcon('totalParams') || '↕'}</span
+							<span class="ind" class:on={sort.key === 'totalParams'}
+								>{sort.icon('totalParams')}</span
 							>
 						</button>
 					</th>
@@ -480,12 +446,12 @@
 						onpointerleave={hideTip}
 						onfocusin={showTip}
 						onfocusout={hideTip}
-						aria-sort={ariaSort('zeroShot')}
+						aria-sort={sort.aria('zeroShot')}
 					>
-						<button class="sort-btn tbl-num" onclick={() => clickSort('zeroShot')}>
+						<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
 							<span>Zero-shot</span>
-							<span class="ind" class:on={sortKey === 'zeroShot'}
-								>{sortIcon('zeroShot') || '↕'}</span
+							<span class="ind" class:on={sort.key === 'zeroShot'}
+								>{sort.icon('zeroShot')}</span
 							>
 						</button>
 					</th>
@@ -498,12 +464,12 @@
 							onpointerleave={hideTip}
 							onfocusin={showTip}
 							onfocusout={hideTip}
-							aria-sort={ariaSort('meanTask')}
+							aria-sort={sort.aria('meanTask')}
 						>
-							<button class="sort-btn tbl-num" onclick={() => clickSort('meanTask')}>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTask')}>
 								<span>Mean (Task)</span>
-								<span class="ind" class:on={sortKey === 'meanTask'}
-									>{sortIcon('meanTask') || '↕'}</span
+								<span class="ind" class:on={sort.key === 'meanTask'}
+									>{sort.icon('meanTask')}</span
 								>
 							</button>
 						</th>
@@ -517,12 +483,12 @@
 							onpointerleave={hideTip}
 							onfocusin={showTip}
 							onfocusout={hideTip}
-							aria-sort={ariaSort('meanTaskType')}
+							aria-sort={sort.aria('meanTaskType')}
 						>
-							<button class="sort-btn tbl-num" onclick={() => clickSort('meanTaskType')}>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTaskType')}>
 								<span>Mean (TaskType)</span>
-								<span class="ind" class:on={sortKey === 'meanTaskType'}
-									>{sortIcon('meanTaskType') || '↕'}</span
+								<span class="ind" class:on={sort.key === 'meanTaskType'}
+									>{sort.icon('meanTaskType')}</span
 								>
 							</button>
 						</th>
@@ -536,12 +502,12 @@
 							onpointerleave={hideTip}
 							onfocusin={showTip}
 							onfocusout={hideTip}
-							aria-sort={ariaSort('meanPublic')}
+							aria-sort={sort.aria('meanPublic')}
 						>
-							<button class="sort-btn tbl-num" onclick={() => clickSort('meanPublic')}>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPublic')}>
 								<span>Mean (Public)</span>
-								<span class="ind" class:on={sortKey === 'meanPublic'}
-									>{sortIcon('meanPublic') || '↕'}</span
+								<span class="ind" class:on={sort.key === 'meanPublic'}
+									>{sort.icon('meanPublic')}</span
 								>
 							</button>
 						</th>
@@ -553,12 +519,12 @@
 							onpointerleave={hideTip}
 							onfocusin={showTip}
 							onfocusout={hideTip}
-							aria-sort={ariaSort('meanPrivate')}
+							aria-sort={sort.aria('meanPrivate')}
 						>
-							<button class="sort-btn tbl-num" onclick={() => clickSort('meanPrivate')}>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPrivate')}>
 								<span>Mean (Private)</span>
-								<span class="ind" class:on={sortKey === 'meanPrivate'}
-									>{sortIcon('meanPrivate') || '↕'}</span
+								<span class="ind" class:on={sort.key === 'meanPrivate'}
+									>{sort.icon('meanPrivate')}</span
 								>
 							</button>
 						</th>
@@ -569,7 +535,7 @@
 							{@const desc = TASK_TYPE_INFO[tt]}
 							<th
 								class="tbl-num"
-								aria-sort={ariaSort(k)}
+								aria-sort={sort.aria(k)}
 								data-tip-title={desc ? humanizeType(tt) : ''}
 								data-tip={desc ?? ''}
 								onpointerenter={desc ? showTip : undefined}
@@ -577,9 +543,9 @@
 								onfocusin={desc ? showTip : undefined}
 								onfocusout={desc ? hideTip : undefined}
 							>
-								<button class="sort-btn tbl-num" onclick={() => clickSort(k)}>
+								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
 									<span>{humanizeType(tt)}</span>
-									<span class="ind" class:on={sortKey === k}>{sortIcon(k) || '↕'}</span>
+									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
 								</button>
 							</th>
 						{/each}
@@ -591,29 +557,7 @@
 					<tr class:pinned={pinnedModels.has(row.model.name)}>
 						<td class="sticky-left">
 							<div class="rank-cell">
-								<button
-									type="button"
-									class="tbl-pin-btn"
-									class:on={pinnedModels.has(row.model.name)}
-									onclick={() => pinnedModels.toggle(row.model.name)}
-									aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-									title={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-								>
-									<svg
-										viewBox="0 0 24 24"
-										width="12"
-										height="12"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2.4"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
-									>
-										<path d="M12 17v5" />
-										<path d="M9 10.76V6h6v4.76l3 2.59V17H6v-3.65l3-2.59z" />
-									</svg>
-								</button>
+								<PinButton name={row.model.name} />
 								<span class="rank-pill">#{row.rank}</span>
 							</div>
 						</td>
@@ -625,21 +569,7 @@
 							onfocusin={(e) => showModelTip(e, row)}
 							onfocusout={hideModelTip}
 						>
-							<span class="type-icon" title={row.model.modelType}>
-								<ModelTypeIcon type={row.model.modelType} size={13} />
-							</span>
-							<!-- Internal link to the model detail page. The HuggingFace
-							     reference URL is still surfaced on the model card itself
-							     (and via the hover tooltip's Model-page row), so the table
-							     navigation stays inside the leaderboard. -->
-							<a
-								class="tbl-model-link"
-								href={resolve('/models/[name]', { name: slug(row.model.name) })}
-							>
-								<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
-									>/</span
-								><span class="tbl-model-name">{row.model.displayName}</span>
-							</a>
+							<ModelCellName model={row.model} />
 						</td>
 						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
 							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
@@ -739,13 +669,16 @@
 	}
 
 	/* `.type-icon` + per-model-type tints, plus shared row hover, live in
-	   src/lib/styles/leaderboard-table.css. */
-	.has-tip a {
+	   src/lib/styles/leaderboard-table.css. The link inside the model
+	   cell now comes from ModelCellName.svelte; `:global(...)` reaches
+	   it across the component boundary so the dotted-underline hint
+	   (only on SummaryTable's tip-bearing cells) still applies. */
+	.has-tip :global(.tbl-model-link) {
 		text-decoration: underline dotted color-mix(in srgb, var(--link) 50%, transparent);
 		text-underline-offset: 3px;
 		text-decoration-thickness: 1px;
 	}
-	.has-tip a:hover {
+	.has-tip :global(.tbl-model-link:hover) {
 		text-decoration-color: var(--link);
 	}
 	.sort-btn {

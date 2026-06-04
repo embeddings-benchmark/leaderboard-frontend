@@ -1,19 +1,16 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import { isBoundaryCross } from '$lib/cell-hover';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { type CsvCell } from '$lib/csv';
-	import { getParam, updateUrl } from '$lib/url-state';
-	import {
-		ariaSort as ariaSortFor,
-		defaultDirFor,
-		heat as heatBase,
-		nextSort,
-		sortIcon as sortIconFor
-	} from '$lib/format';
+	import { heat as heatBase } from '$lib/format';
+	import { createSortState } from '$lib/stores/sort.svelte';
+	import ModelCellName from './ModelCellName.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
-	import ModelTypeIcon from './ModelTypeIcon.svelte';
+	import PinButton from './PinButton.svelte';
+	import SortHeader from './SortHeader.svelte';
 
 	type Tip = {
 		showFor: (t: HTMLElement, row: SummaryRow) => void;
@@ -21,14 +18,6 @@
 	};
 	let tipPortal = $state<Tip | undefined>(undefined);
 
-	// See SummaryTable / PerTaskTab — using `pointerover`/`pointerout`
-	// (delegated by Svelte 5) avoids per-cell DOM listeners; the boundary
-	// guard makes them behave like `pointerenter`/`pointerleave`.
-	function isBoundaryCross(e: PointerEvent | FocusEvent): boolean {
-		const cell = e.currentTarget as HTMLElement | null;
-		const other = (e as PointerEvent).relatedTarget as Node | null;
-		return !!cell && !(other && cell.contains(other));
-	}
 	function onCellEnter(e: PointerEvent | FocusEvent, row: SummaryRow) {
 		if (!isBoundaryCross(e)) return;
 		tipPortal?.showFor(e.currentTarget as HTMLElement, row);
@@ -122,32 +111,16 @@
 	let worstMean = $derived(meanExtrema.min);
 
 	type SortKey = 'model' | 'mean' | `lang:${string}`;
-	const initialKey = getParam('s.lang');
-	const initialDir = getParam('d.lang');
-	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
-	let sortDir = $state<'asc' | 'desc'>(initialDir === 'asc' ? 'asc' : 'desc');
-	$effect(() => {
-		updateUrl({
-			's.lang': sortKey,
-			'd.lang': sortKey ? sortDir : null
-		});
+	const sort = createSortState<SortKey>({
+		urlKeys: ['s.lang', 'd.lang'],
+		ascKeys: ['model']
 	});
-
-	const ASC_KEYS: readonly SortKey[] = ['model'];
-	const defaultDir = (k: SortKey) => defaultDirFor(k, ASC_KEYS);
-	function clickSort(k: SortKey) {
-		const next = nextSort(k, sortKey, sortDir, defaultDir);
-		sortKey = next.key;
-		sortDir = next.dir;
-	}
-	const sortIcon = (k: SortKey) => sortIconFor(k, sortKey, sortDir);
-	const ariaSort = (k: SortKey) => ariaSortFor(k, sortKey, sortDir);
 
 	let sortedRows = $derived.by(() => {
 		let rows = summary.rows;
-		if (sortKey) {
-			const dir = sortDir === 'asc' ? 1 : -1;
-			const key = sortKey;
+		if (sort.key) {
+			const dir = sort.dir === 'asc' ? 1 : -1;
+			const key = sort.key;
 			rows = [...rows].sort((a, b) => {
 				if (key === 'model') {
 					return (
@@ -207,25 +180,16 @@
 			<thead>
 				<tr>
 					<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
-					<th class="tbl-sticky-col" aria-sort={ariaSort('model')}>
-						<button class="tbl-sort tbl-sort-left" onclick={() => clickSort('model')}>
-							<span>Model</span>
-							<span class="tbl-sort-ind" class:on={sortKey === 'model'}>{sortIcon('model')}</span>
-						</button>
+					<th class="tbl-sticky-col" aria-sort={sort.aria('model')}>
+						<SortHeader {sort} field="model" label="Model" align="left" />
 					</th>
-					<th class="tbl-num" aria-sort={ariaSort('mean')}>
-						<button class="tbl-sort" onclick={() => clickSort('mean')}>
-							<span>Mean</span>
-							<span class="tbl-sort-ind" class:on={sortKey === 'mean'}>{sortIcon('mean')}</span>
-						</button>
+					<th class="tbl-num" aria-sort={sort.aria('mean')}>
+						<SortHeader {sort} field="mean" label="Mean" />
 					</th>
 					{#each LANGUAGES as lang (lang)}
 						{@const k = `lang:${lang}` as SortKey}
-						<th class="tbl-num" aria-sort={ariaSort(k)}>
-							<button class="tbl-sort" onclick={() => clickSort(k)}>
-								<span>{lang}</span>
-								<span class="tbl-sort-ind" class:on={sortKey === k}>{sortIcon(k)}</span>
-							</button>
+						<th class="tbl-num" aria-sort={sort.aria(k)}>
+							<SortHeader {sort} field={k} label={lang} />
 						</th>
 					{/each}
 				</tr>
@@ -235,29 +199,7 @@
 					{@const mean = rowMean(row)}
 					<tr class:pinned={pinnedModels.has(row.model.name)}>
 						<td class="tbl-pin-col tbl-sticky-pin">
-							<button
-								type="button"
-								class="tbl-pin-btn"
-								class:on={pinnedModels.has(row.model.name)}
-								onclick={() => pinnedModels.toggle(row.model.name)}
-								aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-								title={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-							>
-								<svg
-									viewBox="0 0 24 24"
-									width="12"
-									height="12"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2.4"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M12 17v5" />
-									<path d="M9 10.76V6h6v4.76l3 2.59V17H6v-3.65l3-2.59z" />
-								</svg>
-							</button>
+							<PinButton name={row.model.name} />
 						</td>
 						<td
 							class="tbl-sticky-col"
@@ -267,24 +209,7 @@
 							onfocusin={(e) => onCellEnter(e, row)}
 							onfocusout={onCellLeave}
 						>
-							<span class="type-icon" title={row.model.modelType}>
-								<ModelTypeIcon type={row.model.modelType} size={13} />
-							</span>
-							{#if row.model.url}
-								<!-- External model URL (HuggingFace etc.) -->
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-								<a href={row.model.url} target="_blank" rel="noreferrer" class="tbl-model-link">
-									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
-										>/</span
-									><span class="tbl-model-name">{row.model.displayName}</span>
-								</a>
-							{:else}
-								<span class="tbl-model-link">
-									<span class="tbl-model-org">{row.model.org}</span><span class="tbl-model-sep"
-										>/</span
-									><span class="tbl-model-name">{row.model.displayName}</span>
-								</span>
-							{/if}
+							<ModelCellName model={row.model} />
 						</td>
 						<td
 							class="tbl-num"

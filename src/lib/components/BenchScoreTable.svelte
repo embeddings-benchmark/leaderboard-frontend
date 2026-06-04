@@ -20,18 +20,9 @@
 	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
-	import { getParam, updateUrl } from '$lib/url-state';
-	import {
-		ariaSort as ariaSortFor,
-		defaultDirFor,
-		fmtPct,
-		heat,
-		maxOf,
-		minOf,
-		nextSort,
-		slug,
-		sortIcon as sortIconFor
-	} from '$lib/format';
+	import { createSortState } from '$lib/stores/sort.svelte';
+	import { fmtPct, heat, maxOf, minOf, slug } from '$lib/format';
+	import SortHeader from './SortHeader.svelte';
 
 	interface Props {
 		rows: BenchScore[];
@@ -39,31 +30,15 @@
 	let { rows }: Props = $props();
 
 	type SortKey = 'benchmark' | 'rank' | 'meanTask' | 'meanTaskType' | 'zeroShot';
-	const initialKey = getParam('s.bench');
-	const initialDir = getParam('d.bench');
-	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
-	let sortDir = $state<'asc' | 'desc'>(initialDir === 'desc' ? 'desc' : 'asc');
-	$effect(() => {
-		updateUrl({
-			's.bench': sortKey,
-			'd.bench': sortKey ? sortDir : null
-		});
+	const sort = createSortState<SortKey>({
+		urlKeys: ['s.bench', 'd.bench'],
+		ascKeys: ['benchmark', 'rank']
 	});
 
-	const ASC_KEYS: readonly SortKey[] = ['benchmark', 'rank'];
-	const defaultDir = (k: SortKey) => defaultDirFor(k, ASC_KEYS);
-	function clickSort(k: SortKey) {
-		const next = nextSort(k, sortKey, sortDir, defaultDir);
-		sortKey = next.key;
-		sortDir = next.dir;
-	}
-	const sortIcon = (k: SortKey) => sortIconFor(k, sortKey, sortDir);
-	const ariaSort = (k: SortKey) => ariaSortFor(k, sortKey, sortDir);
-
 	let sortedRows = $derived.by<BenchScore[]>(() => {
-		if (!sortKey) return rows;
-		const dir = sortDir === 'asc' ? 1 : -1;
-		const k = sortKey;
+		if (!sort.key) return rows;
+		const dir = sort.dir === 'asc' ? 1 : -1;
+		const k = sort.key;
 		return [...rows].sort((a, b) => {
 			if (k === 'benchmark') {
 				return (
@@ -97,47 +72,20 @@
 	<table class="tbl bench-table" use:stickyHead>
 		<thead>
 			<tr>
-				<th class="sticky" aria-sort={ariaSort('benchmark')}>
-					<button
-						type="button"
-						class="tbl-sort tbl-sort-left"
-						onclick={() => clickSort('benchmark')}
-					>
-						<span>Benchmark</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'benchmark'}
-							>{sortIcon('benchmark')}</span
-						>
-					</button>
+				<th class="sticky" aria-sort={sort.aria('benchmark')}>
+					<SortHeader {sort} field="benchmark" label="Benchmark" align="left" />
 				</th>
-				<th class="tbl-num" aria-sort={ariaSort('rank')}>
-					<button type="button" class="tbl-sort" onclick={() => clickSort('rank')}>
-						<span>Rank</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'rank'}>{sortIcon('rank')}</span>
-					</button>
+				<th class="tbl-num" aria-sort={sort.aria('rank')}>
+					<SortHeader {sort} field="rank" label="Rank" />
 				</th>
-				<th class="tbl-num" aria-sort={ariaSort('meanTask')}>
-					<button type="button" class="tbl-sort" onclick={() => clickSort('meanTask')}>
-						<span>Mean (Task)</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'meanTask'}
-							>{sortIcon('meanTask')}</span
-						>
-					</button>
+				<th class="tbl-num" aria-sort={sort.aria('meanTask')}>
+					<SortHeader {sort} field="meanTask" label="Mean (Task)" />
 				</th>
-				<th class="tbl-num" aria-sort={ariaSort('meanTaskType')}>
-					<button type="button" class="tbl-sort" onclick={() => clickSort('meanTaskType')}>
-						<span>Mean (TaskType)</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'meanTaskType'}
-							>{sortIcon('meanTaskType')}</span
-						>
-					</button>
+				<th class="tbl-num" aria-sort={sort.aria('meanTaskType')}>
+					<SortHeader {sort} field="meanTaskType" label="Mean (TaskType)" />
 				</th>
-				<th class="tbl-num" aria-sort={ariaSort('zeroShot')}>
-					<button type="button" class="tbl-sort" onclick={() => clickSort('zeroShot')}>
-						<span>Zero-shot</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'zeroShot'}
-							>{sortIcon('zeroShot')}</span
-						>
-					</button>
+				<th class="tbl-num" aria-sort={sort.aria('zeroShot')}>
+					<SortHeader {sort} field="zeroShot" label="Zero-shot" />
 				</th>
 			</tr>
 		</thead>

@@ -16,22 +16,12 @@
 </script>
 
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
-	import { getParam, updateUrl } from '$lib/url-state';
-	import ModelTypeIcon from './ModelTypeIcon.svelte';
-	import {
-		ariaSort as ariaSortFor,
-		defaultDirFor,
-		fmtPct,
-		heat,
-		maxOf,
-		minOf,
-		nextSort,
-		slug,
-		sortIcon as sortIconFor
-	} from '$lib/format';
+	import { createSortState } from '$lib/stores/sort.svelte';
+	import ModelCellName from './ModelCellName.svelte';
+	import SortHeader from './SortHeader.svelte';
+	import { fmtPct, heat, maxOf, minOf } from '$lib/format';
 
 	interface Props {
 		rows: ModelScore[];
@@ -42,31 +32,15 @@
 	// Subset columns get a `subset:` prefix so the string union stays flat
 	// and serialises to the URL without further encoding.
 	type SortKey = 'rank' | 'model' | 'score' | `subset:${string}`;
-	const initialKey = getParam('s.scores');
-	const initialDir = getParam('d.scores');
-	let sortKey = $state<SortKey | null>((initialKey as SortKey | null) ?? null);
-	let sortDir = $state<'asc' | 'desc'>(initialDir === 'asc' ? 'asc' : 'desc');
-	$effect(() => {
-		updateUrl({
-			's.scores': sortKey,
-			'd.scores': sortKey ? sortDir : null
-		});
+	const sort = createSortState<SortKey>({
+		urlKeys: ['s.scores', 'd.scores'],
+		ascKeys: ['rank', 'model']
 	});
 
-	const ASC_KEYS: readonly SortKey[] = ['rank', 'model'];
-	const defaultDir = (k: SortKey) => defaultDirFor(k, ASC_KEYS);
-	function clickSort(k: SortKey) {
-		const next = nextSort(k, sortKey, sortDir, defaultDir);
-		sortKey = next.key;
-		sortDir = next.dir;
-	}
-	const sortIcon = (k: SortKey) => sortIconFor(k, sortKey, sortDir);
-	const ariaSort = (k: SortKey) => ariaSortFor(k, sortKey, sortDir);
-
 	let sortedRows = $derived.by<ModelScore[]>(() => {
-		if (!sortKey) return rows;
-		const dir = sortDir === 'asc' ? 1 : -1;
-		const k = sortKey;
+		if (!sort.key) return rows;
+		const dir = sort.dir === 'asc' ? 1 : -1;
+		const k = sort.key;
 		return [...rows].sort((a, b) => {
 			if (k === 'rank') return (a.rank - b.rank) * dir;
 			if (k === 'model') return a.model.name.localeCompare(b.model.name) * dir;
@@ -112,35 +86,23 @@
 	<table class="tbl task-table" use:stickyHead>
 		<thead>
 			<tr>
-				<th class="tbl-num sticky-rank" aria-sort={ariaSort('rank')}>
-					<button type="button" class="tbl-sort" onclick={() => clickSort('rank')}>
-						<span>Rank</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'rank'}>{sortIcon('rank')}</span>
-					</button>
+				<th class="tbl-num sticky-rank" aria-sort={sort.aria('rank')}>
+					<SortHeader {sort} field="rank" label="Rank" />
 				</th>
-				<th class="sticky" aria-sort={ariaSort('model')}>
-					<button type="button" class="tbl-sort tbl-sort-left" onclick={() => clickSort('model')}>
-						<span>Model</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'model'}>{sortIcon('model')}</span>
-					</button>
+				<th class="sticky" aria-sort={sort.aria('model')}>
+					<SortHeader {sort} field="model" label="Model" align="left" />
 				</th>
 				<th
 					class="tbl-num mean-head"
-					aria-sort={ariaSort('score')}
+					aria-sort={sort.aria('score')}
 					title="Mean of per-subset scores for this task"
 				>
-					<button type="button" class="tbl-sort" onclick={() => clickSort('score')}>
-						<span>Mean scores</span>
-						<span class="tbl-sort-ind" class:on={sortKey === 'score'}>{sortIcon('score')}</span>
-					</button>
+					<SortHeader {sort} field="score" label="Mean scores" />
 				</th>
 				{#each subsets as sub (sub)}
 					{@const k = `subset:${sub}` as SortKey}
-					<th class="tbl-num sub" aria-sort={ariaSort(k)} title={sub}>
-						<button type="button" class="tbl-sort" onclick={() => clickSort(k)}>
-							<span>{sub}</span>
-							<span class="tbl-sort-ind" class:on={sortKey === k}>{sortIcon(k)}</span>
-						</button>
+					<th class="tbl-num sub" aria-sort={sort.aria(k)} title={sub}>
+						<SortHeader {sort} field={k} label={sub} />
 					</th>
 				{/each}
 			</tr>
@@ -152,16 +114,7 @@
 						<span class="rank-pill">#{s.rank}</span>
 					</td>
 					<td class="sticky" data-model-type={s.model.modelType}>
-						<span class="type-icon" title={s.model.modelType}>
-							<ModelTypeIcon type={s.model.modelType} size={13} />
-						</span>
-						<a
-							class="task-model-link"
-							href={resolve('/models/[name]', { name: slug(s.model.name) })}
-						>
-							<span class="tbl-model-org">{s.model.org}</span><span class="tbl-model-sep">/</span
-							><span class="tbl-model-name">{s.model.displayName}</span>
-						</a>
+						<ModelCellName model={s.model} />
 					</td>
 					<td
 						class="tbl-num mean-cell"
@@ -249,16 +202,9 @@
 			min-width: 160px;
 		}
 	}
-	.task-model-link {
-		color: var(--text);
-		text-decoration: none;
-	}
-	.task-model-link:hover {
-		color: var(--link);
-	}
-	/* `.type-icon` + per-model-type tint rules live in
-	   src/lib/styles/leaderboard-table.css — shared with SummaryTable,
-	   PerTaskTab, and PerLanguageTab. */
+	/* `.tbl-model-link` styling + `.type-icon` per-model-type tints
+	   live in src/lib/styles/leaderboard-table.css — shared with
+	   SummaryTable, PerTaskTab, and PerLanguageTab. */
 	.mean-cell.partial {
 		color: var(--text-subtle);
 		font-weight: 500;
