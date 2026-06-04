@@ -21,6 +21,8 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import ModelTypeIcon from './ModelTypeIcon.svelte';
+	import ModelHoverPortal from './ModelHoverPortal.svelte';
+	import HoverPortal from './HoverPortal.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import MarkdownText from './MarkdownText.svelte';
 
@@ -311,26 +313,31 @@
 	// stacking context — even though it's position:fixed, the neighboring sticky
 	// Model column has a higher z-index in their shared parent and would paint
 	// over the left edge of any tip that crossed under it.
-	type TipKind = 'col' | 'model';
-	type TipRow = { k: string; v: string };
+	//
+	// The MODEL-cell hover now delegates to the shared `ModelHoverPortal`
+	// (also used by PerTaskTab + PerLanguageTab) so all three tables show
+	// byte-identical tooltips. This file's local `tipState` only handles
+	// the column-header tooltips, which have a different shape (markdown
+	// body, no dl rows).
 	type TipState = {
 		visible: boolean;
-		kind: TipKind;
 		title: string;
 		text: string;
-		rows: TipRow[];
 		x: number;
 		y: number;
 	};
 	let tipState = $state<TipState>({
 		visible: false,
-		kind: 'col',
 		title: '',
 		text: '',
-		rows: [],
 		x: 0,
 		y: 0
 	});
+	type ModelTip = {
+		showFor: (t: HTMLElement, row: SummaryRow) => void;
+		hide: () => void;
+	};
+	let modelTipPortal = $state<ModelTip | undefined>(undefined);
 
 	// Tooltip is `position: fixed; transform: translate(-50%, …)` so x is
 	// the desired *centre*. Clamp it to the viewport with a half-width
@@ -359,10 +366,8 @@
 		const r = cell.getBoundingClientRect();
 		tipState = {
 			visible: true,
-			kind: 'col',
 			title,
 			text,
-			rows: [],
 			x: clampTipX(r.left + r.width / 2),
 			y: r.bottom
 		};
@@ -381,35 +386,11 @@
 
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
 		if (!isBoundaryCross(e)) return;
-		cancelHide();
-		const cell = e.currentTarget as HTMLElement;
-		const r = cell.getBoundingClientRect();
-		const activeParamsLabel = row.activeParamsB
-			? `${fmtParamsValue(row.activeParamsB)}${fmtParamsUnit(row.activeParamsB)}`
-			: '—';
-		const rows: TipRow[] = [
-			{ k: 'Type', v: row.model.modelType },
-			{ k: 'Active params', v: activeParamsLabel },
-			{ k: 'Zero-shot', v: fmtZeroShot(row.zeroShotPct) },
-			{
-				k: 'Embedding dim',
-				v: row.embeddingDim ? row.embeddingDim.toLocaleString() : '—'
-			},
-			{
-				k: 'Max tokens',
-				v: row.maxTokens ? row.maxTokens.toLocaleString() : '—'
-			},
-			{ k: 'Released', v: row.model.releaseDate ?? '—' }
-		];
-		tipState = {
-			visible: true,
-			kind: 'model',
-			title: row.model.displayName,
-			text: '',
-			rows,
-			x: clampTipX(r.left + r.width / 2),
-			y: r.bottom
-		};
+		modelTipPortal?.showFor(e.currentTarget as HTMLElement, row);
+	}
+	function hideModelTip(e?: PointerEvent | FocusEvent) {
+		if (e && !isBoundaryCross(e)) return;
+		modelTipPortal?.hide();
 	}
 
 	// Hiding is debounced so the user can cross the 6 px gap between the
@@ -640,9 +621,9 @@
 							class="sticky-model has-tip"
 							data-model-type={row.model.modelType}
 							onpointerover={(e) => showModelTip(e, row)}
-							onpointerout={hideTip}
+							onpointerout={hideModelTip}
 							onfocusin={(e) => showModelTip(e, row)}
-							onfocusout={hideTip}
+							onfocusout={hideModelTip}
 						>
 							<span class="type-icon" title={row.model.modelType}>
 								<ModelTypeIcon type={row.model.modelType} size={13} />
@@ -721,34 +702,26 @@
 		</table>
 	</div>
 
-	{#if tipState.visible}
-		<!-- pointer-events: auto lets the user click any [link](url) we slip
-		     into the col-tip body. The cell's onpointerleave still fires on
-		     exit because the tip is offset 6 px below the cell, so the
-		     cursor crosses through empty space and triggers hideTip(). -->
-		<div
-			class="tip-portal"
-			role="tooltip"
-			style:left="{tipState.x}px"
-			style:top="{tipState.y}px"
-			onpointerenter={keepTip}
-			onpointerleave={hideTip}
-		>
-			{#if tipState.title}<strong class="tip-portal-title">{tipState.title}</strong>{/if}
-			{#if tipState.kind === 'col'}
-				<span class="tip-portal-body"><MarkdownText text={tipState.text} /></span>
-			{:else}
-				<dl class="tip-portal-dl">
-					{#each tipState.rows as r (r.k)}
-						<div>
-							<dt>{r.k}</dt>
-							<dd>{r.v}</dd>
-						</div>
-					{/each}
-				</dl>
-			{/if}
-		</div>
-	{/if}
+	<!-- Column-header tooltip — `interactive` so the user can click any
+	     [link](url) we slip into the body. The cell's pointerleave
+	     still fires on exit because the bubble's `pointerenter` /
+	     `pointerleave` chain back into `keepTip` / `hideTip`. -->
+	<HoverPortal
+		visible={tipState.visible}
+		title={tipState.title}
+		x={tipState.x}
+		y={tipState.y}
+		interactive
+		onPointerEnter={keepTip}
+		onPointerLeave={hideTip}
+	>
+		<span class="tip-portal-body"><MarkdownText text={tipState.text} /></span>
+	</HoverPortal>
+
+	<!-- Model-cell tooltip is the shared `ModelHoverPortal` so all three
+	     leaderboard tables (Summary / PerTask / PerLanguage) render
+	     byte-identical bubbles. -->
+	<ModelHoverPortal bind:this={modelTipPortal} />
 </div>
 
 <style>
@@ -758,67 +731,11 @@
 	.summary-table {
 		width: 100%;
 	}
-	/* Tooltip portal — rendered as a sibling of .scroll so it isn't trapped in
-	   any sticky <th>'s stacking context. position:fixed with JS coordinates. */
-	.tip-portal {
-		position: fixed;
-		transform: translate(-50%, 0);
-		min-width: 220px;
-		max-width: 340px;
-		/* Top padding includes the 6 px visual gap so the hit area is
-		   contiguous with the cell — no dead zone to traverse on the way
-		   to a clickable link inside the tip. */
-		padding: 16px 12px 10px;
-		background: var(--tip-bg);
-		color: var(--tip-fg);
-		border-radius: 8px;
-		background-clip: padding-box;
-		font-size: 12px;
-		font-weight: 400;
-		font-family: var(--font-sans);
-		text-transform: none;
-		letter-spacing: 0;
-		line-height: 1.5;
-		text-align: left;
-		z-index: 1000;
-		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
-		white-space: normal;
-		pointer-events: auto;
-	}
-	.tip-portal-title {
-		display: block;
-		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--primary);
-		margin-bottom: 4px;
-	}
+	/* Tooltip shell + title styles live in HoverPortal.svelte. We only
+	   own the column-tip body wrapper so MarkdownText output (links,
+	   spans, etc.) sits as a block under the title. */
 	.tip-portal-body {
 		display: block;
-	}
-	.tip-portal-dl {
-		display: grid;
-		grid-template-columns: max-content 1fr;
-		gap: 4px 14px;
-		margin: 0;
-	}
-	.tip-portal-dl > div {
-		display: contents;
-	}
-	.tip-portal-dl dt {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--tip-label);
-		font-weight: 600;
-		align-self: center;
-	}
-	.tip-portal-dl dd {
-		margin: 0;
-		font-variant-numeric: tabular-nums;
-		font-weight: 500;
-		color: var(--tip-fg);
 	}
 
 	/* `.type-icon` + per-model-type tints, plus shared row hover, live in

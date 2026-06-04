@@ -14,36 +14,51 @@
 		return n.toLocaleString();
 	}
 
+	// Single source of truth for the per-model hover row set — used by
+	// SummaryTable, PerTaskTab, and PerLanguageTab so the three tooltips
+	// stay byte-identical. Numeric values render as plain locale-
+	// formatted numbers (no " d" or " tok" suffixes — the dt label
+	// already names the unit) and Org isn't a separate row because it
+	// already appears in the title (`<org> / <displayName>`).
 	export function rowsForModel(row: SummaryRow): { k: string; v: string }[] {
 		const m = row.model;
 		return [
-			{ k: 'Org', v: m.org },
 			{ k: 'Type', v: m.modelType },
-			{ k: 'Total params', v: fmtParams(row.totalParamsB) },
 			{ k: 'Active params', v: fmtParams(row.activeParamsB) },
-			{ k: 'Embed dim', v: row.embeddingDim ? `${fmtInt(row.embeddingDim)} d` : '—' },
-			{ k: 'Max tokens', v: row.maxTokens ? `${fmtInt(row.maxTokens)} tok` : '—' },
 			{ k: 'Zero-shot', v: fmtZeroShot(row.zeroShotPct) },
+			{ k: 'Embedding dim', v: row.embeddingDim ? fmtInt(row.embeddingDim) : '—' },
+			{ k: 'Max tokens', v: row.maxTokens ? fmtInt(row.maxTokens) : '—' },
 			{ k: 'Released', v: m.releaseDate ?? '—' }
 		];
 	}
 </script>
 
 <script lang="ts">
+	import HoverPortal from './HoverPortal.svelte';
+
 	type TipState = {
 		visible: boolean;
 		title: string;
+		modelType: string;
 		rows: { k: string; v: string }[];
 		x: number;
 		y: number;
 	};
-	let tip = $state<TipState>({ visible: false, title: '', rows: [], x: 0, y: 0 });
+	let tip = $state<TipState>({
+		visible: false,
+		title: '',
+		modelType: '',
+		rows: [],
+		x: 0,
+		y: 0
+	});
 
 	export function showFor(target: HTMLElement, row: SummaryRow) {
 		const r = target.getBoundingClientRect();
 		tip = {
 			visible: true,
 			title: `${row.model.org} / ${row.model.displayName}`,
+			modelType: row.model.modelType,
 			rows: rowsForModel(row),
 			x: r.left + r.width / 2,
 			y: r.bottom
@@ -54,61 +69,24 @@
 	}
 </script>
 
-{#if tip.visible}
-	<div class="tip" role="tooltip" style:left="{tip.x}px" style:top="{tip.y}px">
-		<strong class="title">{tip.title}</strong>
-		<dl>
-			{#each tip.rows as r (r.k)}
-				<div>
-					<dt>{r.k}</dt>
-					<dd>{r.v}</dd>
-				</div>
-			{/each}
-		</dl>
-	</div>
-{/if}
+<HoverPortal
+	visible={tip.visible}
+	title={tip.title}
+	modelType={tip.modelType}
+	x={tip.x}
+	y={tip.y}
+>
+	<dl>
+		{#each tip.rows as r (r.k)}
+			<div>
+				<dt>{r.k}</dt>
+				<dd class:type-value={r.k === 'Type'}>{r.v}</dd>
+			</div>
+		{/each}
+	</dl>
+</HoverPortal>
 
 <style>
-	.tip {
-		position: fixed;
-		transform: translate(-50%, 6px);
-		min-width: 220px;
-		max-width: 340px;
-		padding: 10px 12px;
-		background: var(--tip-bg);
-		color: var(--tip-fg);
-		border-radius: 8px;
-		font-size: 12px;
-		font-weight: 400;
-		font-family: var(--font-sans);
-		text-transform: none;
-		letter-spacing: 0;
-		line-height: 1.5;
-		text-align: left;
-		z-index: 1000;
-		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
-		white-space: normal;
-		pointer-events: none;
-	}
-	.tip::before {
-		content: '';
-		position: absolute;
-		top: -4px;
-		left: 50%;
-		transform: translateX(-50%) rotate(45deg);
-		width: 8px;
-		height: 8px;
-		background: var(--tip-bg);
-	}
-	.title {
-		display: block;
-		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--primary);
-		margin-bottom: 4px;
-	}
 	dl {
 		display: grid;
 		grid-template-columns: max-content 1fr;
@@ -131,5 +109,28 @@
 		font-variant-numeric: tabular-nums;
 		font-weight: 500;
 		color: var(--tip-fg);
+	}
+	/* Per-model-type tint on the Type row's value — mirrors the title
+	   tint owned by HoverPortal. `:global(...)` reaches the dd from the
+	   ancestor `[data-model-type=…]` selector on the portal root. */
+	:global(.hover-portal[data-model-type='dense']) .type-value {
+		color: var(--tint-blue-fg);
+		font-weight: 700;
+	}
+	:global(.hover-portal[data-model-type='cross-encoder']) .type-value {
+		color: var(--tint-orange-fg);
+		font-weight: 700;
+	}
+	:global(.hover-portal[data-model-type='late-interaction']) .type-value {
+		color: var(--tint-green-fg);
+		font-weight: 700;
+	}
+	:global(.hover-portal[data-model-type='sparse']) .type-value {
+		color: var(--tint-amber-fg);
+		font-weight: 700;
+	}
+	:global(.hover-portal[data-model-type='router']) .type-value {
+		color: var(--tint-purple-fg);
+		font-weight: 700;
 	}
 </style>

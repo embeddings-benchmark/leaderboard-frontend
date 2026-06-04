@@ -53,12 +53,17 @@
 	   underlying tint is one source of truth (was `rgb(15, 23, 42, X)`
 	   duplicated across 20+ files). */
 	--shadow-tint: 15 23 42;
-	/* Dark portal tooltip — intentionally not themed. Tooltips are
-	   always dark for legibility against either the light or dark
-	   table cells they overlay. */
-	--tip-bg: #1f2329;
-	--tip-fg: #f1f3f5;
-	--tip-label: #9aa3ad;
+	/* Portal tooltip — themed so the bubble matches the surrounding
+	   surface (was forced dark in both themes; users felt it stood out
+	   too sharply against light tables). Light theme uses a near-white
+	   bubble with dark text; dark theme keeps the original dark values.
+	   Combined into the live `--tip-*` tokens further down. */
+	--tip-bg-light: #fbfcfd;
+	--tip-fg-light: #14181f;
+	--tip-label-light: #6b7280;
+	--tip-bg-dark: #1f2329;
+	--tip-fg-dark: #f1f3f5;
+	--tip-label-dark: #9aa3ad;
 	/* Top-bar background — translucent so the page surface peeks through the
 	   blur. Pair per theme rather than mixing the same alpha both ways. */
 	--bar-bg-light: rgb(255, 255, 255, 0.82);
@@ -84,6 +89,9 @@
 	--row-hover: light-dark(var(--row-hover-light), var(--row-hover-dark));
 	--shadow-sm: light-dark(var(--shadow-sm-light), var(--shadow-sm-dark));
 	--bar-bg: light-dark(var(--bar-bg-light), var(--bar-bg-dark));
+	--tip-bg: light-dark(var(--tip-bg-light), var(--tip-bg-dark));
+	--tip-fg: light-dark(var(--tip-fg-light), var(--tip-fg-dark));
+	--tip-label: light-dark(var(--tip-label-light), var(--tip-label-dark));
 
 	/* Category palette — each row pairs a soft bg with a readable fg. */
 	--tint-blue: light-dark(#e8edff, #1e2740);
@@ -142,6 +150,9 @@
 		--row-hover: var(--row-hover-light);
 		--shadow-sm: var(--shadow-sm-light);
 		--bar-bg: var(--bar-bg-light);
+		--tip-bg: var(--tip-bg-light);
+		--tip-fg: var(--tip-fg-light);
+		--tip-label: var(--tip-label-light);
 	}
 	@media (prefers-color-scheme: dark) {
 		:root:not([data-theme='light']) {
@@ -163,6 +174,9 @@
 			--row-hover: var(--row-hover-dark);
 			--shadow-sm: var(--shadow-sm-dark);
 			--bar-bg: var(--bar-bg-dark);
+			--tip-bg: var(--tip-bg-dark);
+			--tip-fg: var(--tip-fg-dark);
+			--tip-label: var(--tip-label-dark);
 		}
 	}
 	:root[data-theme='dark'] {
@@ -184,6 +198,9 @@
 		--row-hover: var(--row-hover-dark);
 		--shadow-sm: var(--shadow-sm-dark);
 		--bar-bg: var(--bar-bg-dark);
+		--tip-bg: var(--tip-bg-dark);
+		--tip-fg: var(--tip-fg-dark);
+		--tip-label: var(--tip-label-dark);
 	}
 }
 
