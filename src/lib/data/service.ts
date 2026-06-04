@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type {
 	Benchmark,
+	BenchmarkLeaders,
 	BenchmarkSummary,
 	MenuEntry,
 	ModelFilters,
@@ -129,6 +130,66 @@ export async function loadSummary(benchmarkName: string): Promise<BenchmarkSumma
 	// deprecated alias for one frontend deploy window.
 	return enrichSummary(
 		await cachedHttp<BenchmarkSummary>(`/benchmarks/${encodeURIComponent(benchmarkName)}/scores`)
+	);
+}
+
+/**
+ * Slim per-size-bucket leaders for a benchmark.
+ *
+ * Used by the home page to render top-by-size mini-tables without
+ * pulling the full `/scores` payload (several MB on multilingual
+ * benchmarks). Each bucket is a `[min, max]` tuple in billions of
+ * parameters; pass `null` as `max` for the open-ended top bucket
+ * (encoded on the wire as bare `min`).
+ *
+ * Falls back to building leaders client-side from the mock summary
+ * when `PUBLIC_USE_MOCK=1` and the API is unset — keeps the home
+ * page working offline without a separate mock for this endpoint.
+ */
+export async function loadLeaders(
+	benchmarkName: string,
+	buckets: ReadonlyArray<readonly [number, number | null]>
+): Promise<BenchmarkLeaders> {
+	if (!API) {
+		if (!USE_MOCK) throw noApiError('loadLeaders');
+		const summary = await loadSummary(benchmarkName);
+		return {
+			benchmarkName: summary.benchmarkName,
+			buckets: buckets.map(([lo, hi]) => {
+				const candidates = summary.rows.filter(
+					(r) => r.totalParamsB > 0 && r.totalParamsB >= lo && (hi == null || r.totalParamsB < hi)
+				);
+				candidates.sort((a, b) => (b.meanTask ?? -1) - (a.meanTask ?? -1));
+				const top = candidates[0];
+				return {
+					min: lo,
+					max: hi,
+					leader: top
+						? {
+								rank: top.rank,
+								model: {
+									name: top.model.name,
+									displayName: top.model.displayName,
+									org: top.model.org,
+									modelType: top.model.modelType
+								},
+								meanTask: top.meanTask,
+								totalParamsB: top.totalParamsB
+							}
+						: null
+				};
+			})
+		};
+	}
+	// Wire format is a JSON-encoded array of [min, max] tuples — the
+	// backend parses it as `?buckets=[[0,0.5],...,[5,null]]`. Single
+	// query param keeps the URL cacheable by the shared cachedHttp
+	// keyed-by-URL store while letting us express the structured
+	// shape the user wanted.
+	const buf: Array<[number, number | null]> = buckets.map(([lo, hi]) => [lo, hi]);
+	const qs = `buckets=${encodeURIComponent(JSON.stringify(buf))}`;
+	return cachedHttp<BenchmarkLeaders>(
+		`/benchmarks/${encodeURIComponent(benchmarkName)}/leaders?${qs}`
 	);
 }
 

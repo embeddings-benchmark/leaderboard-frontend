@@ -148,6 +148,33 @@ export interface BenchmarkSummary {
 	aggregations: BenchmarkAggregation[];
 }
 
+// Slim per-size-bucket response from `/benchmarks/{name}/leaders` —
+// used by the home page so we don't have to pull a full /scores
+// payload (several MB on multilingual benchmarks) just to render
+// 4 mini-leaderboard rows.
+export interface LeaderModel {
+	name: string;
+	displayName: string;
+	org: string;
+	modelType: ModelType;
+}
+export interface LeaderRow {
+	rank: number;
+	model: LeaderModel;
+	meanTask: number | null;
+	totalParamsB: number;
+}
+export interface BucketLeader {
+	min: number;
+	/** `null` means "open-ended" (>= min). */
+	max: number | null;
+	leader: LeaderRow | null;
+}
+export interface BenchmarkLeaders {
+	benchmarkName: string;
+	buckets: BucketLeader[];
+}
+
 export interface TaskScoreRow {
 	rank: number;
 	model: ModelMeta;
