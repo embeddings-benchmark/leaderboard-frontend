@@ -245,7 +245,6 @@
 		<section class="primary" aria-label="Featured leaderboards">
 			<div class="section-head">
 				<span class="eyebrow">Featured</span>
-				<span class="kicker">Where most people start — top model per size, so small models get glory too</span>
 			</div>
 			<div class="primary-grid">
 				{#each primaries as p (p.key)}
@@ -425,10 +424,6 @@
 		padding: 3px 8px;
 		background: var(--primary-soft);
 		border-radius: 999px;
-	}
-	.kicker {
-		font-size: 12px;
-		color: var(--text-muted);
 	}
 	.primary {
 		margin-bottom: 22px;
