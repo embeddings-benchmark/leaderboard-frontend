@@ -40,10 +40,31 @@
 
 	interface Props {
 		summary: BenchmarkSummary;
+		// Language column list — mirrors `Benchmark.language_view` upstream.
+		// When `'all'`, the union of the benchmark's tasks' languages is
+		// used. The parent route hides this tab when the benchmark didn't
+		// opt into a per-language view, so this prop is never null here.
+		languageView: string[] | 'all';
 	}
-	let { summary }: Props = $props();
+	let { summary, languageView }: Props = $props();
 
-	const LANGUAGES = ['English', 'Chinese', 'French', 'German', 'Spanish', 'Arabic'];
+	let LANGUAGES = $derived.by(() => {
+		if (languageView === 'all') {
+			const seen = new Set<string>();
+			const out: string[] = [];
+			for (const t of summary.tasksMeta ?? []) {
+				for (const lang of t.languages ?? []) {
+					if (!seen.has(lang)) {
+						seen.add(lang);
+						out.push(lang);
+					}
+				}
+			}
+			out.sort();
+			return out;
+		}
+		return languageView;
+	});
 
 	// Returns null when the row has no overall mean (partial benchmark coverage);
 	// downstream renders that as '—' so missing data doesn't masquerade as 0.00.

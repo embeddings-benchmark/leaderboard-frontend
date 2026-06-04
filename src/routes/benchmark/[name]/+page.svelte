@@ -32,7 +32,10 @@
 	);
 
 	type TabId = 'summary' | 'perf_size' | 'perf_time' | 'perf_task' | 'perf_language' | 'task_info';
-	const TABS: { id: TabId; label: string }[] = [
+	// Per-language tab is filtered out below when the benchmark didn't
+	// opt into a `language_view` — the underlying table can't render
+	// meaningful columns without it.
+	const ALL_TABS: { id: TabId; label: string }[] = [
 		{ id: 'summary', label: 'Summary' },
 		{ id: 'perf_size', label: 'Performance per Model Size' },
 		{ id: 'perf_time', label: 'Performance over Time' },
@@ -40,9 +43,30 @@
 		{ id: 'perf_language', label: 'Performance per language' },
 		{ id: 'task_info', label: 'Task information' }
 	];
+	let hasLanguageView = $derived(
+		!!benchmark &&
+			(benchmark.languageView === 'all' ||
+				(Array.isArray(benchmark.languageView) && benchmark.languageView.length > 0))
+	);
+	let TABS = $derived(
+		ALL_TABS.filter((t) => t.id !== 'perf_language' || hasLanguageView)
+	);
+	// Deep links may carry `?tab=perf_language` for a benchmark that
+	// doesn't expose a language view (e.g. someone shared the URL after
+	// the language_view field was removed). Fall back to Summary so the
+	// page doesn't render with no active tab.
+	$effect(() => {
+		if (activeTab === 'perf_language' && benchmark && !hasLanguageView) {
+			activeTab = 'summary';
+		}
+	});
 	// Hydrate active tab from `?tab=` for shareable deep links.
 
-	const TAB_IDS = new Set(TABS.map((t) => t.id));
+	// Validate the initial `?tab=` against the FULL tab list — the
+	// reactive `TABS` may not have been populated yet at module init,
+	// and the perf_language-fallback effect above handles unsupported
+	// tabs once the benchmark loads.
+	const TAB_IDS = new Set(ALL_TABS.map((t) => t.id));
 	const initialTab = getParam('tab');
 	let activeTab = $state<TabId>(
 		initialTab && TAB_IDS.has(initialTab as TabId) ? (initialTab as TabId) : 'summary'
@@ -72,7 +96,9 @@
 	$effect(() => {
 		if (typeof window === 'undefined') return;
 		if (!filteredSummary) return;
-		const pending = PREWARM.filter((t) => !visited.has(t));
+		const pending = PREWARM.filter(
+			(t) => !visited.has(t) && (t !== 'perf_language' || hasLanguageView)
+		);
 		if (pending.length === 0) return;
 		// Add one tab per idle slice so we never block the main thread for the
 		// full pre-mount budget. Skip if the user already navigates away.
@@ -364,9 +390,13 @@
 							<PerTaskTab summary={filteredSummary} />
 						</div>
 					{/if}
-					{#if visited.has('perf_language')}
+					{#if visited.has('perf_language') && hasLanguageView && benchmark?.languageView}
 						<div class="tab-pane" class:active={activeTab === 'perf_language'} data-prepaint>
-							<PerLanguageTab summary={filteredSummary} bind:this={perLanguageTab} />
+							<PerLanguageTab
+								summary={filteredSummary}
+								languageView={benchmark.languageView}
+								bind:this={perLanguageTab}
+							/>
 						</div>
 					{/if}
 					{#if visited.has('task_info')}

@@ -27,6 +27,12 @@ export interface Benchmark {
 	// without opening each benchmark. Set by the backend from the cached
 	// per-benchmark frames; `0` means unknown (cache not populated) or empty.
 	numModels?: number;
+	// Explicit subset of language codes for the per-language leaderboard
+	// view. Mirrors `Benchmark.language_view` upstream. `'all'` means
+	// "every language present"; `null`/missing means the benchmark didn't
+	// opt into a per-language view and the Per-language tab should be
+	// hidden entirely on this benchmark's detail page.
+	languageView?: string[] | 'all' | null;
 }
 
 export type SimplifiedTaskType =
