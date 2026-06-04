@@ -196,6 +196,7 @@
 <div class="rs">
 	<div class="labels">
 		{#if parse}
+			{@const HINT = 'Accepts e.g. 500K, 5M, 1.2B, 3T — Enter to apply, Esc to cancel'}
 			<input
 				type="text"
 				class="val val-edit"
@@ -204,9 +205,9 @@
 				onblur={commitMin}
 				onkeydown={(e) => onLabelKey(e, 'min')}
 				aria-label="Minimum value"
+				title={HINT}
 				inputmode="text"
 				spellcheck="false"
-				size={Math.max(3, minDraft.length)}
 			/>
 			<input
 				type="text"
@@ -216,9 +217,9 @@
 				onblur={commitMax}
 				onkeydown={(e) => onLabelKey(e, 'max')}
 				aria-label="Maximum value"
+				title={HINT}
 				inputmode="text"
 				spellcheck="false"
-				size={Math.max(3, maxDraft.length)}
 			/>
 		{:else}
 			<span class="val">{format(localMin)}</span>
@@ -256,6 +257,9 @@
 				<span class="tick" style:left="{pct(t)}%">{format(t)}</span>
 			{/each}
 		</div>
+	{/if}
+	{#if parse && (editingMin || editingMax)}
+		<div class="hint">Type a value (e.g. 500K, 5M, 1.2B, 3T)</div>
 	{/if}
 </div>
 
@@ -296,6 +300,12 @@
 		transition:
 			background 0.1s,
 			border-color 0.1s;
+		/* Auto-size to content where supported (Baseline 2024-10).
+		   Avoids a reactive `size` attribute that would swap the
+		   input element and blur it mid-keystroke. Falls back to
+		   the `width` below for older browsers. */
+		field-sizing: content;
+		width: 7ch;
 	}
 	.val-edit:hover {
 		background: var(--surface-muted);
@@ -405,5 +415,11 @@
 		position: absolute;
 		transform: translateX(-50%);
 		white-space: nowrap;
+	}
+	.hint {
+		font-size: 11px;
+		color: var(--text-subtle);
+		text-align: center;
+		margin-top: 2px;
 	}
 </style>
