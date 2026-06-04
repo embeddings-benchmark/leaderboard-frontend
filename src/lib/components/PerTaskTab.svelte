@@ -4,6 +4,8 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import { resolve } from '$app/paths';
+	import { slug } from '$lib/format';
 	import {
 		ariaSort as ariaSortFor,
 		bestPerColumn,
@@ -442,7 +444,12 @@
 			onpointerenter={keepTaskTip}
 			onpointerleave={hideTaskTip}
 		>
-			<strong class="task-tip-title">{taskTip.title}</strong>
+			<a
+				class="task-tip-title"
+				href={resolve('/tasks/[name]', { name: slug(taskTip.title) })}
+			>
+				{taskTip.title}
+			</a>
 			{#if taskTip.type}<span class="task-tip-type">{taskTip.type}</span>{/if}
 			{#if taskTip.description}
 				<span class="task-tip-body"><MarkdownText text={taskTip.description} /></span>
@@ -538,6 +545,13 @@
 		color: var(--tip-fg);
 		margin-bottom: 2px;
 		word-break: break-word;
+		text-decoration: underline;
+		text-decoration-color: color-mix(in srgb, var(--tip-fg) 35%, transparent);
+		text-underline-offset: 2px;
+	}
+	.task-tip-title:hover,
+	.task-tip-title:focus-visible {
+		text-decoration-color: var(--tip-fg);
 	}
 	.task-tip-type {
 		display: block;

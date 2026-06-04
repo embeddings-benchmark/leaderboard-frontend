@@ -430,10 +430,28 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// Local lookups in a pure transformation — plain Set is correct here.
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const visibleTaskNames = new Set(visibleTasks.map((t) => t.name));
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
-	const visibleTaskTypes = Array.from(new Set(visibleTasks.map((t) => t.type)));
-	// Preserve the original task-type ordering.
-	const taskTypesOut = summary.taskTypes.filter((t) => visibleTaskTypes.includes(t));
+	// `summary.taskTypes` holds the *display* labels — after the
+	// backend's `_split_on_capital` + per-builder renames (e.g.
+	// `Any2AnyRetrieval` → `Retrieval`, `VisualSTS(eng)` → `VisualSTeng`).
+	// `tasksMeta[i].type` is the *raw* type and can differ from the
+	// display label, so deriving visible types from it would silently
+	// drop renamed columns. When no task-type filter is applied, pass
+	// `summary.taskTypes` through verbatim — it's the source of truth
+	// for which columns the summary table should render.
+	let taskTypesOut: string[];
+	if (fullTypes && fullDomains && fullModalities && fullLanguages && fullTasks) {
+		taskTypesOut = summary.taskTypes;
+	} else {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const visibleTaskTypes = new Set(visibleTasks.map((t) => t.type));
+		// Best-effort filter — preserves any summary.taskTypes whose
+		// raw form survived the filter, AND any whose renamed display
+		// label still matches a row's `scoresByTaskType` key.
+		const liveKeys = new Set<string>();
+		for (const r of summary.rows)
+			for (const k of Object.keys(r.scoresByTaskType ?? {})) liveKeys.add(k);
+		taskTypesOut = summary.taskTypes.filter((t) => visibleTaskTypes.has(t) || liveKeys.has(t));
+	}
 
 	const taskNamesOut = summary.tasks.filter((t) => visibleTaskNames.has(t));
 
@@ -476,33 +494,45 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			return true;
 		})
 		.map((row) => {
-			// Recompute means strictly over the visible slice: only emit a value
-			// when the model covers *every* visible task / task-type. Anything
-			// less and the cell is blank — same null-for-partial-coverage policy
-			// as the backend, so we never silently outrank fully-evaluated peers.
-			let taskSum = 0;
-			let taskN = 0;
-			for (const t of taskNamesOut) {
-				const v = row.scoresByTask[t];
-				if (v !== undefined) {
-					taskSum += v;
-					taskN++;
+			// Filters can narrow the visible task / task-type slice, in
+			// which case we recompute means client-side using the same
+			// null-for-partial-coverage policy the backend uses (so
+			// partially-covered models don't silently outrank fully-
+			// evaluated peers). When NO filter is active though, the
+			// recompute is doubly wrong: (a) it does extra work, and
+			// (b) it forces a "mean of per-task scores" interpretation
+			// that doesn't match every backend builder — MIEB-style
+			// benchmarks compute Mean (Task) as "mean of per-type means"
+			// (each type weighted equally regardless of task count), so
+			// our recompute drifted from the canonical value (jina on
+			// MIEB(eng) showed 58 instead of 65). Trust the API when no
+			// filter is touched.
+			let meanTask: number | null = row.meanTask;
+			let meanTaskType: number | null = row.meanTaskType;
+			if (!fullTypes || !fullDomains || !fullModalities || !fullLanguages || !fullTasks) {
+				let taskSum = 0;
+				let taskN = 0;
+				for (const t of taskNamesOut) {
+					const v = row.scoresByTask[t];
+					if (v !== undefined) {
+						taskSum += v;
+						taskN++;
+					}
 				}
-			}
-			const meanTask: number | null =
-				taskNamesOut.length > 0 && taskN === taskNamesOut.length ? taskSum / taskN : null;
-
-			let typeSum = 0;
-			let typeN = 0;
-			for (const tt of taskTypesOut) {
-				const v = row.scoresByTaskType[tt];
-				if (v !== undefined) {
-					typeSum += v;
-					typeN++;
+				meanTask =
+					taskNamesOut.length > 0 && taskN === taskNamesOut.length ? taskSum / taskN : null;
+				let typeSum = 0;
+				let typeN = 0;
+				for (const tt of taskTypesOut) {
+					const v = row.scoresByTaskType[tt];
+					if (v !== undefined) {
+						typeSum += v;
+						typeN++;
+					}
 				}
+				meanTaskType =
+					taskTypesOut.length > 0 && typeN === taskTypesOut.length ? typeSum / typeN : null;
 			}
-			const meanTaskType: number | null =
-				taskTypesOut.length > 0 && typeN === taskTypesOut.length ? typeSum / typeN : null;
 
 			return { ...row, meanTask, meanTaskType };
 		});

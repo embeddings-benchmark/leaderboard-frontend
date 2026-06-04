@@ -120,10 +120,16 @@
 		if (!s || s === 'loading' || s === 'error') return [];
 		return s.rows.slice(0, n);
 	}
-	function pickScore(row: { meanTask: number | null; scoresByTaskType?: Record<string, number> }) {
-		// Most benchmarks expose meanTask; for ones without (rare), fall
-		// back to the first per-type score so the mini-table isn't empty.
+	function pickScore(row: {
+		meanTask: number | null;
+		meanTaskType?: number | null;
+		scoresByTaskType?: Record<string, number>;
+	}) {
+		// Prefer whichever mean the benchmark actually exposes. Standard
+		// benchmarks emit both; MIEB-style emit only meanTaskType (its
+		// aggregations declare MEAN_TASK_TYPE rather than MEAN_TASK).
 		if (row.meanTask != null) return row.meanTask;
+		if (row.meanTaskType != null) return row.meanTaskType;
 		const first = Object.values(row.scoresByTaskType ?? {})[0];
 		return first ?? null;
 	}
