@@ -53,8 +53,12 @@
 			stroke-linejoin="round"
 			aria-hidden="true"
 		>
-			<path d="M3 6h7l-3 4 3 4H3" />
-			<path d="M21 6h-7l3 4-3 4h7" />
+			<!-- Glyph paths are centered around y=12 (viewBox midpoint) so
+			     the icon's optical centre lines up with the text x-height
+			     under `align-items: center`. The earlier y=6..14 range
+			     was top-skewed and read as slightly raised. -->
+			<path d="M3 8h7l-3 4 3 4H3" />
+			<path d="M21 8h-7l3 4-3 4h7" />
 		</svg>
 		<span>Compare {count > 4 ? '4 of ' + count : count} pinned</span>
 	</a>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
@@ -123,9 +124,19 @@
 	// Pinned models are scoped to the current benchmark — pinning persists
 	// across tab switches (Summary ↔ Per task ↔ Per language) but a
 	// navigation to a different benchmark resets the set so stale pins
-	// don't shadow rows in a list that may not even contain them. First
-	// mount keeps whatever the `?pin=` URL hydrated; we only clear when
-	// the benchmark name actually changes.
+	// don't shadow rows in a list that may not even contain them.
+	//
+	// Two cases to cover:
+	//   1. Stay-within-route nav (e.g. via in-page links) where the
+	//      `+page.svelte` instance is reused and `benchmarkName` flips
+	//      under us. Tracked via the local `prevBenchmarkForPins`.
+	//   2. Unmount → remount nav (e.g. user goes to `/` and clicks a
+	//      different benchmark card). The local var resets to null,
+	//      so case 1's compare-against-previous logic can't fire. The
+	//      mount-time URL check below catches it: if the new URL has
+	//      no `?pin=` param but the singleton store still holds pins
+	//      from the prior page, clear them — the URL is the canonical
+	//      persistence so a missing param means "no pins on this view".
 	let prevBenchmarkForPins: string | null = null;
 	$effect(() => {
 		const current = benchmarkName;
@@ -133,6 +144,11 @@
 			pinnedModels.clear();
 		}
 		prevBenchmarkForPins = current;
+	});
+	onMount(() => {
+		if (!page.url.searchParams.get('pin') && pinnedModels.size > 0) {
+			pinnedModels.clear();
+		}
 	});
 	$effect(() => {
 		filters.initFor(leaderboard.summary);
