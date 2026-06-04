@@ -7,6 +7,7 @@
 	import { page, updated } from '$app/state';
 	import { base, resolve } from '$app/paths';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
 
 	let { children } = $props();
 
@@ -131,6 +132,12 @@
 	</header>
 
 	{@render children()}
+
+	<!-- Floating "compare X pinned" chip — appears at bottom-center
+	     whenever ≥2 models are pinned in any table. Self-hides on the
+	     /compare route. Mounted once globally so every page benefits
+	     without per-page wiring. -->
+	<ComparePinnedButton />
 
 	<footer class="page-footer" aria-label="Site footer">
 		<a
