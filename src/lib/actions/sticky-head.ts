@@ -61,6 +61,8 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		overflow: hidden;
 		pointer-events: none;
 		display: none;
+		will-change: transform;
+		contain: layout style paint;
 	`;
 
 	// Inner div is the actual horizontal scroll container that mirrors the
@@ -121,6 +123,43 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		}
 	}
 
+	// Layout values cached at resize / mutation / tab-activate time so the
+	// hot scroll path doesn't have to call `getBoundingClientRect` (which
+	// forces synchronous layout — a major source of jank on mobile Firefox
+	// with this 9000-px-wide table). Pixel coordinates are stored in
+	// document space (viewport rect + scroll offset) so we can derive the
+	// current viewport position each frame from cheap `scrollY` reads.
+	let layoutDirty = true;
+	let cachedWrapperLeft = 0;
+	let cachedWrapperWidth = 0;
+	let cachedHeadHeight = 0;
+	let cachedTheadDocTop = 0;
+	let cachedTableDocBottom = 0;
+	let cachedStickyTop = 48;
+	// Track the last static-position styles we wrote so we can skip
+	// re-applying them when scroll alone fires — keeps the scroll-path
+	// style writes down to one (`display`) plus the horizontal sync.
+	let appliedLeft = -1;
+	let appliedWidth = -1;
+	let appliedHeight = -1;
+	let appliedTop = -1;
+	let overlayDisplayed = false;
+
+	function readLayout() {
+		const wr = wrapper.getBoundingClientRect();
+		const th = realThead.getBoundingClientRect();
+		const tbl = table.getBoundingClientRect();
+		const sx = window.scrollX;
+		const sy = window.scrollY;
+		cachedWrapperLeft = wr.left + sx;
+		cachedWrapperWidth = wr.width;
+		cachedHeadHeight = th.height;
+		cachedTheadDocTop = th.top + sy;
+		cachedTableDocBottom = tbl.bottom + sy;
+		cachedStickyTop = stickyTopPx();
+		layoutDirty = false;
+	}
+
 	// Bail when our table lives in any inactive `.tab-pane`. Both
 	// `data-prepaint` panes (clip-path hidden, still laid out) and
 	// regular `content-visibility: hidden` panes (skipped from paint
@@ -130,37 +169,59 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	function update() {
 		const pane = table.closest('.tab-pane');
 		if (pane && !pane.classList.contains('active')) {
-			overlay.style.display = 'none';
+			if (overlayDisplayed) {
+				overlay.style.display = 'none';
+				overlayDisplayed = false;
+			}
 			return;
 		}
 
-		const wrapperRect = wrapper.getBoundingClientRect();
-		const theadRect = realThead.getBoundingClientRect();
-		const tableRect = table.getBoundingClientRect();
+		if (layoutDirty) readLayout();
 
-		// Re-measure each frame — the bar shrinks at the mobile
-		// breakpoint and we want the overlay flush against whatever the
-		// current bar height is.
-		const stickyTop = stickyTopPx();
-		overlay.style.top = `${stickyTop}px`;
-
-		// Show the overlay only when the real thead has scrolled above the offset
-		// AND the table itself is still on screen (its bottom hasn't crossed
-		// above the overlay yet). Otherwise we'd leave a ghost thead floating
-		// after the table is gone.
-		const headH = theadRect.height;
-		const shouldShow = theadRect.top < stickyTop && tableRect.bottom > stickyTop + headH;
+		const sy = window.scrollY;
+		const theadViewportTop = cachedTheadDocTop - sy;
+		const tableViewportBottom = cachedTableDocBottom - sy;
+		const stickyTop = cachedStickyTop;
+		const headH = cachedHeadHeight;
+		const shouldShow = theadViewportTop < stickyTop && tableViewportBottom > stickyTop + headH;
 
 		if (!shouldShow) {
-			overlay.style.display = 'none';
+			if (overlayDisplayed) {
+				overlay.style.display = 'none';
+				overlayDisplayed = false;
+			}
 			return;
 		}
 
-		overlay.style.display = 'block';
-		overlay.style.left = `${wrapperRect.left}px`;
-		overlay.style.width = `${wrapperRect.width}px`;
-		overlay.style.height = `${headH}px`;
+		// Only write the static-position styles when they actually changed
+		// (resize / layout shift). Scroll alone leaves them stable so the
+		// hot path is just `display` + the horizontal sync.
+		const left = cachedWrapperLeft - window.scrollX;
+		if (appliedLeft !== left) {
+			overlay.style.left = `${left}px`;
+			appliedLeft = left;
+		}
+		if (appliedWidth !== cachedWrapperWidth) {
+			overlay.style.width = `${cachedWrapperWidth}px`;
+			appliedWidth = cachedWrapperWidth;
+		}
+		if (appliedHeight !== headH) {
+			overlay.style.height = `${headH}px`;
+			appliedHeight = headH;
+		}
+		if (appliedTop !== stickyTop) {
+			overlay.style.top = `${stickyTop}px`;
+			appliedTop = stickyTop;
+		}
+		if (!overlayDisplayed) {
+			overlay.style.display = 'block';
+			overlayDisplayed = true;
+		}
 		inner.scrollLeft = wrapper.scrollLeft;
+	}
+
+	function markLayoutDirty() {
+		layoutDirty = true;
 	}
 
 	// Forward clicks on the overlay's sort buttons (or any button-like control)
@@ -196,6 +257,7 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		if (resyncRaf) return;
 		resyncRaf = requestAnimationFrame(() => {
 			resyncRaf = 0;
+			markLayoutDirty();
 			syncWidths();
 			update();
 		});
@@ -206,6 +268,7 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		contentRaf = requestAnimationFrame(() => {
 			contentRaf = 0;
 			syncContent();
+			markLayoutDirty();
 		});
 	}
 
@@ -219,11 +282,16 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	// Watch the containing pane (if any) for class flips so the overlay
 	// hides immediately when this table's tab goes inactive — without it,
 	// `update()` only runs on scroll/resize and the overlay would linger
-	// at the viewport top showing columns from the wrong tab.
+	// at the viewport top showing columns from the wrong tab. Also mark
+	// the layout dirty so we re-measure when the pane becomes active
+	// (its dimensions may have changed while hidden).
 	const paneAncestor = table.closest('.tab-pane');
 	let paneMo: MutationObserver | null = null;
 	if (paneAncestor) {
-		paneMo = new MutationObserver(scheduleUpdate);
+		paneMo = new MutationObserver(() => {
+			markLayoutDirty();
+			scheduleUpdate();
+		});
 		paneMo.observe(paneAncestor, { attributes: true, attributeFilter: ['class'] });
 	}
 
