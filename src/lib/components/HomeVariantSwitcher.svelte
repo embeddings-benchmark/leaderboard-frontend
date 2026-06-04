@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	type Id = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k';
+	type Id = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l';
 	interface Props {
 		active: Id;
 	}
@@ -16,7 +16,8 @@
 		{ id: 'h', label: 'H · Wizard', path: '/home-h' },
 		{ id: 'i', label: 'I · Bento', path: '/home-i' },
 		{ id: 'j', label: 'J · Quadrant', path: '/home-j' },
-		{ id: 'k', label: 'K · Top-5 + tabs', path: '/home-k' }
+		{ id: 'k', label: 'K · Top-5 + tabs', path: '/home-k' },
+		{ id: 'l', label: 'L · Featured + size + discover', path: '/home-l' }
 	];
 </script>
 
