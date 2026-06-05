@@ -1,7 +1,3 @@
-# Anything that bloats the build context or would clobber the image.
-# Keep this in sync with `.gitignore` plus a few extras the
-# Dockerfile build does NOT need (the prerendered output, the IDE
-# scratch dirs, scripts that aren't part of the bundle, etc.).
 node_modules
 build
 .svelte-kit
@@ -29,6 +25,5 @@ memory
 scripts/bench-*.mjs
 tests
 playwright.config.ts
-playwright-report
 Dockerfile
 .dockerignore

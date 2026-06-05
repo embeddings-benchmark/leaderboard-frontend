@@ -32,9 +32,8 @@
 	);
 
 	type TabId = 'summary' | 'perf_size' | 'perf_time' | 'perf_task' | 'perf_language' | 'task_info';
-	// Per-language tab is filtered out below when the benchmark didn't
-	// opt into a `language_view` — the underlying table can't render
-	// meaningful columns without it.
+	// `perf_language` is filtered out below when the benchmark has no
+	// `language_view` — its column list is undefined without one.
 	const ALL_TABS: { id: TabId; label: string }[] = [
 		{ id: 'summary', label: 'Summary' },
 		{ id: 'perf_size', label: 'Performance per Model Size' },
@@ -48,24 +47,17 @@
 			(benchmark.languageView === 'all' ||
 				(Array.isArray(benchmark.languageView) && benchmark.languageView.length > 0))
 	);
-	let TABS = $derived(
-		ALL_TABS.filter((t) => t.id !== 'perf_language' || hasLanguageView)
-	);
-	// Deep links may carry `?tab=perf_language` for a benchmark that
-	// doesn't expose a language view (e.g. someone shared the URL after
-	// the language_view field was removed). Fall back to Summary so the
-	// page doesn't render with no active tab.
+	let TABS = $derived(ALL_TABS.filter((t) => t.id !== 'perf_language' || hasLanguageView));
+	// Fall back to Summary if the deep-linked tab is no longer available
+	// (e.g. ?tab=perf_language on a benchmark without language_view).
 	$effect(() => {
 		if (activeTab === 'perf_language' && benchmark && !hasLanguageView) {
 			activeTab = 'summary';
 		}
 	});
-	// Hydrate active tab from `?tab=` for shareable deep links.
 
-	// Validate the initial `?tab=` against the FULL tab list — the
-	// reactive `TABS` may not have been populated yet at module init,
-	// and the perf_language-fallback effect above handles unsupported
-	// tabs once the benchmark loads.
+	// Validate against ALL_TABS — the reactive TABS isn't populated
+	// at module init; the fallback effect above handles late removal.
 	const TAB_IDS = new Set(ALL_TABS.map((t) => t.id));
 	const initialTab = getParam('tab');
 	let activeTab = $state<TabId>(
@@ -147,22 +139,11 @@
 		}
 	});
 
-	// Pinned models are scoped to the current benchmark — pinning persists
-	// across tab switches (Summary ↔ Per task ↔ Per language) but a
-	// navigation to a different benchmark resets the set so stale pins
-	// don't shadow rows in a list that may not even contain them.
-	//
-	// Two cases to cover:
-	//   1. Stay-within-route nav (e.g. via in-page links) where the
-	//      `+page.svelte` instance is reused and `benchmarkName` flips
-	//      under us. Tracked via the local `prevBenchmarkForPins`.
-	//   2. Unmount → remount nav (e.g. user goes to `/` and clicks a
-	//      different benchmark card). The local var resets to null,
-	//      so case 1's compare-against-previous logic can't fire. The
-	//      mount-time URL check below catches it: if the new URL has
-	//      no `?pin=` param but the singleton store still holds pins
-	//      from the prior page, clear them — the URL is the canonical
-	//      persistence so a missing param means "no pins on this view".
+	// Pins are benchmark-scoped: persist across tab switches but
+	// reset when the active benchmark changes. The $effect handles
+	// stay-within-route nav (component reused, benchmarkName flips);
+	// the onMount handles unmount→remount nav (URL is the canonical
+	// persistence — no `?pin=` means no pins for this view).
 	let prevBenchmarkForPins: string | null = null;
 	$effect(() => {
 		const current = benchmarkName;

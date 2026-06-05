@@ -102,6 +102,9 @@ const MTEB_MULTILINGUAL_V2 = makeBenchmark({
 		'A large-scale multilingual expansion of MTEB known as MMTEB, driven mainly by highly-curated community contributions covering 250+ languages.',
 	reference: 'https://arxiv.org/abs/2502.13595',
 	languages: MMTEB_LANGUAGES,
+	// Mirrors upstream `Benchmark.language_view` so e2e can deep-link
+	// into ?tab=perf_language without a live backend.
+	languageView: ['English', 'Chinese', 'Hindi', 'Spanish', 'French', 'Arabic', 'Russian', 'German'],
 	tasks: Array.from({ length: 132 }, (_, i) => `Task_${i + 1}`),
 	domains: COMMON_DOMAINS,
 	modalities: ['text'],

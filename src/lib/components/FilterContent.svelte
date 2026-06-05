@@ -60,13 +60,7 @@
 		if (Number.isNaN(n)) return null;
 		const unit = m[2].toUpperCase();
 		const inMillions =
-			unit === 'K'
-				? n / 1000
-				: unit === 'B'
-					? n * 1000
-					: unit === 'T'
-						? n * 1_000_000
-						: n; // bare or 'M' → already in millions
+			unit === 'K' ? n / 1000 : unit === 'B' ? n * 1000 : unit === 'T' ? n * 1_000_000 : n; // bare or 'M' → already in millions
 		return paramsToLog(inMillions);
 	}
 

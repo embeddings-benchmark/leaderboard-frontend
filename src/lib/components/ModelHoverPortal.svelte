@@ -14,12 +14,8 @@
 		return n.toLocaleString();
 	}
 
-	// Single source of truth for the per-model hover row set — used by
-	// SummaryTable, PerTaskTab, and PerLanguageTab so the three tooltips
-	// stay byte-identical. Numeric values render as plain locale-
-	// formatted numbers (no " d" or " tok" suffixes — the dt label
-	// already names the unit) and Org isn't a separate row because it
-	// already appears in the title (`<org> / <displayName>`).
+	// Shared hover-row set for SummaryTable, PerTaskTab, PerLanguageTab.
+	// Org goes in the title (`<org> / <displayName>`), not a separate row.
 	export function rowsForModel(row: SummaryRow): { k: string; v: string }[] {
 		const m = row.model;
 		return [
@@ -69,13 +65,7 @@
 	}
 </script>
 
-<HoverPortal
-	visible={tip.visible}
-	title={tip.title}
-	modelType={tip.modelType}
-	x={tip.x}
-	y={tip.y}
->
+<HoverPortal visible={tip.visible} title={tip.title} modelType={tip.modelType} x={tip.x} y={tip.y}>
 	<dl>
 		{#each tip.rows as r (r.k)}
 			<div>
@@ -110,9 +100,8 @@
 		font-weight: 500;
 		color: var(--tip-fg);
 	}
-	/* Per-model-type tint on the Type row's value — mirrors the title
-	   tint owned by HoverPortal. `:global(...)` reaches the dd from the
-	   ancestor `[data-model-type=…]` selector on the portal root. */
+	/* Per-model-type tint on the Type row's value (mirrors the
+	   title tint owned by HoverPortal). */
 	:global(.hover-portal[data-model-type='dense']) .type-value {
 		color: var(--tint-blue-fg);
 		font-weight: 700;

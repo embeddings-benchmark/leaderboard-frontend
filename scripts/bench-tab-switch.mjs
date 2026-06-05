@@ -129,12 +129,15 @@ async function bench(name) {
 		// Locate the buttons by visible text so we get unique CSS selectors.
 		const tabIds = { summary: 'Summary' };
 		tabIds.target = TARGET_LABEL[TARGET];
-		const buttons = await page.evaluate(({ labels }) => {
-			const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
-			const find = (label) =>
-				tabs.findIndex((b) => b.textContent.toLowerCase().includes(label.toLowerCase()));
-			return { target: find(labels.target), summary: find(labels.summary) };
-		}, { labels: tabIds });
+		const buttons = await page.evaluate(
+			({ labels }) => {
+				const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+				const find = (label) =>
+					tabs.findIndex((b) => b.textContent.toLowerCase().includes(label.toLowerCase()));
+				return { target: find(labels.target), summary: find(labels.summary) };
+			},
+			{ labels: tabIds }
+		);
 		const targetSel = `[role="tab"]:nth-of-type(${buttons.target + 1})`;
 		const summarySel = `[role="tab"]:nth-of-type(${buttons.summary + 1})`;
 
@@ -158,17 +161,13 @@ async function bench(name) {
 	}
 }
 
-console.log(
-	`Benchmark: ${BENCH}  Summary ↔ ${targetLabel}  (${ITERATIONS} iters, base=${BASE})`
-);
+console.log(`Benchmark: ${BENCH}  Summary ↔ ${targetLabel}  (${ITERATIONS} iters, base=${BASE})`);
 console.log('—'.repeat(64));
 function fmt(n) {
 	return String(n ?? '?').padStart(4) + 'ms';
 }
 
-console.log(
-	'  Reporting Event Timing API entries — `total` is full INP (click→paint),'
-);
+console.log('  Reporting Event Timing API entries — `total` is full INP (click→paint),');
 console.log('  `proc` is the JS handler, `present` is browser render+composite.');
 console.log();
 

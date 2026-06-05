@@ -44,14 +44,9 @@
 		return (score * 100).toFixed(2);
 	}
 
-	// Trained-on warning tooltip — mirrors the SummaryTable column-tip
-	// pattern (fixed-position portal anchored to the icon's bounding
-	// rect). Replaces the previous CSS ::after bubble which felt slow
-	// because anchor-positioning re-layout + the transition combined
-	// add perceptible latency. The portal is a single element shared
-	// across every ⚠️ in the table, with no transition: shown the
-	// moment the cursor enters, hidden 200 ms after it leaves so the
-	// user has time to mouse onto it if needed.
+	// Trained-on ⚠️ tooltip — single fixed-position portal shared
+	// across every cell. 200 ms hide delay so the user can cross
+	// onto the bubble.
 	const TRAIN_TIP_MAX_WIDTH = 260;
 	const TRAIN_TIP_EDGE = 8;
 	type TrainTipState = { visible: boolean; text: string; x: number; y: number };
@@ -92,11 +87,9 @@
 		}, 200);
 	}
 
-	// Column-header tip for the task name. Mirrors the SummaryTable
-	// portal pattern (fixed-position, JS-clamped to viewport) — the
-	// `<th>` is sticky and lives in `overflow-x: auto`, so a child
-	// tooltip would be clipped + trapped in the th's stacking context.
-	// One portal element is reused across every column.
+	// Column-header tip — fixed-position portal so it escapes the
+	// sticky <th>'s clipping + stacking context (same pattern as
+	// SummaryTable). One element reused across every column.
 	const TASK_TIP_MAX_WIDTH = 320;
 	const TASK_TIP_EDGE = 8;
 	type TaskTipState = {
@@ -130,10 +123,10 @@
 			taskTipHideTimer = null;
 		}
 	}
-	// Lookup keyed by task name. tasksMeta entries are 1:1 with the
-	// benchmark's task list, but defensive map-lookup keeps it robust
-	// if the backend ever returns a different order or omits entries.
+	// Lookup keyed by task name — robust if the backend reorders or
+	// omits entries.
 	let taskMetaByName = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const m = new Map<string, (typeof summary.tasksMeta)[number]>();
 		for (const t of summary.tasksMeta ?? []) m.set(t.name, t);
 		return m;
@@ -195,14 +188,10 @@
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
 
-	// Progressive row render — this is the heaviest table on the
-	// benchmark page (250+ task columns × all rows ≈ 100k cells), so we
-	// stream rows in idle slots during the offscreen pre-paint to keep
-	// the main thread responsive. The moment the pane becomes `.active`
-	// we force visibleRows = total so the user never sees a partial
-	// table on tab click — the pre-paint contract is preserved.
-	// `lastRowSignature` lets the $effect bail on its own writes
-	// (Svelte 5 re-fires the effect on every state change inside it).
+	// Heaviest table on the page (~100k cells). Stream rows in idle
+	// slots during off-screen pre-paint; force-finish when the pane
+	// activates so a tab click never reveals a partial table.
+	// `lastRowSignature` bails the $effect on its own writes.
 	const INITIAL_ROW_CHUNK = 60;
 	const ROW_CHUNK_STEP = 80;
 	let visibleRows = $state(INITIAL_ROW_CHUNK);
@@ -218,10 +207,8 @@
 		if (signature === lastRowSignature) return;
 		lastRowSignature = signature;
 		const myVersion = ++growVersion;
-		// If the pane is already active when this mounts (e.g. user
-		// deep-linked to ?tab=perf_task), skip progressive and render
-		// everything immediately — partial tables only make sense
-		// during the hidden pre-paint.
+		// Already-active pane (deep link) renders everything at once —
+		// progressive only makes sense during off-screen pre-paint.
 		const pane = wrapEl?.closest('.tab-pane');
 		if (!pane || pane.classList.contains('active')) {
 			visibleRows = total;
@@ -246,9 +233,7 @@
 		}, 60);
 	});
 
-	// Watch the containing pane's class — the moment `.active` is added
-	// (user clicked the tab), force-finish so they never see a partial
-	// table. The MutationObserver replaces itself per `wrapEl` change.
+	// Force-finish the row chunks the moment the pane activates.
 	$effect(() => {
 		if (!wrapEl) return;
 		const pane = wrapEl.closest('.tab-pane');
@@ -368,10 +353,7 @@
 			onpointerenter={keepTaskTip}
 			onpointerleave={hideTaskTip}
 		>
-			<a
-				class="task-tip-title"
-				href={resolve('/tasks/[name]', { name: slug(taskTip.title) })}
-			>
+			<a class="task-tip-title" href={resolve('/tasks/[name]', { name: slug(taskTip.title) })}>
 				{taskTip.title}
 			</a>
 			{#if taskTip.type}<span class="task-tip-type">{taskTip.type}</span>{/if}
@@ -435,9 +417,8 @@
 		z-index: 1000;
 		pointer-events: auto;
 	}
-	/* Column-header tip — same dark-portal treatment as the trained-on
-	   warning bubble and SummaryTable's column tip. Fixed-position so
-	   it escapes the table's overflow + sticky-header stacking context. */
+	/* Column-header tip — same dark-portal treatment as the
+	   trained-on bubble and SummaryTable's column tip. */
 	.task-tip {
 		position: fixed;
 		transform: translate(-50%, 6px);

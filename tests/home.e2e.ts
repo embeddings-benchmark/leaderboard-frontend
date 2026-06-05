@@ -12,7 +12,7 @@ test('home page renders the brand and at least one benchmark card', async ({ pag
 
 	await page.goto('/');
 	await expect(page.getByRole('link', { name: /MTEB/, exact: false }).first()).toBeVisible();
-	await expect(page.getByRole('heading', { name: /Pick a benchmark to explore/i })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /Benchmark Overview/i })).toBeVisible();
 	// Top nav.
 	await expect(page.getByRole('link', { name: 'Models', exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Tasks', exact: true })).toBeVisible();

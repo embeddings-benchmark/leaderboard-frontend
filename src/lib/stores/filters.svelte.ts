@@ -427,26 +427,22 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		if (!fullTasks && !filters.tasks.has(t.name)) return false;
 		return true;
 	});
-	// Local lookups in a pure transformation — plain Set is correct here.
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const visibleTaskNames = new Set(visibleTasks.map((t) => t.name));
-	// `summary.taskTypes` holds the *display* labels — after the
-	// backend's `_split_on_capital` + per-builder renames (e.g.
-	// `Any2AnyRetrieval` → `Retrieval`, `VisualSTS(eng)` → `VisualSTeng`).
-	// `tasksMeta[i].type` is the *raw* type and can differ from the
-	// display label, so deriving visible types from it would silently
-	// drop renamed columns. When no task-type filter is applied, pass
-	// `summary.taskTypes` through verbatim — it's the source of truth
-	// for which columns the summary table should render.
+	// `summary.taskTypes` holds the display labels (after backend
+	// `_split_on_capital` + renames like `Any2AnyRetrieval` → `Retrieval`).
+	// `tasksMeta[i].type` is the raw label, so filtering against it
+	// would drop renamed columns. When no filter is active, pass
+	// `summary.taskTypes` through verbatim.
 	let taskTypesOut: string[];
 	if (fullTypes && fullDomains && fullModalities && fullLanguages && fullTasks) {
 		taskTypesOut = summary.taskTypes;
 	} else {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const visibleTaskTypes = new Set(visibleTasks.map((t) => t.type));
-		// Best-effort filter — preserves any summary.taskTypes whose
-		// raw form survived the filter, AND any whose renamed display
-		// label still matches a row's `scoresByTaskType` key.
+		// Keep display labels that match either the raw type or a live
+		// scoresByTaskType key.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const liveKeys = new Set<string>();
 		for (const r of summary.rows)
 			for (const k of Object.keys(r.scoresByTaskType ?? {})) liveKeys.add(k);
@@ -494,19 +490,12 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			return true;
 		})
 		.map((row) => {
-			// Filters can narrow the visible task / task-type slice, in
-			// which case we recompute means client-side using the same
-			// null-for-partial-coverage policy the backend uses (so
-			// partially-covered models don't silently outrank fully-
-			// evaluated peers). When NO filter is active though, the
-			// recompute is doubly wrong: (a) it does extra work, and
-			// (b) it forces a "mean of per-task scores" interpretation
-			// that doesn't match every backend builder — MIEB-style
-			// benchmarks compute Mean (Task) as "mean of per-type means"
-			// (each type weighted equally regardless of task count), so
-			// our recompute drifted from the canonical value (jina on
-			// MIEB(eng) showed 58 instead of 65). Trust the API when no
-			// filter is touched.
+			// With filters narrowing the slice, recompute means
+			// client-side (null for partial coverage, so partially-
+			// covered models don't outrank fully-evaluated peers).
+			// With no filter, trust the API — some backends (MIEB)
+			// compute Mean (Task) as mean-of-per-type-means rather
+			// than mean-of-tasks, so a naive recompute would diverge.
 			let meanTask: number | null = row.meanTask;
 			let meanTaskType: number | null = row.meanTaskType;
 			if (!fullTypes || !fullDomains || !fullModalities || !fullLanguages || !fullTasks) {

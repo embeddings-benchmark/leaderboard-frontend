@@ -349,7 +349,6 @@
 		};
 	}
 
-
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
 		if (!isBoundaryCross(e)) return;
 		modelTipPortal?.showFor(e.currentTarget as HTMLElement, row);
@@ -450,9 +449,7 @@
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
 							<span>Zero-shot</span>
-							<span class="ind" class:on={sort.key === 'zeroShot'}
-								>{sort.icon('zeroShot')}</span
-							>
+							<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
 						</button>
 					</th>
 					{#if showMeanTask}
@@ -468,9 +465,7 @@
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTask')}>
 								<span>Mean (Task)</span>
-								<span class="ind" class:on={sort.key === 'meanTask'}
-									>{sort.icon('meanTask')}</span
-								>
+								<span class="ind" class:on={sort.key === 'meanTask'}>{sort.icon('meanTask')}</span>
 							</button>
 						</th>
 					{/if}

@@ -29,16 +29,15 @@
 
 	interface Props {
 		summary: BenchmarkSummary;
-		// Language column list — mirrors `Benchmark.language_view` upstream.
-		// When `'all'`, the union of the benchmark's tasks' languages is
-		// used. The parent route hides this tab when the benchmark didn't
-		// opt into a per-language view, so this prop is never null here.
+		// Mirrors `Benchmark.language_view`. `'all'` = union of every
+		// task's languages. Parent hides the tab when not set.
 		languageView: string[] | 'all';
 	}
 	let { summary, languageView }: Props = $props();
 
 	let LANGUAGES = $derived.by(() => {
 		if (languageView === 'all') {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const seen = new Set<string>();
 			const out: string[] = [];
 			for (const t of summary.tasksMeta ?? []) {

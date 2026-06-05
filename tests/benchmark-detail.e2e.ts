@@ -6,6 +6,9 @@ import { test, expect } from '@playwright/test';
 
 const BENCH = 'MTEB(eng, v2)';
 const SLUG = encodeURIComponent(BENCH);
+// MTEB(eng, v2) has no language_view, so its perf_language tab is
+// hidden — use the multilingual mock for that deep-link test.
+const MULTI_SLUG = encodeURIComponent('MTEB(Multilingual, v2)');
 
 test('benchmark detail page loads the hero and the summary tab by default', async ({ page }) => {
 	await page.goto(`/benchmark/${SLUG}/`);
@@ -30,7 +33,7 @@ test('tab switching activates the selected tab and updates the URL', async ({ pa
 });
 
 test('the URL ?tab= param rehydrates the active tab on load', async ({ page }) => {
-	await page.goto(`/benchmark/${SLUG}/?tab=perf_language`);
+	await page.goto(`/benchmark/${MULTI_SLUG}/?tab=perf_language`);
 	await expect(page.getByRole('tab', { name: 'Performance per language' })).toHaveAttribute(
 		'aria-selected',
 		'true'
