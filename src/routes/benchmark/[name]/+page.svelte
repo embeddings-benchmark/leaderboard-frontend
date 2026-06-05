@@ -219,6 +219,8 @@
 		<nav class="breadcrumb" aria-label="Breadcrumb">
 			<a href={resolve('/')}>Home</a>
 			<span class="sep">/</span>
+			<a href={resolve('/benchmarks')}>Benchmarks</a>
+			<span class="sep">/</span>
 			<span class="current">{benchmark?.displayName ?? benchmarkName}</span>
 		</nav>
 
