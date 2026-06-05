@@ -1,21 +1,31 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { loadModels } from '$lib/data/service';
 	import { safeIdle } from '$lib/idle';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import { sortModalities } from '$lib/format';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
-	import ModelTypeIcon from '$lib/components/ModelTypeIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { ModelMeta } from '$lib/types';
-	import { slug, fmtInt } from '$lib/format';
+	import { modelPath, fmtInt } from '$lib/format';
 
 	let ALL_MODELS = $state<ModelMeta[]>([]);
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
+
+	// Local language filter state. Lives in the page (not the shared
+	// `filters` store) because /models is the only place that uses it.
+	// Same "all on = filter off" semantic as the shared store:
+	// `languagesPicked.size === LANGUAGES.length` ⇒ no narrowing.
+	// The UI (search input, cap-and-expand, pills) is rendered inside
+	// the shared FilterSidebar — we just pass the data and handlers in.
+	let LANGUAGES = $state<string[]>([]);
+	const languagesPicked = new SvelteSet<string>();
 
 	$effect(() => {
 		// Re-fetch whenever the modality picker (now in the FilterSidebar)
@@ -28,6 +38,15 @@
 		loadModels(mods ? { modalities: mods } : {})
 			.then((m) => {
 				ALL_MODELS = m;
+				// Compute available languages from the loaded models.
+				// `ModelMeta.languages` may be missing (older backends, models
+				// with no declared language scope) — those rows pass the
+				// filter trivially via the "everything checked" default.
+				const langSet = new Set<string>();
+				for (const x of m) for (const l of x.languages ?? []) langSet.add(l);
+				LANGUAGES = [...langSet].sort();
+				languagesPicked.clear();
+				for (const l of LANGUAGES) languagesPicked.add(l);
 				loadingData = false;
 			})
 			.catch((e) => {
@@ -51,8 +70,10 @@
 		params: 'desc',
 		released: 'desc'
 	};
-	let sort = $state<SortId>('params');
-	let sortDir = $state<SortDir>(NATURAL_DIR.params);
+	// Default sort: newest release first. Surfaces just-shipped models at
+	// the top so visitors see what's current without scrolling.
+	let sort = $state<SortId>('released');
+	let sortDir = $state<SortDir>(NATURAL_DIR.released);
 
 	function onSortKeyChange(next: SortId) {
 		sort = next;
@@ -80,13 +101,32 @@
 		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
 		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
 		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
-		if (filters.modelTypes.size > 0 && !filters.modelTypes.has(m.modelType)) return false;
+		// Empty pick set = "deselect everything" → nothing matches.
+		if (!filters.modelTypes.has(m.modelType)) return false;
 		if (m.totalParamsB > 0) {
 			const paramsM = m.totalParamsB * 1000;
 			if (paramsM < filters.minModelSizeM) return false;
 			if (paramsM > filters.maxModelSizeM) return false;
 		}
+		// Language predicate: "all on" = filter off; otherwise require
+		// at least one declared language to be in the picked set.
+		// Models with no declared languages (`undefined`/`[]`) get a
+		// pass — language metadata is optional upstream and we don't
+		// want to silently drop pre-tagged models.
+		if (LANGUAGES.length > 0 && languagesPicked.size !== LANGUAGES.length) {
+			const mlangs = m.languages ?? [];
+			if (mlangs.length > 0 && !mlangs.some((l) => languagesPicked.has(l))) return false;
+		}
 		return true;
+	}
+
+	function toggleLanguage(l: string) {
+		if (languagesPicked.has(l)) languagesPicked.delete(l);
+		else languagesPicked.add(l);
+	}
+	function toggleAllLanguages() {
+		if (languagesPicked.size === LANGUAGES.length) languagesPicked.clear();
+		else for (const l of LANGUAGES) languagesPicked.add(l);
 	}
 
 	// Split filter / sort so name-query keystrokes (which only narrow rows)
@@ -214,7 +254,7 @@
 				{#each visibleModels as m (m.name)}
 					<a
 						class="card"
-						href={resolve('/models/[name]', { name: slug(m.name) })}
+						href={resolve('/models/[...name]', { name: modelPath(m.name) })}
 						data-type={m.modelType}
 						title={m.modelType}
 					>
@@ -225,7 +265,6 @@
 								</span>
 							</div>
 							<span class="type-chip" data-type={m.modelType}>
-								<ModelTypeIcon type={m.modelType} size={12} />
 								<span>{m.modelType}</span>
 							</span>
 						</div>
@@ -260,7 +299,7 @@
 						</div>
 						{#if m.modalities && m.modalities.length > 0}
 							<div class="modality-row" aria-label="Supported modalities">
-								{#each m.modalities as mod (mod)}
+								{#each sortModalities(m.modalities) as mod (mod)}
 									<span class="mod-chip modality-tint" data-modality={mod} title={mod}>
 										<ModalityIcon modality={mod} size={12} />
 										<span class="mod-label">{mod}</span>
@@ -274,7 +313,14 @@
 		{/if}
 	</main>
 
-	<FilterSidebar hideScope flatModel />
+	<FilterSidebar
+		hideScope
+		flatModel
+		languageOptions={LANGUAGES}
+		languagesPicked={languagesPicked as unknown as Set<string>}
+		onToggleLanguage={toggleLanguage}
+		onToggleAllLanguages={toggleAllLanguages}
+	/>
 </div>
 
 <ScrollToTopButton />

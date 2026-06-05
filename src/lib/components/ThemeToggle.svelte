@@ -148,7 +148,10 @@
 		padding: 0;
 		margin: -1px;
 		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
+		/* `clip` was the legacy WCAG visually-hidden trick; deprecated
+		   in favour of `clip-path`. Same visual + AT behaviour, no
+		   console warning. */
+		clip-path: inset(50%);
 		white-space: nowrap;
 		border: 0;
 	}

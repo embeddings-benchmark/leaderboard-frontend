@@ -178,7 +178,10 @@ export async function loadBenchmark(name: string): Promise<Benchmark> {
 	return cachedHttp<Benchmark>(`/benchmarks/${encodeURIComponent(name)}`);
 }
 
-export async function loadSummary(benchmarkName: string): Promise<BenchmarkSummary> {
+export async function loadSummary(
+	benchmarkName: string,
+	languages?: ReadonlyArray<string>
+): Promise<BenchmarkSummary> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadSummary');
 		const { buildMockSummary } = await loadMockSummaryMod();
@@ -186,9 +189,20 @@ export async function loadSummary(benchmarkName: string): Promise<BenchmarkSumma
 	}
 	// Path is `/scores` (consistent with /tasks/{name}/scores and
 	// /models/{name}/scores). The backend keeps `/summary` as a
-	// deprecated alias for one frontend deploy window.
+	// deprecated alias for one frontend deploy window. When `languages`
+	// is set, the server recomputes `meanTask` / `meanTaskType` /
+	// `scoresByTask` over only the subsets matching the picks; the
+	// cache key includes the sorted-languages string so toggling the
+	// language filter doesn't invalidate the canonical summary slot.
+	let qs = '';
+	if (languages && languages.length) {
+		const unique = Array.from(new Set(languages)).sort();
+		qs = `?languages=${unique.map(encodeURIComponent).join(',')}`;
+	}
 	return enrichSummary(
-		await cachedHttp<BenchmarkSummary>(`/benchmarks/${encodeURIComponent(benchmarkName)}/scores`)
+		await cachedHttp<BenchmarkSummary>(
+			`/benchmarks/${encodeURIComponent(benchmarkName)}/scores${qs}`
+		)
 	);
 }
 

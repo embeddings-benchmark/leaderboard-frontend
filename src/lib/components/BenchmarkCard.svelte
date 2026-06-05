@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import type { Benchmark } from '$lib/types';
-	import { apiUrl, fmtCompact, isIconUrl, slug } from '$lib/format';
+	import { apiUrl, fmtCompact, isIconUrl, slug, sortModalities } from '$lib/format';
 	import CopyableId from './CopyableId.svelte';
 	import MarkdownText from './MarkdownText.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
@@ -11,7 +11,12 @@
 		b: Benchmark;
 	}
 	let { b }: Props = $props();
-	let accentModality = $derived(b.modalities?.[0] ?? 'text');
+	// Card accent follows the canonical modality priority
+	// (`video → audio → image → text`) — the same order the badge row
+	// uses below. Previously took `modalities[0]` from the API's
+	// alphabetical sort, which meant MVEB (video + audio + image) tinted
+	// as audio when video is the more distinctive medium.
+	let accentModality = $derived(sortModalities(b.modalities)[0] ?? 'text');
 </script>
 
 <a
@@ -80,7 +85,7 @@
 	{/if}
 	{#if b.modalities && b.modalities.length > 0}
 		<div class="badges">
-			{#each b.modalities as mod (mod)}
+			{#each sortModalities(b.modalities) as mod (mod)}
 				<span class="badge modality-tint" data-modality={mod} title={mod}>
 					<ModalityIcon modality={mod} size={12} />
 					<span>{mod}</span>
@@ -194,11 +199,21 @@
 		font-size: 12.5px;
 		line-height: 1.45;
 		color: var(--text-muted);
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
 		overflow: hidden;
+		/* Standard CSS Overflow 4 shorthand: clamps without the deprecated
+		   `-webkit-box-orient`. Chromium 124+, Safari 18.2+, Firefox 136+. */
+		line-clamp: 2;
+	}
+	/* Fallback for browsers that haven't shipped the standard `line-clamp`
+	   yet — they get the legacy WebKit triplet (with `-webkit-box-orient`
+	   only inside this branch, so the deprecation warning doesn't fire
+	   for browsers that don't need it). */
+	@supports not (line-clamp: 2) {
+		.desc {
+			display: -webkit-box;
+			-webkit-line-clamp: 2;
+			-webkit-box-orient: vertical;
+		}
 	}
 	.stats {
 		display: grid;

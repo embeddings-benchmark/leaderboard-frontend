@@ -30,7 +30,9 @@
 		justify-content: center;
 		width: 14px;
 		height: 14px;
-		margin-right: 6px;
+		/* `?` sits AFTER the column label now, so the gap is on the
+		   left. Sort-button gap handles the rest of the spacing. */
+		margin-left: 4px;
 		background: transparent;
 		color: var(--text-subtle);
 		border: 1px solid var(--border-strong);
@@ -38,7 +40,10 @@
 		font-size: 9px;
 		font-weight: 700;
 		line-height: 1;
-		cursor: help;
+		/* Inherit cursor from the enclosing sort button (`pointer`) —
+		   we used to override to `help` here, which produced two
+		   different cursors over the same clickable surface. */
+		cursor: inherit;
 		flex-shrink: 0;
 		vertical-align: middle;
 	}

@@ -144,6 +144,14 @@
 .link-btn:hover {
 	text-decoration: underline;
 }
+/* Expand button under a capped pill list (e.g. /tasks Language group's
+   "Show all 1037" affordance). Inline-block so it sits in flow under
+   the scrollport instead of stretching the sidebar to its width. */
+.show-more-btn {
+	display: inline-block;
+	margin-top: 6px;
+	padding: 2px 0;
+}
 
 .pills {
 	display: flex;
@@ -154,10 +162,15 @@
    sidebar room. */
 /* Add `.scroll-thin` (from app.css) alongside `.scroll` to get the styled
    scrollbar; this rule just sizes the scrollport itself. */
+/* `contain: layout` isolates the inner flex-wrap layout from the ancestor
+   `<aside>`'s scroll calculation. Without it Chromium leaks each
+   inner-overflowed row into the sidebar's `scrollHeight`, leaving the
+   user with a phantom ~350 px tall empty band below the last facet. */
 .pills.scroll {
 	max-height: 320px;
 	overflow-y: auto;
 	padding-right: 4px;
+	contain: layout;
 }
 .pill {
 	display: inline-flex;
@@ -170,6 +183,23 @@
 	border-radius: 999px;
 	cursor: pointer;
 	user-select: none;
+	transition:
+		background 0.12s,
+		border-color 0.12s,
+		color 0.12s;
+}
+/* Unchecked hover: subtle border + text lift, no fill change. Matches
+   the FilterContent.svelte .pill:hover treatment used on the benchmark
+   detail page so the affordance reads the same in every sidebar. */
+.pill:hover {
+	border-color: var(--border-strong);
+	color: var(--text);
+}
+/* Checked-pill hover: nudge toward primary but mix with --surface so
+   dark theme stays muted instead of bleaching to near-white. */
+.pill:has(input:checked):hover {
+	background: color-mix(in srgb, var(--primary) 22%, var(--surface));
+	border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
 }
 /* Visually-hide the checkbox; the pill's `:has(input:checked)` rule
    carries the visual state. */
@@ -193,7 +223,12 @@
 	color: var(--text-muted);
 }
 .type-fill {
-	white-space: nowrap;
+	/* Long names ("Interlingua (International Auxiliary Language Association)",
+	   etc.) used to overflow the 307 px sidebar column with `white-space: nowrap`
+	   and push the sidebar into horizontal scroll. Cap the pill at the
+	   container width and let oversized labels wrap onto a second line. */
+	max-width: 100%;
+	overflow-wrap: anywhere;
 }
 .type-fill:has(input:checked),
 .modality-fill:has(input:checked) {

@@ -7,11 +7,11 @@
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
-	import ModelTypeIcon from '$lib/components/ModelTypeIcon.svelte';
+	import { sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
-	import { fmtInt, fmtParamsUnit, fmtParamsValue, slug } from '$lib/format';
+	import { fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
 
 	let modelName = $derived(decodeURIComponent(page.params.name ?? ''));
 
@@ -156,7 +156,6 @@
 			<div class="hero-left">
 				<div class="kicker">
 					<span class="type-badge" data-type={model.modelType}>
-						<ModelTypeIcon type={model.modelType} size={12} />
 						<span>{model.modelType}</span>
 					</span>
 					<span class="badge" class:open={model.openWeights}>
@@ -168,7 +167,7 @@
 					{#if model.sentenceTransformersCompatible}
 						<span class="badge soft">ST compatible</span>
 					{/if}
-					{#each model.modalities ?? [] as mod (mod)}
+					{#each sortModalities(model.modalities) as mod (mod)}
 						<span class="badge modality-tint" data-modality={mod} title={mod}>
 							<ModalityIcon modality={mod} size={12} />
 							<span>{mod}</span>
@@ -242,7 +241,7 @@
 							<dd>
 								<a
 									class="model-link"
-									href={resolve('/models/[name]', { name: slug(model.adaptedFrom) })}
+									href={resolve('/models/[...name]', { name: modelPath(model.adaptedFrom) })}
 									>{model.adaptedFrom}</a
 								>
 							</dd>
@@ -254,7 +253,7 @@
 							<dd>
 								<a
 									class="model-link"
-									href={resolve('/models/[name]', { name: slug(model.supersededBy) })}
+									href={resolve('/models/[...name]', { name: modelPath(model.supersededBy) })}
 									>{model.supersededBy}</a
 								>
 							</dd>

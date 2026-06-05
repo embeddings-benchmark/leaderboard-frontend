@@ -4,8 +4,22 @@
 	interface Props {
 		hideScope?: boolean;
 		flatModel?: boolean;
+		// Optional inline Language facet — forwarded to FilterContent.
+		// Only /models passes these; on every other page the block is
+		// omitted because there's no language data to bind to.
+		languageOptions?: string[];
+		languagesPicked?: Set<string>;
+		onToggleLanguage?: (l: string) => void;
+		onToggleAllLanguages?: () => void;
 	}
-	let { hideScope = false, flatModel = false }: Props = $props();
+	let {
+		hideScope = false,
+		flatModel = false,
+		languageOptions,
+		languagesPicked,
+		onToggleLanguage,
+		onToggleAllLanguages
+	}: Props = $props();
 
 	// Collapsed on narrow viewports so the drawer doesn't overlap content;
 	// SSR has no `window` so it stays expanded until hydration.
@@ -29,7 +43,14 @@
 	</button>
 
 	{#if !collapsed}
-		<FilterContent {hideScope} {flatModel} />
+		<FilterContent
+			{hideScope}
+			{flatModel}
+			{languageOptions}
+			{languagesPicked}
+			{onToggleLanguage}
+			{onToggleAllLanguages}
+		/>
 	{/if}
 </aside>
 

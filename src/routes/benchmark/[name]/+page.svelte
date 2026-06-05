@@ -2,9 +2,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
-	import { safeIdle, safeCancelIdle } from '$lib/idle';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 
@@ -20,6 +18,7 @@
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import Tabs from '$lib/components/Tabs.svelte';
 	import SummaryTable from '$lib/components/SummaryTable.svelte';
+	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import PerfSizeTab from '$lib/components/PerfSizeTab.svelte';
 	import PerfTimeTab from '$lib/components/PerfTimeTab.svelte';
@@ -71,48 +70,12 @@
 	});
 
 	// Mount-and-keep: once a tab body has been rendered, leave it in the DOM
-	// and just hide it on switch. The big tables (PerTaskTab in particular —
-	// 308 rows × dozens of task columns) take ~400ms to mount cold; flipping
-	// CSS display is ~1ms, so this trades a one-time cost per tab for near-
-	// instant switches forever after.
-	const visited = new SvelteSet<TabId>();
-	$effect(() => {
-		if (!visited.has(activeTab)) visited.add(activeTab);
-	});
-
-	// Pre-mount the heavy table panes once the active tab + filteredSummary
-	// have rendered. They're created into `content-visibility: hidden` so
-	// the layout/paint cost lands during idle time rather than when the
-	// user clicks the tab. Combined with the cached-pane swap below, the
-	// per-task / per-language tabs feel instant on first click.
-	const PREWARM: TabId[] = ['perf_task', 'perf_language'];
-	$effect(() => {
-		if (typeof window === 'undefined') return;
-		if (!filteredSummary) return;
-		const pending = PREWARM.filter(
-			(t) => !visited.has(t) && (t !== 'perf_language' || hasLanguageView)
-		);
-		if (pending.length === 0) return;
-		// Add one tab per idle slice so we never block the main thread for the
-		// full pre-mount budget. Skip if the user already navigates away.
-		let cancelled = false;
-		let handle: number | null = null;
-		function next() {
-			if (cancelled) return;
-			const tab = pending.shift();
-			if (!tab) return;
-			handle = safeIdle(() => {
-				if (cancelled) return;
-				visited.add(tab);
-				next();
-			}, 2000);
-		}
-		next();
-		return () => {
-			cancelled = true;
-			if (handle !== null) safeCancelIdle(handle);
-		};
-	});
+	// `visited` set + prewarm scheduler removed: panes are now mounted only
+	// while their tab is active (see the {#if activeTab === 'X'} below).
+	// Keeping every visited tab in the DOM tripled the surface that pin
+	// clicks had to walk (419 rows × 3 panes' worth of PinButtons, all
+	// re-evaluating on the shared SvelteSet's coarse invalidation), which
+	// pushed pin click handlers to ~550 ms on MTEB(Multilingual).
 
 	// Bound to the live PerLanguageTab instance so the page-level toolbar
 	// can call its `buildCsv()` for the Download CSV button — keeps the
@@ -151,7 +114,29 @@
 		}
 	});
 	$effect(() => {
+		// Only feed initFor a summary that matches the current page. During
+		// in-app navigation between two /benchmark/* pages, this effect can
+		// fire while `leaderboard.summary` still holds the previous
+		// benchmark's data (the async `select()` hasn't completed). If we
+		// ran initFor with the stale summary, it would see "same benchmark"
+		// against its `lastBenchmarkName` tracker, skip the reset, and call
+		// sync() — which writes the previous benchmark's narrowed filter
+		// picks into the NEW URL, persisting them across the navigation.
+		if (!leaderboard.summary || leaderboard.summary.benchmarkName !== benchmarkName) return;
 		filters.initFor(leaderboard.summary);
+	});
+
+	// When the language filter narrows, refetch the summary with
+	// ``?languages=…`` so the server recomputes mean / per-task / per-type
+	// scores over only the picked subsets. Toggling back to "all" refetches
+	// the unfiltered summary (and hits the preload-warmed cache).
+	$effect(() => {
+		if (!leaderboard.summary || leaderboard.selected !== benchmarkName) return;
+		const narrowed =
+			filters.languages.size > 0 &&
+			filters.languages.size < filters.availableLanguages.length;
+		const langs = narrowed ? Array.from(filters.languages) : undefined;
+		leaderboard.requestSummaryForLanguages(langs);
 	});
 
 	let filteredSummary = $derived(
@@ -308,6 +293,11 @@
 
 			<Tabs tabs={TABS} active={activeTab} onSelect={(id) => (activeTab = id)} />
 
+			<ProgressBar
+				active={leaderboard.loading || leaderboard.refetching}
+				label={leaderboard.refetching ? 'Recomputing scores' : 'Loading benchmark'}
+			/>
+
 			{#if activeTab === 'summary' || activeTab === 'perf_task' || activeTab === 'perf_language'}
 				<div class="toolbar-row">
 					<ModelSearchBar
@@ -339,33 +329,37 @@
 				{:else if filteredSummary.rows.length === 0}
 					<p class="muted">No models match the current filters.</p>
 				{:else}
-					{#if visited.has('summary')}
-						<div class="tab-pane" class:active={activeTab === 'summary'}>
+					<!-- Mount ONLY the active table tab. Previously the visited-cache
+					     pattern kept every visited pane in the DOM with `class:active`
+					     toggling visibility — but on big benchmarks (MTEB(Multilingual,
+					     v2): 419 rows × 3 tabs = 1257 PinButtons) every pin click
+					     invalidated SvelteSet subscribers across all rendered tabs,
+					     pushing the click handler to ~550 ms. Mounting only the active
+					     tab cuts the surface by 3× and pin clicks drop accordingly.
+					     Trade-off: tab switches re-render the table (no first-paint
+					     cache), but pin is the higher-frequency interaction. -->
+					{#if activeTab === 'summary'}
+						<div class="tab-pane active">
 							<SummaryTable summary={filteredSummary} />
 						</div>
 					{/if}
-					{#if visited.has('perf_size')}
-						<div class="tab-pane" class:active={activeTab === 'perf_size'}>
+					{#if activeTab === 'perf_size'}
+						<div class="tab-pane active">
 							<PerfSizeTab summary={filteredSummary} />
 						</div>
 					{/if}
-					{#if visited.has('perf_time')}
-						<div class="tab-pane" class:active={activeTab === 'perf_time'}>
+					{#if activeTab === 'perf_time'}
+						<div class="tab-pane active">
 							<PerfTimeTab summary={filteredSummary} />
 						</div>
 					{/if}
-					{#if visited.has('perf_task')}
-						<!-- `data-prepaint`: keep the pane in the paint pipeline while hidden
-						     (clip-path: inset(100%) below). Browser caches the painted layer
-						     so first click after the idle pre-mount is nearly instant. Only
-						     applied to table panes — Plotly tabs need a real-size container
-						     on mount, so they stay on the default `content-visibility: hidden`. -->
-						<div class="tab-pane" class:active={activeTab === 'perf_task'} data-prepaint>
+					{#if activeTab === 'perf_task'}
+						<div class="tab-pane active">
 							<PerTaskTab summary={filteredSummary} />
 						</div>
 					{/if}
-					{#if visited.has('perf_language') && hasLanguageView && benchmark?.languageView}
-						<div class="tab-pane" class:active={activeTab === 'perf_language'} data-prepaint>
+					{#if activeTab === 'perf_language' && hasLanguageView && benchmark?.languageView}
+						<div class="tab-pane active">
 							<PerLanguageTab
 								summary={filteredSummary}
 								languageView={benchmark.languageView}
@@ -373,8 +367,8 @@
 							/>
 						</div>
 					{/if}
-					{#if visited.has('task_info')}
-						<div class="tab-pane" class:active={activeTab === 'task_info'}>
+					{#if activeTab === 'task_info'}
+						<div class="tab-pane active">
 							<TaskInfoTab {benchmark} tasksMeta={filteredSummary.tasksMeta} />
 						</div>
 					{/if}
@@ -546,45 +540,12 @@
 		padding-top: 14px;
 		position: relative;
 	}
-	/* Default: `content-visibility: hidden` keeps inactive panes' rendered
-	   state cached without taking layout space. First activation pays the
-	   paint cost; subsequent switches restore from cache. */
-	.tab-pane {
-		content-visibility: hidden;
-		contain-intrinsic-size: 0;
-	}
+	/* Only the active pane is mounted now (see the {#if activeTab === 'X'}
+	   guards above), so the `content-visibility: hidden` cache pattern is
+	   gone. Active pane just renders normally. */
 	.tab-pane.active {
 		content-visibility: visible;
 		contain-intrinsic-size: none;
-	}
-	/* Heavy table panes opt into pre-paint. While inactive they sit
-	   absolutely positioned over .tab-body, fully laid out + painted,
-	   but visually clipped to a 0×0 box — the browser's painted layer
-	   stays warm, so when the user clicks the tab the swap is just a
-	   `clip-path: none` (no re-layout, no re-paint).
-	   A grid-stack + opacity variant was measured ~35% faster on
-	   Firefox but forced every pane to contribute to .tab-body's
-	   width/height — that made each tab inherit the widest pane's
-	   table size, ballooning the page on summary/per-language. */
-	.tab-pane[data-prepaint] {
-		content-visibility: visible;
-		contain-intrinsic-size: none;
-		position: absolute;
-		inset: 0;
-		clip-path: inset(100%);
-		pointer-events: none;
-		/* `clip-path` hides the paint, but the absolutely-positioned
-		   pane's inner table (PerTask is ~19 000 px tall) still
-		   overflows its bounds — which expands document scrollHeight
-		   and adds ~1850 px of empty space after the footer on the
-		   shorter Summary tab. Clip the overflow so the layout box
-		   stops at the pane's `inset: 0` rect. */
-		overflow: hidden;
-	}
-	.tab-pane[data-prepaint].active {
-		position: static;
-		clip-path: none;
-		pointer-events: auto;
 	}
 	.toolbar-row {
 		display: flex;

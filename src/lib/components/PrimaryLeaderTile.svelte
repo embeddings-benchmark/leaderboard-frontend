@@ -108,9 +108,13 @@
 		--tint: var(--tint-purple);
 		--tint-fg: var(--tint-purple-fg);
 	}
+	/* English shares the blue tint with Multilingual — both are
+	   "general" benchmarks, and the original green was reading like a
+	   different category rather than a different scope. The data-key
+	   stays on the element for future per-tile overrides. */
 	.prim[data-key='english'] {
-		--tint: var(--tint-green);
-		--tint-fg: var(--tint-green-fg);
+		--tint: var(--tint-blue);
+		--tint-fg: var(--tint-blue-fg);
 	}
 	.prim-head {
 		display: flex;

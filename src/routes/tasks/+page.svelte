@@ -1,16 +1,15 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
 	import { safeIdle } from '$lib/idle';
 	import { flattenMenu } from '$lib/types';
-	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import TaskCard from '$lib/components/TaskCard.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
-	import { humanizeType, slug } from '$lib/format';
+	import { humanizeType } from '$lib/format';
 
 	interface TaskEntry {
 		name: string;
@@ -38,6 +37,7 @@
 	let FULL_TYPES_PRESENT = $state<string[]>([]);
 	let MODALITIES = $state<string[]>([]);
 	let DOMAINS = $state<string[]>([]);
+	let LANGUAGES = $state<string[]>([]);
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
 
@@ -85,10 +85,12 @@
 				MODALITIES = Array.from(new Set(entries.flatMap((t) => t.modalities))).sort();
 				FULL_TYPES_PRESENT = Array.from(new Set(entries.map((t) => t.type).filter(Boolean))).sort();
 				DOMAINS = Array.from(new Set(entries.flatMap((t) => t.domains))).sort();
+				LANGUAGES = Array.from(new Set(entries.flatMap((t) => t.languages))).sort();
 				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
 				for (const v of FULL_TYPES_PRESENT) fullTypeFilter.add(v);
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
+				for (const v of LANGUAGES) languageFilter.add(v);
 				loadingData = false;
 			} catch (e) {
 				loadError = e instanceof Error ? e.message : String(e);
@@ -119,6 +121,7 @@
 	const fullTypeFilter = new SvelteSet<string>();
 	const modalityFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
+	const languageFilter = new SvelteSet<string>();
 
 	// Start collapsed on narrow viewports where the drawer would overlap content.
 	let sidebarCollapsed = $state(
@@ -151,6 +154,10 @@
 		if (domainFilter.has(d)) domainFilter.delete(d);
 		else domainFilter.add(d);
 	}
+	function toggleLanguage(l: string) {
+		if (languageFilter.has(l)) languageFilter.delete(l);
+		else languageFilter.add(l);
+	}
 	function toggleAllTypes() {
 		if (typeFilter.size === SIMPLIFIED_PRESENT.length) typeFilter.clear();
 		else for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
@@ -167,10 +174,15 @@
 		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
 		else for (const v of MODALITIES) modalityFilter.add(v);
 	}
+	function toggleAllLanguages() {
+		if (languageFilter.size === LANGUAGES.length) languageFilter.clear();
+		else for (const v of LANGUAGES) languageFilter.add(v);
+	}
 	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
 	let allFullTypes = $derived(fullTypeFilter.size === FULL_TYPES_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
+	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
 
 	let domainQuery = $state('');
 	let visibleDomains = $derived.by(() => {
@@ -178,6 +190,25 @@
 		if (!q) return DOMAINS;
 		return DOMAINS.filter((d) => d.toLowerCase().includes(q));
 	});
+
+	let languageQuery = $state('');
+	let languagesExpanded = $state(false);
+	const LANGUAGE_CAP = 40;
+	let filteredLanguages = $derived.by(() => {
+		const q = languageQuery.trim().toLowerCase();
+		if (!q) return LANGUAGES;
+		return LANGUAGES.filter((l) => l.toLowerCase().includes(q));
+	});
+	// Show only the first ``LANGUAGE_CAP`` matches by default — the full
+	// registry holds ~1100 entries and a 21k-px scroll port is unusable.
+	// `languagesExpanded` flips on "Show all" and stays on for the rest
+	// of the session; the search input narrows the list and bypasses the
+	// cap when matches fit comfortably.
+	let visibleLanguages = $derived(
+		languagesExpanded || filteredLanguages.length <= LANGUAGE_CAP
+			? filteredLanguages
+			: filteredLanguages.slice(0, LANGUAGE_CAP)
+	);
 
 	let fullTypeQuery = $state('');
 	let visibleFullTypes = $derived.by(() => {
@@ -202,28 +233,22 @@
 	// set identity changes.
 	let matched = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		// Filters with every chip checked are bypassed so rows with empty
-		// modality / domain / type lists stay visible (`[].some(...)` is false).
+		// "All on" = filter off (skip the empty-`.some()` problem on rows
+		// with empty modality / domain / type lists). Partial = intersection
+		// check. Empty = the user cleared the category deliberately, so
+		// nothing matches.
 		const typeOff = typeFilter.size === SIMPLIFIED_PRESENT.length;
 		const fullTypeOff = fullTypeFilter.size === FULL_TYPES_PRESENT.length;
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
+		const languageOff = languageFilter.size === LANGUAGES.length;
 		return ALL_TASKS.filter((t) => {
 			if (q && !t.name.toLowerCase().includes(q)) return false;
-			if (!typeOff && typeFilter.size > 0 && !typeFilter.has(t.simplifiedType)) return false;
-			if (!fullTypeOff && fullTypeFilter.size > 0 && !fullTypeFilter.has(t.type)) return false;
-			if (
-				!modalityOff &&
-				modalityFilter.size > 0 &&
-				!(t.modalities ?? []).some((m) => modalityFilter.has(m))
-			)
-				return false;
-			if (
-				!domainOff &&
-				domainFilter.size > 0 &&
-				!(t.domains ?? []).some((d) => domainFilter.has(d))
-			)
-				return false;
+			if (!typeOff && !typeFilter.has(t.simplifiedType)) return false;
+			if (!fullTypeOff && !fullTypeFilter.has(t.type)) return false;
+			if (!modalityOff && !(t.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
+			if (!domainOff && !(t.domains ?? []).some((d) => domainFilter.has(d))) return false;
+			if (!languageOff && !(t.languages ?? []).some((l) => languageFilter.has(l))) return false;
 			return true;
 		});
 	});
@@ -359,47 +384,19 @@
 			{:else}
 				<div class="grid" data-loaded>
 					{#each visibleTasks as t (t.name)}
-						<a
-							class="card"
-							href={resolve('/tasks/[name]', { name: slug(t.name) })}
-							data-stype={t.simplifiedType}
-						>
-							<div class="card-head">
-								<span class="title" title={t.name}>{t.name}</span>
-							</div>
-							<p class="desc"><MarkdownText text={t.description} /></p>
-							<dl class="stats">
-								<div>
-									<dt>Benchmarks</dt>
-									<dd>{t.benchmarks.length}</dd>
-								</div>
-								<div>
-									<dt>Languages</dt>
-									<dd>{t.languages.length}</dd>
-								</div>
-								<div>
-									<dt>Domains</dt>
-									<dd>{t.domains.length}</dd>
-								</div>
-								<div>
-									<dt>Main metric</dt>
-									<dd class="metric">{t.mainScore || '—'}</dd>
-								</div>
-							</dl>
-							{#if t.modalities.length > 0}
-								<div class="badges">
-									{#each t.modalities as mod (mod)}
-										<span class="badge modality-tint" data-modality={mod} title={mod}>
-											<ModalityIcon modality={mod} size={12} />
-											<span>{mod}</span>
-										</span>
-									{/each}
-								</div>
-							{/if}
-							<div class="card-foot">
-								<span class="type-chip" data-type={t.type} title={t.type}>{t.type}</span>
-							</div>
-						</a>
+						<TaskCard
+							name={t.name}
+							type={t.type}
+							simplifiedType={t.simplifiedType}
+							description={t.description}
+							modalities={t.modalities}
+							stats={[
+								{ label: 'Benchmarks', value: t.benchmarks.length },
+								{ label: 'Languages', value: t.languages.length },
+								{ label: 'Domains', value: t.domains.length },
+								{ label: 'Main metric', value: t.mainScore || '—', variant: 'metric' }
+							]}
+						/>
 					{/each}
 				</div>
 			{/if}
@@ -520,6 +517,50 @@
 						{/if}
 					</div>
 				</div>
+
+				<div class="group">
+					<div class="group-head">
+						<span class="group-label">Language</span>
+						<button type="button" class="link-btn" onclick={toggleAllLanguages}>
+							{allLanguages ? 'Clear' : 'All'}
+						</button>
+					</div>
+					<input
+						type="search"
+						class="type-search"
+						placeholder="Search languages…"
+						bind:value={languageQuery}
+					/>
+					<!-- Cap collapsed; on expand we drop the .scroll wrapper so the
+					     full list flows in the sidebar (and the page scroll handles
+					     overflow). Keeping the inner 320 px scrollport on expand
+					     was the bug — visually nothing changed at the top, so
+					     "Show all" looked like it added empty space below. -->
+					<div class="pills" class:scroll={!languagesExpanded} class:scroll-thin={!languagesExpanded}>
+						{#each visibleLanguages as l (l)}
+							<label class="pill type-fill">
+								<input
+									type="checkbox"
+									checked={languageFilter.has(l)}
+									onchange={() => toggleLanguage(l)}
+								/>
+								<span>{l}</span>
+							</label>
+						{/each}
+						{#if visibleLanguages.length === 0}
+							<p class="muted no-match">No languages match.</p>
+						{/if}
+					</div>
+					{#if filteredLanguages.length > LANGUAGE_CAP}
+						<button
+							type="button"
+							class="link-btn show-more-btn"
+							onclick={() => (languagesExpanded = !languagesExpanded)}
+						>
+							{languagesExpanded ? 'Show fewer' : `Show all ${filteredLanguages.length}`}
+						</button>
+					{/if}
+				</div>
 			</div>
 		{/if}
 	</aside>
@@ -598,249 +639,12 @@
 	}
 
 	/* Cards ---------------------------------------------------------------- */
+	/* Card chrome lives in $lib/components/TaskCard.svelte — this page just
+	   wraps it in the responsive grid. */
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 12px;
-	}
-	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		padding: 14px 16px;
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		position: relative;
-		overflow: hidden;
-		text-decoration: none;
-		color: inherit;
-		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease,
-			box-shadow 0.12s ease;
-		/* `content-visibility: auto` lets the browser skip rendering off-screen
-		   cards (1759 entries on the full registry). `contain-intrinsic-size`
-		   reserves placeholder space so the scrollbar geometry stays stable. */
-		content-visibility: auto;
-		contain-intrinsic-size: 280px;
-	}
-	.card:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
-	}
-	.card:focus-visible {
-		outline: 2px solid var(--card-accent, var(--primary));
-		outline-offset: 2px;
-	}
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Per-stype cards: flat surface + thin top-accent bar (`.card::before`).
-	   The 64px header tint is mixed against the actual surface so it's a
-	   subtle wash in light mode and barely-there in dark. */
-	.card[data-stype='retrieval'] {
-		--card-accent: var(--tint-purple-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-stype='classification'] {
-		--card-accent: var(--tint-blue-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-stype='pair-classification'] {
-		--card-accent: var(--tint-green-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-stype='clustering'] {
-		--card-accent: var(--tint-orange-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-stype='semantic-similarity'] {
-		--card-accent: var(--tint-pink-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-pink) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card:hover {
-		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
-	}
-	.card:hover .title {
-		color: var(--card-accent, var(--primary-strong));
-	}
-
-	.card-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 10px;
-	}
-	.desc {
-		margin: 0;
-		font-size: 12.5px;
-		line-height: 1.45;
-		color: var(--text-muted);
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
-	.title {
-		font-size: 14px;
-		font-weight: 700;
-		color: var(--text);
-		/* Long unbroken task names (e.g. XM3600T2IRetrieval) used to wrap
-		   awkwardly because the only legal break point was at hyphens.
-		   overflow-wrap: anywhere lets the browser break mid-camel-case so the
-		   row keeps its rhythm. */
-		overflow-wrap: anywhere;
-		word-break: normal;
-		flex: 1;
-		min-width: 0;
-		line-height: 1.3;
-	}
-
-	.stats {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 8px 14px;
-		margin: 0;
-	}
-	.stats > div {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.stats dt {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.stats dd {
-		margin: 0;
-		font-size: 14px;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-	}
-	/* Main-metric values like `ndcg_at_10` or `cosine_spearman` are long and
-	   non-numeric — render them in mono at a smaller size so they fit the
-	   stat cell without wrapping. */
-	.stats dd.metric {
-		font-family: var(--font-mono);
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: -0.01em;
-		color: var(--ink-strong);
-		overflow-wrap: anywhere;
-	}
-	.badges {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 3px 8px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
-	}
-	.card-foot {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-		margin-top: auto;
-		padding-top: 8px;
-		border-top: 1px solid var(--border);
-	}
-	.type-chip {
-		display: inline-block;
-		padding: 3px 9px;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.03em;
-		text-transform: uppercase;
-		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
-	}
-	/* All task-type chips key off the shared --tint-* palette so the chip
-	   colors automatically swap between the light and dark variants. */
-	.type-chip[data-type='Classification'] {
-		background: var(--tint-blue);
-		color: var(--tint-blue-fg);
-		border-color: color-mix(in srgb, var(--tint-blue-fg) 35%, transparent);
-	}
-	.type-chip[data-type='Clustering'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
-	}
-	.type-chip[data-type='PairClassification'],
-	.type-chip[data-type='MultilabelClassification'] {
-		background: var(--tint-green);
-		color: var(--tint-green-fg);
-		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, transparent);
-	}
-	.type-chip[data-type='Reranking'] {
-		background: var(--tint-amber);
-		color: var(--tint-amber-fg);
-		border-color: color-mix(in srgb, var(--tint-amber-fg) 35%, transparent);
-	}
-	.type-chip[data-type='Retrieval'] {
-		background: var(--tint-purple);
-		color: var(--tint-purple-fg);
-		border-color: color-mix(in srgb, var(--tint-purple-fg) 35%, transparent);
-	}
-	.type-chip[data-type='STS'] {
-		background: var(--tint-pink);
-		color: var(--tint-pink-fg);
-		border-color: color-mix(in srgb, var(--tint-pink-fg) 35%, transparent);
-	}
-	.type-chip[data-type='BitextMining'] {
-		background: var(--tint-azure);
-		color: var(--tint-azure-fg);
-		border-color: color-mix(in srgb, var(--tint-azure-fg) 35%, transparent);
-	}
-	.type-chip[data-type='InstructionReranking'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
-	}
-	.type-chip[data-type='Summarization'] {
-		background: var(--tint-teal);
-		color: var(--tint-teal-fg);
-		border-color: color-mix(in srgb, var(--tint-teal-fg) 35%, transparent);
 	}
 
 	/* `.empty` lives in src/app.css. */

@@ -12,7 +12,6 @@
 	} from '$lib/stores/filters.svelte';
 	import RangeSlider from './RangeSlider.svelte';
 	import { humanizeType } from '$lib/format';
-	import ModelTypeIcon from './ModelTypeIcon.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
 
 	// Size slider works in log10(M-of-params). Bounds are derived per benchmark
@@ -98,13 +97,46 @@
 		// directory), drop the collapsible "Model filters" card chrome so the
 		// controls read as the section itself instead of a card-in-a-sidebar.
 		flatModel?: boolean;
+		// Optional inline "Language" facet shown inside the model-filters
+		// block. Wired up only by /models, which holds the picked/available
+		// state locally (it's the only page that filters models by language
+		// — benchmark detail pages have their own language picker in the
+		// benchmark scope section). When `languageOptions` is undefined or
+		// empty the block is omitted entirely.
+		languageOptions?: string[];
+		languagesPicked?: Set<string>;
+		onToggleLanguage?: (l: string) => void;
+		onToggleAllLanguages?: () => void;
 	}
 	let {
 		defaultModelOpen = true,
 		defaultScopeOpen = false,
 		hideScope = false,
-		flatModel = false
+		flatModel = false,
+		languageOptions,
+		languagesPicked,
+		onToggleLanguage,
+		onToggleAllLanguages
 	}: Props = $props();
+
+	// Same cap-then-expand pattern the inline rail used: hide the long
+	// tail behind a "Show all N" until the user opts in.
+	let modelLangQuery = $state('');
+	let modelLangsExpanded = $state(false);
+	const MODEL_LANGUAGE_CAP = 40;
+	let filteredModelLangs = $derived.by(() => {
+		const all = languageOptions ?? [];
+		const q = modelLangQuery.trim().toLowerCase();
+		return q ? all.filter((l) => l.toLowerCase().includes(q)) : all;
+	});
+	let visibleModelLangs = $derived(
+		modelLangsExpanded || filteredModelLangs.length <= MODEL_LANGUAGE_CAP
+			? filteredModelLangs
+			: filteredModelLangs.slice(0, MODEL_LANGUAGE_CAP)
+	);
+	let allModelLangsOn = $derived(
+		!!languagesPicked && !!languageOptions && languagesPicked.size === languageOptions.length
+	);
 
 	let modelOpen = $state(untrack(() => defaultModelOpen));
 	let scopeOpen = $state(untrack(() => defaultScopeOpen));
@@ -451,7 +483,6 @@
 						onclick={() => filters.toggleInSet('modelTypes', t)}
 						aria-pressed={filters.modelTypes.has(t)}
 					>
-						<ModelTypeIcon type={t} size={12} />
 						<span>{t}</span>
 					</button>
 				{/each}
@@ -489,6 +520,48 @@
 				{/each}
 			</div>
 		</div>
+
+		{#if languageOptions && languageOptions.length > 0 && languagesPicked}
+			<!-- Language facet, only rendered when the host page wires up
+			     `languageOptions` (currently /models). State lives in the
+			     parent so the sidebar stays generic. -->
+			<div class="group">
+				<div class="group-header">
+					<span class="group-label">Language</span>
+					<button type="button" class="link-btn" onclick={() => onToggleAllLanguages?.()}>
+						{allModelLangsOn ? 'Clear' : 'All'}
+					</button>
+				</div>
+				<input
+					type="search"
+					class="lang-search"
+					placeholder="Search languages…"
+					bind:value={modelLangQuery}
+				/>
+				<div class="pills">
+					{#each visibleModelLangs as l (l)}
+						<button
+							type="button"
+							class="pill"
+							class:on={languagesPicked.has(l)}
+							onclick={() => onToggleLanguage?.(l)}
+							aria-pressed={languagesPicked.has(l)}
+						>
+							<span>{l}</span>
+						</button>
+					{/each}
+				</div>
+				{#if filteredModelLangs.length > MODEL_LANGUAGE_CAP}
+					<button
+						type="button"
+						class="link-btn show-more-btn"
+						onclick={() => (modelLangsExpanded = !modelLangsExpanded)}
+					>
+						{modelLangsExpanded ? 'Show fewer' : `Show all ${filteredModelLangs.length}`}
+					</button>
+				{/if}
+			</div>
+		{/if}
 	{/snippet}
 
 	{#if flatModel}
@@ -908,6 +981,23 @@
 		color: var(--text-subtle);
 		font-variant-numeric: tabular-nums;
 	}
+	/* Search input inside the Language facet — mirrors the
+	   `.type-search` style on /tasks so the controls feel uniform
+	   across sidebars. */
+	.lang-search {
+		width: 100%;
+		padding: 5px 10px;
+		font-size: 12px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		color: var(--text);
+	}
+	.lang-search:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 1px;
+		border-color: var(--primary);
+	}
 	.link-btn {
 		background: none;
 		border: none;
@@ -1008,7 +1098,12 @@
 		font-weight: 600;
 	}
 	.pill.on:hover {
-		background: color-mix(in srgb, var(--primary) 18%, white);
+		/* Lift the soft tint slightly toward the primary without bleaching
+		   it. Mixing against `var(--surface)` keeps the result theme-aware:
+		   on light it nudges brighter, on dark it stays dim and readable
+		   instead of blowing out to near-white. */
+		background: color-mix(in srgb, var(--primary) 22%, var(--surface));
+		border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
 	}
 	/* Model-type pills carry the type's signature color when active. Pulled
 	   from the shared --tint-* palette so they match SummaryTable's column

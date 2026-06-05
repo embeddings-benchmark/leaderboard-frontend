@@ -145,10 +145,15 @@ describe('applyFilters: task-set narrowing', () => {
 		expect(a.meanTask).toBeCloseTo(0.7, 5);
 	});
 
-	it('hides tasks dropped by the language filter (language is task-level metadata)', () => {
-		filters.setAll('languages', ['eng-Latn'], true); // drop fra-Latn-only T2
+	it('does NOT drop tasks by language filter — that is now handled server-side', () => {
+		// The backend re-runs the summary scoped to the picked languages via
+		// `?languages=` on /scores; the client trusts whatever task list the
+		// new summary carries. Filtering tasks client-side by language would
+		// drift wrong while the debounced refetch is in flight (it would
+		// re-apply the new filter to the OLD summary's per-task slots).
+		filters.setAll('languages', ['eng-Latn'], true);
 		const out = applyFilters(fixtureSummary());
-		expect(out.tasks).toEqual(['T1', 'T3']);
+		expect(out.tasks).toEqual(['T1', 'T2', 'T3']);
 	});
 });
 

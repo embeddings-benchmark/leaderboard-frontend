@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { loadBenchmarks } from '$lib/data/service';
 	import type { Benchmark } from '$lib/types';
@@ -63,15 +62,22 @@
 	// so rows with empty modality / type / domain lists stay visible.
 	let MODALITIES = $state<string[]>([]);
 	let TASK_TYPES = $state<string[]>([]);
+	let SIMPLIFIED_TYPES_PRESENT = $state<string[]>([]);
 	let DOMAINS = $state<string[]>([]);
+	let LANGUAGES = $state<string[]>([]);
 	const modalityFilter = new SvelteSet<string>();
 	const taskTypeFilter = new SvelteSet<string>();
+	const simplifiedTypeFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
+	const languageFilter = new SvelteSet<string>();
 	let sidebarCollapsed = $state(
 		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 	);
 	let taskTypeQuery = $state('');
 	let domainQuery = $state('');
+	let languageQuery = $state('');
+	let languagesExpanded = $state(false);
+	const LANGUAGE_CAP = 40;
 	let visibleTaskTypes = $derived.by(() => {
 		const q = taskTypeQuery.trim().toLowerCase();
 		return q ? TASK_TYPES.filter((t) => t.toLowerCase().includes(q)) : TASK_TYPES;
@@ -80,6 +86,15 @@
 		const q = domainQuery.trim().toLowerCase();
 		return q ? DOMAINS.filter((d) => d.toLowerCase().includes(q)) : DOMAINS;
 	});
+	let filteredLanguages = $derived.by(() => {
+		const q = languageQuery.trim().toLowerCase();
+		return q ? LANGUAGES.filter((l) => l.toLowerCase().includes(q)) : LANGUAGES;
+	});
+	let visibleLanguages = $derived(
+		languagesExpanded || filteredLanguages.length <= LANGUAGE_CAP
+			? filteredLanguages
+			: filteredLanguages.slice(0, LANGUAGE_CAP)
+	);
 
 	function toggleModality(m: string) {
 		if (modalityFilter.has(m)) modalityFilter.delete(m);
@@ -105,9 +120,30 @@
 		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
 		else for (const v of DOMAINS) domainFilter.add(v);
 	}
+	function toggleSimplifiedType(t: string) {
+		if (simplifiedTypeFilter.has(t)) simplifiedTypeFilter.delete(t);
+		else simplifiedTypeFilter.add(t);
+	}
+	function toggleAllSimplifiedTypes() {
+		if (simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length)
+			simplifiedTypeFilter.clear();
+		else for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
+	}
+	function toggleLanguage(l: string) {
+		if (languageFilter.has(l)) languageFilter.delete(l);
+		else languageFilter.add(l);
+	}
+	function toggleAllLanguages() {
+		if (languageFilter.size === LANGUAGES.length) languageFilter.clear();
+		else for (const v of LANGUAGES) languageFilter.add(v);
+	}
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
 	let allTaskTypes = $derived(taskTypeFilter.size === TASK_TYPES.length);
+	let allSimplifiedTypes = $derived(
+		simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length
+	);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
+	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
 
 	$effect(() => {
 		loadBenchmarks(true)
@@ -119,19 +155,40 @@
 				/* eslint-disable svelte/prefer-svelte-reactivity */
 				const mods = new Set<string>();
 				const types = new Set<string>();
+				const simpTypes = new Set<string>();
 				const doms = new Set<string>();
+				const langs = new Set<string>();
 				/* eslint-enable svelte/prefer-svelte-reactivity */
 				for (const b of list) {
 					if (b.modalities) for (const m of b.modalities) mods.add(m);
 					if (b.taskTypes) for (const t of b.taskTypes) types.add(t);
+					if (b.simplifiedTaskTypes) for (const t of b.simplifiedTaskTypes) simpTypes.add(t);
 					if (b.domains) for (const d of b.domains) doms.add(d);
+					if (b.languages) for (const l of b.languages) langs.add(l);
 				}
 				MODALITIES = [...mods].sort();
 				TASK_TYPES = [...types].sort();
+				// Order the simplified buckets the same way /tasks does (curated
+				// canonical first, then any extras) so users see the familiar
+				// "retrieval / classification / …" sequence.
+				const CURATED = [
+					'retrieval',
+					'classification',
+					'pair-classification',
+					'clustering',
+					'semantic-similarity'
+				];
+				SIMPLIFIED_TYPES_PRESENT = [
+					...CURATED.filter((t) => simpTypes.has(t)),
+					...[...simpTypes].filter((t) => !CURATED.includes(t)).sort()
+				];
 				DOMAINS = [...doms].sort();
+				LANGUAGES = [...langs].sort();
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of TASK_TYPES) taskTypeFilter.add(v);
+				for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
+				for (const v of LANGUAGES) languageFilter.add(v);
 				loading = false;
 			})
 			.catch((e) => {
@@ -143,30 +200,25 @@
 	// Featured (on the curated menu) come first, then off-menu benchmarks.
 	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
+		// "All on" = filter off; partial = intersection check; empty =
+		// the user deliberately cleared the category, so nothing matches.
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const taskTypeOff = taskTypeFilter.size === TASK_TYPES.length;
+		const simplifiedOff = simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
+		const languageOff = languageFilter.size === LANGUAGES.length;
 		const matches = (b: Benchmark) => {
 			if (q && !b.name.toLowerCase().includes(q) && !b.displayName.toLowerCase().includes(q))
 				return false;
+			if (!modalityOff && !(b.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
+			if (!taskTypeOff && !(b.taskTypes ?? []).some((t) => taskTypeFilter.has(t))) return false;
 			if (
-				!modalityOff &&
-				modalityFilter.size > 0 &&
-				!(b.modalities ?? []).some((m) => modalityFilter.has(m))
+				!simplifiedOff &&
+				!(b.simplifiedTaskTypes ?? []).some((t) => simplifiedTypeFilter.has(t))
 			)
 				return false;
-			if (
-				!taskTypeOff &&
-				taskTypeFilter.size > 0 &&
-				!(b.taskTypes ?? []).some((t) => taskTypeFilter.has(t))
-			)
-				return false;
-			if (
-				!domainOff &&
-				domainFilter.size > 0 &&
-				!(b.domains ?? []).some((d) => domainFilter.has(d))
-			)
-				return false;
+			if (!domainOff && !(b.domains ?? []).some((d) => domainFilter.has(d))) return false;
+			if (!languageOff && !(b.languages ?? []).some((l) => languageFilter.has(l))) return false;
 			return true;
 		};
 		const dir = sortDir === 'asc' ? 1 : -1;
@@ -199,12 +251,6 @@
 
 <div class="app">
 	<main class="main">
-		<nav class="breadcrumb" aria-label="Breadcrumb">
-			<a href={resolve('/')}>Home</a>
-			<span class="sep">/</span>
-			<span class="current">All benchmarks</span>
-		</nav>
-
 		<header class="hero">
 			<h1>All benchmarks</h1>
 			<p class="lead">
@@ -294,6 +340,33 @@
 			<div class="filters">
 				<div class="group">
 					<div class="group-head">
+						<span class="group-label">Task group</span>
+						<button type="button" class="link-btn" onclick={toggleAllSimplifiedTypes}>
+							{allSimplifiedTypes ? 'Clear' : 'All'}
+						</button>
+					</div>
+					<!-- `type-fill` paints checked chips in the shared primary
+					     tint (instead of the per-stype colour the /tasks page
+					     uses). On /benchmarks the Task group sits next to the
+					     other primary-tinted facets (Modality / Task type /
+					     Domain), so matching their treatment keeps the sidebar
+					     visually consistent. -->
+					<div class="pills">
+						{#each SIMPLIFIED_TYPES_PRESENT as t (t)}
+							<label class="pill type-fill">
+								<input
+									type="checkbox"
+									checked={simplifiedTypeFilter.has(t)}
+									onchange={() => toggleSimplifiedType(t)}
+								/>
+								<span>{t}</span>
+							</label>
+						{/each}
+					</div>
+				</div>
+
+				<div class="group">
+					<div class="group-head">
 						<span class="group-label">Modality</span>
 						<button type="button" class="link-btn" onclick={toggleAllModalities}>
 							{allModalities ? 'Clear' : 'All'}
@@ -372,6 +445,48 @@
 							<p class="muted no-match">No domains match.</p>
 						{/if}
 					</div>
+				</div>
+
+				<div class="group">
+					<div class="group-head">
+						<span class="group-label">Language</span>
+						<button type="button" class="link-btn" onclick={toggleAllLanguages}>
+							{allLanguages ? 'Clear' : 'All'}
+						</button>
+					</div>
+					<input
+						type="search"
+						class="type-search"
+						placeholder="Search languages…"
+						bind:value={languageQuery}
+					/>
+					<!-- Cap collapsed; on expand we drop the .scroll wrapper so
+					     the full language list flows in the sidebar and the
+					     page scroll handles overflow. Same pattern as /tasks. -->
+					<div class="pills" class:scroll={!languagesExpanded} class:scroll-thin={!languagesExpanded}>
+						{#each visibleLanguages as l (l)}
+							<label class="pill type-fill">
+								<input
+									type="checkbox"
+									checked={languageFilter.has(l)}
+									onchange={() => toggleLanguage(l)}
+								/>
+								<span>{l}</span>
+							</label>
+						{/each}
+						{#if visibleLanguages.length === 0}
+							<p class="muted no-match">No languages match.</p>
+						{/if}
+					</div>
+					{#if filteredLanguages.length > LANGUAGE_CAP}
+						<button
+							type="button"
+							class="link-btn show-more-btn"
+							onclick={() => (languagesExpanded = !languagesExpanded)}
+						>
+							{languagesExpanded ? 'Show fewer' : `Show all ${filteredLanguages.length}`}
+						</button>
+					{/if}
 				</div>
 			</div>
 		{/if}

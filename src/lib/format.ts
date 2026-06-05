@@ -17,6 +17,27 @@ export function humanizeType(s: string): string {
 	return s.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
 }
 
+// Canonical visual order for modality chips across every card / hero
+// (`video → audio → image → text`). Heaviest medium first so the most
+// distinctive marker reads earliest; unknown modalities sort after the
+// canonical ones, alphabetically among themselves. Pure / stable: never
+// mutates the input array.
+const MODALITY_ORDER: Record<string, number> = {
+	video: 0,
+	audio: 1,
+	image: 2,
+	text: 3
+};
+export function sortModalities<T extends string>(mods: readonly T[] | undefined): T[] {
+	if (!mods) return [];
+	return [...mods].sort((a, b) => {
+		const ai = MODALITY_ORDER[a] ?? 99;
+		const bi = MODALITY_ORDER[b] ?? 99;
+		if (ai !== bi) return ai - bi;
+		return a.localeCompare(b);
+	});
+}
+
 /**
  * Resolve an API-relative URL (one starting with "/") against PUBLIC_API_URL.
  * Absolute URLs and empty/null inputs pass through unchanged. Used so the
@@ -49,6 +70,17 @@ export function isIconUrl(icon: string | null | undefined): boolean {
  */
 export function slug(name: string): string {
 	return encodeURIComponent(name);
+}
+
+// Variant of `slug` that preserves forward slashes — for HuggingFace-style
+// `org/displayName` identifiers used by the `/models/[...name]` and
+// `/tasks/[name]` routes, where rendering the path literally (rather than
+// `%2F`-encoded) keeps the URL readable for users and shareable as-is.
+export function modelPath(name: string): string {
+	return name
+		.split('/')
+		.map((segment) => encodeURIComponent(segment))
+		.join('/');
 }
 
 /** Tabular integer with locale grouping, em-dash for falsy values. */

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { loadBenchmarkMenu, loadModelScores, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
@@ -7,7 +8,7 @@
 	import type { Data, Layout } from 'plotly.js';
 	import type { Benchmark, BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { flattenMenu } from '$lib/types';
-	import { humanizeType } from '$lib/format';
+	import { humanizeType, modelPath } from '$lib/format';
 	import { updateUrl } from '$lib/url-state';
 	import { untrack } from 'svelte';
 
@@ -699,16 +700,19 @@
 					<div class="cell head sticky"></div>
 					{#each pickedRows as r, i (r.model.name)}
 						<div class="cell head model-head" style:--c={modelColor(i)}>
-							<div class="model-rank">#{r.rank}</div>
-							{#if r.model.url}
-								<!-- External model URL (HuggingFace etc.) -->
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-								<a class="model-name" href={r.model.url} target="_blank" rel="noreferrer">
-									{r.model.displayName}
-								</a>
-							{:else}
-								<span class="model-name">{r.model.displayName}</span>
-							{/if}
+							<!-- Link points at the internal /models/[...name] detail page,
+							     not the upstream HuggingFace reference — the detail page
+							     surfaces the same external link plus per-benchmark scores
+							     and metadata, so it's the better landing surface.
+							     `modelPath` keeps `org/displayName` segments unencoded so
+							     the URL reads /models/microsoft/harrier-… instead of
+							     /models/microsoft%2Fharrier-…. -->
+							<a
+								class="model-name"
+								href={resolve('/models/[...name]', { name: modelPath(r.model.name) })}
+							>
+								{r.model.displayName}
+							</a>
 							<div class="model-meta">
 								<span class="chip type">{fmtType(r.model.modelType)}</span>
 								{#if r.model.openWeights}
@@ -1185,12 +1189,6 @@
 		padding: 16px 18px;
 		border-top: 3px solid var(--c);
 		background: color-mix(in srgb, var(--c) 6%, var(--surface));
-	}
-	.model-rank {
-		font-size: 11px;
-		font-weight: 700;
-		color: var(--c);
-		letter-spacing: 0.04em;
 	}
 	.model-name {
 		font-size: 15px;

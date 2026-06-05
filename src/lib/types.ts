@@ -9,6 +9,11 @@ export interface Benchmark {
 	citation?: string;
 	languages: string[];
 	taskTypes: string[];
+	// Simplified task groups (Borda-compatible buckets) this benchmark
+	// touches — one of "retrieval", "classification", "pair-classification",
+	// "clustering", "semantic-similarity". Drives the "Task group" facet
+	// on /benchmarks. Empty when the backend hasn't populated it.
+	simplifiedTaskTypes?: string[];
 	tasks: string[];
 	domains: string[];
 	modalities: string[];
@@ -126,6 +131,10 @@ export interface ModelMeta {
 	// Modalities the model can encode (e.g. ["text"], ["text", "image"]).
 	// Defaults to ["text"] when the upstream ModelMeta omits the field.
 	modalities?: string[];
+	// Display labels (e.g. "English", "Mandarin Chinese") for the
+	// languages this model targets. Empty when the upstream meta
+	// declares no language scope. Used by the /models filter sidebar.
+	languages?: string[];
 	citation?: string | null;
 	// Extended metadata, all optional. Surfaced on the model detail card.
 	memoryUsageMb?: number | null;

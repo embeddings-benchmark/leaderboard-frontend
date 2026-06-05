@@ -200,8 +200,19 @@
 	let lastRowSignature = '';
 	let rowKickoffTimer: ReturnType<typeof setTimeout> | null = null;
 	$effect(() => {
-		const total = sortedRows.length;
-		const signature = `${total}|${sortedRows[0]?.model.name ?? ''}|${sortedRows[total - 1]?.model.name ?? ''}`;
+		// Anchor the progressive render to the underlying `summary.rows`
+		// array identity, NOT to `sortedRows`. Pinning a model produces a
+		// new `sortedRows` (partition pass floats pins to the top), but
+		// the row set itself is unchanged — using `sortedRows` as the
+		// dependency forced a full 80→200→… progressive re-render on every
+		// pin click, freezing the UI for 600-row tables (MTEB(Multilingual)).
+		// Sort changes are caught the same way: `sort.key/dir` change ⇒
+		// new `sortedRows` array but `summary.rows` is the same array, so
+		// we'd skip the reset — that's fine, the existing `visibleRows`
+		// already covers everything for any ordering of the same set.
+		const baseRows = summary.rows;
+		const total = baseRows.length;
+		const signature = `${total}|${baseRows[0]?.model.name ?? ''}|${baseRows[total - 1]?.model.name ?? ''}`;
 		if (signature === lastRowSignature) return;
 		lastRowSignature = signature;
 		const myVersion = ++growVersion;
@@ -457,8 +468,8 @@
 						aria-sort={sort.aria('rank')}
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('rank')}>
-							<InfoDot ariaLabel="What is {INFO.rank.title}?" />
 							<span>Rank</span>
+							<InfoDot ariaLabel="What is {INFO.rank.title}?" />
 							<span class="ind" class:on={sort.key === 'rank'}>{sort.icon('rank')}</span>
 						</button>
 					</th>
@@ -473,8 +484,8 @@
 						onfocusout={hideTip}
 					>
 						<button class="sort-btn" onclick={() => sort.click('model')}>
-							<InfoDot ariaLabel="What is {INFO.model.title}?" />
 							<span>Model</span>
+							<InfoDot ariaLabel="What is {INFO.model.title}?" />
 							<span class="ind" class:on={sort.key === 'model'}>{sort.icon('model')}</span>
 						</button>
 					</th>
@@ -489,8 +500,8 @@
 						aria-sort={sort.aria('totalParams')}
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('totalParams')}>
-							<InfoDot ariaLabel="What is {INFO.totalParams.title}?" />
 							<span>Total Params</span>
+							<InfoDot ariaLabel="What is {INFO.totalParams.title}?" />
 							<span class="ind" class:on={sort.key === 'totalParams'}
 								>{sort.icon('totalParams')}</span
 							>
@@ -507,8 +518,8 @@
 						aria-sort={sort.aria('zeroShot')}
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
-							<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
 							<span>Zero-shot</span>
+							<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
 							<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
 						</button>
 					</th>
@@ -524,8 +535,8 @@
 							aria-sort={sort.aria('meanTask')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTask')}>
-								<InfoDot ariaLabel="What is {INFO.meanTask.title}?" />
 								<span>Mean (Task)</span>
+								<InfoDot ariaLabel="What is {INFO.meanTask.title}?" />
 								<span class="ind" class:on={sort.key === 'meanTask'}>{sort.icon('meanTask')}</span>
 							</button>
 						</th>
@@ -542,8 +553,8 @@
 							aria-sort={sort.aria('meanTaskType')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTaskType')}>
-								<InfoDot ariaLabel="What is {INFO.meanTaskType.title}?" />
 								<span>Mean (TaskType)</span>
+								<InfoDot ariaLabel="What is {INFO.meanTaskType.title}?" />
 								<span class="ind" class:on={sort.key === 'meanTaskType'}
 									>{sort.icon('meanTaskType')}</span
 								>
@@ -562,8 +573,8 @@
 							aria-sort={sort.aria('meanPublic')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPublic')}>
-								<InfoDot ariaLabel="What is {INFO.meanPublic.title}?" />
 								<span>Mean (Public)</span>
+								<InfoDot ariaLabel="What is {INFO.meanPublic.title}?" />
 								<span class="ind" class:on={sort.key === 'meanPublic'}
 									>{sort.icon('meanPublic')}</span
 								>
@@ -580,8 +591,8 @@
 							aria-sort={sort.aria('meanPrivate')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPrivate')}>
-								<InfoDot ariaLabel="What is {INFO.meanPrivate.title}?" />
 								<span>Mean (Private)</span>
+								<InfoDot ariaLabel="What is {INFO.meanPrivate.title}?" />
 								<span class="ind" class:on={sort.key === 'meanPrivate'}
 									>{sort.icon('meanPrivate')}</span
 								>
@@ -603,8 +614,8 @@
 								onfocusout={desc ? hideTip : undefined}
 							>
 								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
-									{#if desc}<InfoDot ariaLabel="What is {humanizeType(tt)}?" />{/if}
 									<span>{humanizeType(tt)}</span>
+									{#if desc}<InfoDot ariaLabel="What is {humanizeType(tt)}?" />{/if}
 									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
 								</button>
 							</th>

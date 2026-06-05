@@ -14,13 +14,13 @@
 	interface Props {
 		entry: MenuEntry;
 		// How many cards to show before the "Show more" cut. Defaults to
-		// 8 — fits 2 rows of 4 on desktop.
+		// 4 — one row at the desktop grid width.
 		initialCount?: number;
 		// Whether the section starts expanded. Mirrors `MenuEntry.open`
 		// from the backend by default; pass to force.
 		defaultOpen?: boolean;
 	}
-	let { entry, initialCount = 8, defaultOpen }: Props = $props();
+	let { entry, initialCount = 4, defaultOpen }: Props = $props();
 
 	// Only direct-child benchmarks land in the cards; nested MenuEntries
 	// (none for the home layout, but the type allows them) are ignored.

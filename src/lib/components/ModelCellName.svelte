@@ -9,7 +9,7 @@
 
 	import type { ModelMeta } from '$lib/types';
 	import { resolve } from '$app/paths';
-	import { slug } from '$lib/format';
+	import { modelPath } from '$lib/format';
 
 	interface Props {
 		model: ModelMeta;
@@ -17,7 +17,7 @@
 	let { model }: Props = $props();
 </script>
 
-<a class="tbl-model-link" href={resolve('/models/[name]', { name: slug(model.name) })}>
+<a class="tbl-model-link" href={resolve('/models/[...name]', { name: modelPath(model.name) })}>
 	<span class="tbl-model-org">{model.org}</span><span class="tbl-model-sep">/</span><span
 		class="tbl-model-name">{model.displayName}</span
 	>

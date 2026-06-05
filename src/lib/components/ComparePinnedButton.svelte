@@ -15,14 +15,22 @@
 
 	let href = $derived.by(() => {
 		const names = Array.from(pinnedModels.value).slice(0, 4);
-		// URLSearchParams form-encodes spaces as `+` — matches the
-		// canonical shape /compare writes back, so the URL doesn't
-		// flicker after navigation.
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const params = new URLSearchParams();
-		params.set('model', names.join(','));
-		if (leaderboard.selected) params.set('benchmark', leaderboard.selected);
-		return `${resolve('/compare')}?${params.toString()}`;
+		// Manual query build (NOT URLSearchParams). `params.set('model',
+		// 'a,b')` would URL-encode the join comma to `%2C`, leaving the
+		// compare page's `readMultiParam` to treat the whole thing as a
+		// single name. Mirror the canonical writer instead: encode each
+		// name separately (commas inside a name like "MTEB(Multilingual, v2)"
+		// become `%2C` and survive the read-side split), then join with a
+		// literal `,` separator.
+		const parts: string[] = [];
+		if (names.length > 0) {
+			parts.push(`model=${names.map((n) => encodeURIComponent(n)).join(',')}`);
+		}
+		if (leaderboard.selected) {
+			parts.push(`benchmark=${encodeURIComponent(leaderboard.selected)}`);
+		}
+		const qs = parts.length > 0 ? `?${parts.join('&')}` : '';
+		return `${resolve('/compare')}${qs}`;
 	});
 </script>
 

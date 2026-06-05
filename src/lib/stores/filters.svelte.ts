@@ -88,9 +88,19 @@ function defaultState(): FiltersState {
 
 function createFilters() {
 	const state = $state<FiltersState>(defaultState());
+	// Track the benchmark whose available-* + picks we've already seeded.
+	// Subsequent `initFor` calls for the SAME benchmark (e.g. a
+	// language-scoped summary refetch) refresh the available-* lists
+	// without clobbering the user's current pick state — otherwise
+	// unchecking a language would trigger a refetch, the new summary
+	// would land, `initFor` would reset the language picks to "all",
+	// which would trigger another refetch back to unfiltered.
+	let lastBenchmarkName: string | null = null;
 
 	function initFor(summary: BenchmarkSummary | null) {
 		if (!summary) return;
+		const isNewBenchmark = lastBenchmarkName !== summary.benchmarkName;
+		lastBenchmarkName = summary.benchmarkName;
 
 		// Local accumulators — not held by $state, so plain Set is correct.
 		// Languages come from `tasksMeta[i].languages` which the backend
@@ -139,9 +149,35 @@ function createFilters() {
 		state.availableTasks = summary.tasksMeta;
 		state.availableDomains = sortedDomains;
 		state.availableModalities = sortedModalities;
-		state.availableLanguages = sortedLanguages;
+		// Available languages are only reseeded when the benchmark changes;
+		// staying constant across same-benchmark refetches lets the
+		// language-filter `requestSummaryForLanguages` effect track its
+		// own dedupe key correctly.
+		if (isNewBenchmark) {
+			state.availableLanguages = sortedLanguages;
+		}
 		state.availableMinModelSizeM = niceLow;
 		state.availableMaxModelSizeM = niceHigh;
+		// Same-benchmark refresh (e.g. language-scoped summary refetch):
+		// leave the user's current pick state alone — only the available-*
+		// lists were updated above. Picks reset only when the benchmark
+		// actually changes (new page nav).
+		//
+		// Trim picks that reference items no longer in the new available-*
+		// universe — otherwise the sidebar's `picks/available` counter
+		// reads e.g. "9/8" when a task type the user had checked got
+		// dropped by the server-scoped summary (e.g. InstructionReranking
+		// disappearing once English is deselected). We don't ADD newly
+		// available items: the user's explicit deselections stay in force,
+		// they just get masked against the visible universe.
+		if (!isNewBenchmark) {
+			pruneToAvailable(state.taskTypes, summary.taskTypes);
+			pruneToAvailable(state.tasks, summary.tasks);
+			pruneToAvailable(state.domains, sortedDomains);
+			pruneToAvailable(state.modalities, sortedModalities);
+			sync();
+			return;
+		}
 		// Replace contents in place rather than swapping the SvelteSet reference.
 		// Reassigning the Set forces every chip / FilterContent subscriber to
 		// re-bind from scratch; mutating notifies once per mutation but lets
@@ -203,6 +239,17 @@ function createFilters() {
 		if (mods !== null) replaceSet(state.modalities, decodeSet(mods));
 		const tks = p.get('tks');
 		if (tks !== null) replaceSet(state.tasks, decodeSet(tks));
+	}
+
+	// Drop entries from `target` that aren't in `available`. Used on
+	// same-benchmark refresh so the picks/available counter doesn't
+	// read "9/8" after a server-scoped refetch shrinks the universe.
+	function pruneToAvailable(target: SvelteSet<string>, available: readonly string[]) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const present = new Set<string>(available);
+		for (const v of target) {
+			if (!present.has(v)) target.delete(v);
+		}
 	}
 
 	function replaceSet(target: SvelteSet<string>, source: Iterable<string>) {
@@ -437,17 +484,36 @@ function createFilters() {
 export const filters = createFilters();
 
 function isFullSet(selected: Set<string>, available: string[]): boolean {
-	return selected.size === 0 || selected.size === available.length;
+	// "Full" = every currently-visible item is picked, so no narrowing
+	// is being applied. We deliberately do NOT treat empty as "no
+	// filter": when the user clears every chip in a category they want
+	// to see nothing match (an explicit "exclude everything" gesture).
+	//
+	// Why not the cheaper `selected.size === available.length` shortcut?
+	// After a server-scoped summary refetch (e.g. language filter
+	// trims the task-type list from 9 → 8 by dropping
+	// InstructionReranking), the user's picks may still hold the
+	// original 9 minus a different element. Both sets have size 8 but
+	// contain different elements — the shortcut would falsely report
+	// "no narrowing" and applyFilters would trust the API, leaving the
+	// user's explicitly-deselected column visible.
+	if (selected.size === 0) return false;
+	return available.every((x) => selected.has(x));
 }
 
 export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
-	// Visible tasks: pass type / domain / language / modality / explicit task selection.
+	// Visible tasks: pass type / domain / modality / explicit task selection.
+	// Language is intentionally NOT in this list — the backend already
+	// returns a language-scoped summary (via `?languages=` on /scores),
+	// so re-filtering tasks client-side by language would either be a
+	// no-op (server-trimmed lists already match) or drift wrong while
+	// the debounced refetch is in flight (showing the previous summary's
+	// task slots with current-filter narrowing produces invented values).
 	const fullTypes = isFullSet(filters.taskTypes, summary.taskTypes);
 	const fullDomains = isFullSet(filters.domains, filters.availableDomains);
 	const fullModalities = isFullSet(filters.modalities, filters.availableModalities);
-	const fullLanguages = isFullSet(filters.languages, filters.availableLanguages);
 	const fullTasks = isFullSet(filters.tasks, summary.tasks);
-	const fullView = fullTypes && fullDomains && fullModalities && fullLanguages && fullTasks;
+	const fullView = fullTypes && fullDomains && fullModalities && fullTasks;
 
 	// Skip the `.filter()` allocation when no task-affecting filter is active —
 	// `visibleTasks === summary.tasksMeta`, `taskTypesOut === summary.taskTypes`,
@@ -468,7 +534,6 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			if (!fullDomains && !t.domains.some((d) => filters.domains.has(d))) return false;
 			if (!fullModalities && !(t.modalities ?? []).some((m) => filters.modalities.has(m)))
 				return false;
-			if (!fullLanguages && !t.languages.some((l) => filters.languages.has(l))) return false;
 			if (!fullTasks && !filters.tasks.has(t.name)) return false;
 			return true;
 		});
@@ -509,12 +574,11 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 
 			if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
 
-			if (filters.modelTypes.size > 0 && !filters.modelTypes.has(m.modelType)) return false;
+			// Empty pick set = "deselect everything" = nothing matches.
+			// Full pick set = filter off. Partial = intersection check.
+			if (!filters.modelTypes.has(m.modelType)) return false;
 
-			if (
-				filters.modelModalities.size > 0 &&
-				filters.modelModalities.size < MODEL_MODALITIES.length
-			) {
+			if (filters.modelModalities.size < MODEL_MODALITIES.length) {
 				const mm = m.modalities ?? ['text'];
 				if (!mm.some((x) => filters.modelModalities.has(x))) return false;
 			}
@@ -537,13 +601,25 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		})
 		.map((row) => {
 			// Under filter: recompute every aggregate from the visible per-task
-			// scalars (null on partial coverage, matching the backend's
-			// `_skipna_false_mean`). With no filter, trust the API — MIEB's
-			// Mean (Task) is mean-of-per-type-means, not mean-of-tasks.
+			// scalars. Aggregation policy mirrors the backend:
+			//   • No language filter  → strict (`_skipna_false_mean`): null on
+			//     any missing task in the visible slice, so partial-coverage
+			//     models can't outrank full-coverage peers.
+			//   • Language filter ON  → lenient: the backend already switched
+			//     to lenient means for the language-scoped summary (most
+			//     models don't run every task in every language, so strict
+			//     would null nearly every cell). Mirror it here so layering
+			//     a task-type or domain filter on top of a language pick
+			//     doesn't suddenly empty the table again.
+			// `fullView` excludes languages by design, so a pure language
+			// narrowing keeps `fullView === true` and skips this branch.
 			let meanTask: number | null = row.meanTask;
 			let meanTaskType: number | null = row.meanTaskType;
 			let scoresByTaskType: Record<string, number> = row.scoresByTaskType;
 			if (!fullView) {
+				const lenient =
+					filters.languages.size > 0 &&
+					filters.languages.size < filters.availableLanguages.length;
 				let taskSum = 0;
 				let taskN = 0;
 				for (const t of taskNamesOut) {
@@ -553,8 +629,12 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 						taskN++;
 					}
 				}
-				meanTask =
-					taskNamesOut.length > 0 && taskN === taskNamesOut.length ? taskSum / taskN : null;
+				if (lenient) {
+					meanTask = taskN > 0 ? taskSum / taskN : null;
+				} else {
+					meanTask =
+						taskNamesOut.length > 0 && taskN === taskNamesOut.length ? taskSum / taskN : null;
+				}
 
 				scoresByTaskType = {};
 				for (const tt of taskTypesOut) {
@@ -569,7 +649,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 							typeN++;
 						}
 					}
-					if (typeN === typeTasks.length) {
+					if (lenient ? typeN > 0 : typeN === typeTasks.length) {
 						scoresByTaskType[tt] = typeSum / typeN;
 					}
 				}
@@ -583,8 +663,12 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 						mttN++;
 					}
 				}
-				meanTaskType =
-					taskTypesOut.length > 0 && mttN === taskTypesOut.length ? mttSum / mttN : null;
+				if (lenient) {
+					meanTaskType = mttN > 0 ? mttSum / mttN : null;
+				} else {
+					meanTaskType =
+						taskTypesOut.length > 0 && mttN === taskTypesOut.length ? mttSum / mttN : null;
+				}
 			}
 
 			return { ...row, meanTask, meanTaskType, scoresByTaskType };
