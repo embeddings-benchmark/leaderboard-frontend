@@ -11,6 +11,30 @@
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 	import PinButton from './PinButton.svelte';
 	import SortHeader from './SortHeader.svelte';
+	import { onMount } from 'svelte';
+
+	// Synthetic per-language score generator is a placeholder until the
+	// backend ships real per-language data. Read `PUBLIC_USE_MOCK` via
+	// `import.meta.env` so Vite inlines it as a string literal at build
+	// time — when the flag isn't `'1'`, the `if (USE_MOCK)` block below is
+	// `if (false)` and the bundler dead-code-eliminates both the import
+	// call AND the dynamic chunk it points at. In prod the tab renders
+	// '—' for every cell (the tab is only mounted at all for benchmarks
+	// that opt in via `language_view`).
+	const USE_MOCK = (import.meta.env.PUBLIC_USE_MOCK as string | undefined) === '1';
+	let fakeLangScoreImpl = $state<
+		((row: SummaryRow, langIdx: number, firstTaskType: string) => number | null) | null
+	>(null);
+	onMount(() => {
+		if (!USE_MOCK) return;
+		import('$lib/data/mockPerLanguage').then((m) => {
+			fakeLangScoreImpl = m.fakeLangScore;
+		});
+	});
+	function fakeLangScore(row: SummaryRow, langIdx: number): number | null {
+		if (!fakeLangScoreImpl) return null;
+		return fakeLangScoreImpl(row, langIdx, summary.taskTypes[0] ?? '');
+	}
 
 	type Tip = {
 		showFor: (t: HTMLElement, row: SummaryRow) => void;
@@ -39,31 +63,20 @@
 		if (languageView === 'all') {
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const seen = new Set<string>();
-			const out: string[] = [];
+			const cols: string[] = [];
 			for (const t of summary.tasksMeta ?? []) {
 				for (const lang of t.languages ?? []) {
 					if (!seen.has(lang)) {
 						seen.add(lang);
-						out.push(lang);
+						cols.push(lang);
 					}
 				}
 			}
-			out.sort();
-			return out;
+			cols.sort();
+			return cols;
 		}
-		return languageView;
+		return [...languageView];
 	});
-
-	// Returns null when the row has no overall mean (partial benchmark coverage);
-	// downstream renders that as '—' so missing data doesn't masquerade as 0.00.
-	function fakeLangScore(row: SummaryRow, langIdx: number): number | null {
-		if (row.meanTask == null) return null;
-		const base = row.meanTask * 100;
-		const shift = ((langIdx + row.rank) % 7) - 3;
-		const firstType = summary.taskTypes[0];
-		const delta = firstType ? (row.scoresByTaskType[firstType] ?? 0) * 5 : 0;
-		return Math.max(0, Math.min(99, base + shift + delta - 4));
-	}
 
 	function rowMean(row: SummaryRow): number | null {
 		const vals: number[] = [];
@@ -120,16 +133,17 @@
 		if (sort.key) {
 			const dir = sort.dir === 'asc' ? 1 : -1;
 			const key = sort.key;
+			// Resolve the language column once instead of `LANGUAGES.indexOf`
+			// per comparison.
+			const langIdx = key.startsWith('lang:') ? LANGUAGES.indexOf(key.slice(5)) : -1;
 			rows = [...rows].sort((a, b) => {
 				if (key === 'model') {
 					return (
 						a.model.displayName.toLowerCase().localeCompare(b.model.displayName.toLowerCase()) * dir
 					);
 				}
-				const va: number | null =
-					key === 'mean' ? rowMean(a) : fakeLangScore(a, LANGUAGES.indexOf(key.slice(5)));
-				const vb: number | null =
-					key === 'mean' ? rowMean(b) : fakeLangScore(b, LANGUAGES.indexOf(key.slice(5)));
+				const va: number | null = key === 'mean' ? rowMean(a) : fakeLangScore(a, langIdx);
+				const vb: number | null = key === 'mean' ? rowMean(b) : fakeLangScore(b, langIdx);
 				// Push nulls to the bottom regardless of direction.
 				if (va == null && vb == null) return 0;
 				if (va == null) return 1;
@@ -138,8 +152,14 @@
 			});
 		}
 		if (pinnedModels.size === 0) return rows;
-		const isPinned = (r: SummaryRow) => pinnedModels.has(r.model.name);
-		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
+		// Single-pass partition: pinned first, others in original order.
+		const pinned: SummaryRow[] = [];
+		const unpinned: SummaryRow[] = [];
+		for (const r of rows) {
+			if (pinnedModels.has(r.model.name)) pinned.push(r);
+			else unpinned.push(r);
+		}
+		return [...pinned, ...unpinned];
 	});
 
 	function fmt(n: number | null): string {
@@ -211,18 +231,16 @@
 							<ModelCellName model={row.model} />
 						</td>
 						<td
-							class="tbl-num"
+							class="tbl-num {heat(mean, worstMean, bestMean)}"
 							class:tbl-best={mean != null && mean === bestMean}
-							style={heat(mean, worstMean, bestMean)}
 						>
 							{fmt(mean)}
 						</td>
 						{#each LANGUAGES as lang, idx (lang)}
 							{@const score = fakeLangScore(row, idx)}
 							<td
-								class="tbl-num"
+								class="tbl-num {heat(score, worst[lang], best[lang])}"
 								class:tbl-best={score != null && score === best[lang]}
-								style={heat(score, worst[lang], best[lang])}
 							>
 								{fmt(score)}
 							</td>

@@ -2,7 +2,8 @@
 	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
-	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
+	import { safeIdle } from '$lib/idle';
+	import { flattenMenu } from '$lib/types';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
@@ -32,18 +33,6 @@
 		'semantic-similarity'
 	] as const;
 
-	function collectBenchmarks(entries: MenuEntry[]): Benchmark[] {
-		const out: Benchmark[] = [];
-		const walk = (m: MenuEntry) => {
-			for (const c of m.children) {
-				if (isBenchmark(c)) out.push(c);
-				else walk(c);
-			}
-		};
-		entries.forEach(walk);
-		return out;
-	}
-
 	let ALL_TASKS = $state<TaskEntry[]>([]);
 	let SIMPLIFIED_PRESENT = $state<string[]>([]);
 	let FULL_TYPES_PRESENT = $state<string[]>([]);
@@ -58,7 +47,7 @@
 				// /tasks returns the full task registry; we cross-reference the menu
 				// to know which benchmarks each task appears in.
 				const [menu, tasks] = await Promise.all([loadBenchmarkMenu(), loadTasks()]);
-				const allBenches = collectBenchmarks(menu);
+				const allBenches = flattenMenu(menu);
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const occurrences = new Map<string, string[]>();
 				for (const b of allBenches) {
@@ -208,7 +197,10 @@
 		return SIMPLIFIED_RANK[t] ?? SIMPLIFIED_TYPES.length;
 	}
 
-	let filtered = $derived.by(() => {
+	// Split filter / sort so name-query keystrokes only re-run the cheap
+	// filter pass; the sort only re-runs when sort key/dir or the matched
+	// set identity changes.
+	let matched = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		// Filters with every chip checked are bypassed so rows with empty
 		// modality / domain / type lists stay visible (`[].some(...)` is false).
@@ -216,7 +208,7 @@
 		const fullTypeOff = fullTypeFilter.size === FULL_TYPES_PRESENT.length;
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
-		const list = ALL_TASKS.filter((t) => {
+		return ALL_TASKS.filter((t) => {
 			if (q && !t.name.toLowerCase().includes(q)) return false;
 			if (!typeOff && typeFilter.size > 0 && !typeFilter.has(t.simplifiedType)) return false;
 			if (!fullTypeOff && fullTypeFilter.size > 0 && !fullTypeFilter.has(t.type)) return false;
@@ -234,6 +226,9 @@
 				return false;
 			return true;
 		});
+	});
+	let filtered = $derived.by(() => {
+		const list = [...matched];
 		// Comparator computes ascending cmp; sortDir flips at the end. Name
 		// tie-break stays stable so equal rows don't reshuffle on direction toggle.
 		list.sort((a, b) => {
@@ -287,16 +282,12 @@
 		kickoffTimer = setTimeout(() => {
 			kickoffTimer = null;
 			if (myVersion !== growVersion) return;
-			const idle = (cb: () => void): number =>
-				'requestIdleCallback' in window
-					? window.requestIdleCallback(cb, { timeout: 500 })
-					: (setTimeout(cb, 0) as unknown as number);
 			const grow = () => {
 				if (myVersion !== growVersion) return;
 				visibleCount = Math.min(visibleCount + CHUNK_STEP, total);
-				if (visibleCount < total) idle(grow);
+				if (visibleCount < total) safeIdle(grow);
 			};
-			idle(grow);
+			safeIdle(grow);
 		}, 80);
 	});
 	let visibleTasks = $derived(filtered.slice(0, visibleCount));
@@ -483,7 +474,7 @@
 						placeholder="Search task types…"
 						bind:value={fullTypeQuery}
 					/>
-					<div class="pills scroll">
+					<div class="pills scroll scroll-thin">
 						{#each visibleFullTypes as t (t)}
 							<label class="pill type-fill" data-type={t}>
 								<input
@@ -513,7 +504,7 @@
 						placeholder="Search domains…"
 						bind:value={domainQuery}
 					/>
-					<div class="pills scroll">
+					<div class="pills scroll scroll-thin">
 						{#each visibleDomains as d (d)}
 							<label class="pill type-fill">
 								<input

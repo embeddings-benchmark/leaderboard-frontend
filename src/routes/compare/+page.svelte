@@ -1,13 +1,12 @@
 <script lang="ts">
-	import { SvelteMap } from 'svelte/reactivity';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { loadBenchmarkMenu, loadModelScores, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { Data, Layout } from 'plotly.js';
-	import type { Benchmark, BenchmarkSummary, MenuEntry, SummaryRow } from '$lib/types';
-	import { isBenchmark } from '$lib/types';
+	import type { Benchmark, BenchmarkSummary, SummaryRow } from '$lib/types';
+	import { flattenMenu } from '$lib/types';
 	import { humanizeType } from '$lib/format';
 	import { updateUrl } from '$lib/url-state';
 	import { untrack } from 'svelte';
@@ -56,19 +55,16 @@
 	// Local derived lookup, not held in $state — plain Map is correct.
 
 	let benchIndex = $derived(new Map(ALL_BENCHMARKS.map((b) => [b.name, b])));
-	const summaryCache = new SvelteMap<string, BenchmarkSummary>();
+	// Plain Map + a version counter — cheaper than SvelteMap's per-key
+	// proxy. Consumers bump `summaryCacheVersion` on insert to invalidate
+	// the `benchSummaries` derived.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const summaryCache = new Map<string, BenchmarkSummary>();
+	let summaryCacheVersion = $state(0);
 
 	$effect(() => {
 		loadBenchmarkMenu().then((menu) => {
-			const out: Benchmark[] = [];
-			const walk = (m: MenuEntry) => {
-				for (const c of m.children) {
-					if (isBenchmark(c)) out.push(c);
-					else walk(c);
-				}
-			};
-			menu.forEach(walk);
-			ALL_BENCHMARKS = out;
+			ALL_BENCHMARKS = flattenMenu(menu);
 		});
 	});
 
@@ -122,16 +118,19 @@
 			for (const name of missing) {
 				loadSummary(name).then((s) => {
 					summaryCache.set(name, s);
+					summaryCacheVersion++;
 				});
 			}
 		});
 	});
 
-	let benchSummaries = $derived<BenchmarkSummary[]>(
-		pickedBenchmarks
+	let benchSummaries = $derived.by<BenchmarkSummary[]>(() => {
+		// Touch the version so the derived re-runs when new summaries land.
+		void summaryCacheVersion;
+		return pickedBenchmarks
 			.map((name) => summaryCache.get(name))
-			.filter((s): s is BenchmarkSummary => s !== undefined)
-	);
+			.filter((s): s is BenchmarkSummary => s !== undefined);
+	});
 	let primarySummary = $derived<BenchmarkSummary | null>(benchSummaries[0] ?? null);
 
 	// Pre-seed picks with the top two models from the primary benchmark once
@@ -160,22 +159,38 @@
 		});
 	});
 
-	let pickedRows = $derived.by(() => {
-		if (!primarySummary) return [];
-		return picked
-			.map((name) => primarySummary!.rows.find((r) => r.model.name === name))
-			.filter((r): r is SummaryRow => r !== undefined);
-	});
-
 	// Per-benchmark lookup: rows by model name for each picked benchmark.
+	// Built first so `pickedRows` can reuse the primary's byModel map.
+	// byModel cached by summary identity so reordering picks or revisiting
+	// the same benchmark doesn't rebuild the Map.
 	type BenchView = { name: string; summary: BenchmarkSummary; byModel: Map<string, SummaryRow> };
+	const _byModelCache = new WeakMap<BenchmarkSummary, Map<string, SummaryRow>>();
+	function byModelFor(s: BenchmarkSummary): Map<string, SummaryRow> {
+		let m = _byModelCache.get(s);
+		if (!m) {
+			m = new Map(s.rows.map((r) => [r.model.name, r]));
+			_byModelCache.set(s, m);
+		}
+		return m;
+	}
 	let benchViews = $derived<BenchView[]>(
 		benchSummaries.map((s) => ({
 			name: s.benchmarkName,
 			summary: s,
-			byModel: new Map(s.rows.map((r) => [r.model.name, r]))
+			byModel: byModelFor(s)
 		}))
 	);
+
+	let pickedRows = $derived.by(() => {
+		const primary = benchViews[0];
+		if (!primary) return [];
+		const out: SummaryRow[] = [];
+		for (const name of picked) {
+			const row = primary.byModel.get(name);
+			if (row) out.push(row);
+		}
+		return out;
+	});
 
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
@@ -295,17 +310,23 @@
 		scores: (number | undefined)[];
 	};
 	let taskScores = $derived.by<TaskScoreView[]>(() => {
+		// Per-summary indexes built once: task-name Set for membership +
+		// tasksMeta-by-name Map so we don't `.find` inside the picked loop.
+		const indexes = benchViews.map((bv) => ({
+			tasksSet: new Set(bv.summary.tasks ?? []),
+			metaByName: new Map(bv.summary.tasksMeta.map((m) => [m.name, m]))
+		}));
 		return pickedTasks
 			.map((tn) => {
-				for (const s of benchSummaries) {
-					if (!(s.tasks ?? []).includes(tn)) continue;
-					const meta = s.tasksMeta.find((m) => m.name === tn);
-					const byModel = new Map(s.rows.map((r) => [r.model.name, r]));
+				for (let i = 0; i < benchViews.length; i++) {
+					if (!indexes[i].tasksSet.has(tn)) continue;
+					const bv = benchViews[i];
+					const meta = indexes[i].metaByName.get(tn);
 					return {
 						name: tn,
 						type: meta?.type ?? '',
-						benchmark: s.benchmarkName,
-						scores: pickedRows.map((p) => byModel.get(p.model.name)?.scoresByTask[tn])
+						benchmark: bv.name,
+						scores: pickedRows.map((p) => bv.byModel.get(p.model.name)?.scoresByTask[tn])
 					};
 				}
 				return null;
@@ -318,13 +339,14 @@
 	// provides it for that model.
 	type TypeScoreView = { type: string; scores: (number | undefined)[] };
 	let typeScores = $derived.by<TypeScoreView[]>(() => {
+		// Reuse `benchViews.byModel`; type membership Set built once per summary.
+		const typesSets = benchViews.map((bv) => new Set(bv.summary.taskTypes));
 		return unionTaskTypes.map((tt) => {
 			const scores = pickedRows.map((p) => {
 				const vals: number[] = [];
-				for (const s of benchSummaries) {
-					if (!s.taskTypes.includes(tt)) continue;
-					const row = s.rows.find((r) => r.model.name === p.model.name);
-					const v = row?.scoresByTaskType[tt];
+				for (let i = 0; i < benchViews.length; i++) {
+					if (!typesSets[i].has(tt)) continue;
+					const v = benchViews[i].byModel.get(p.model.name)?.scoresByTaskType[tt];
 					if (v !== undefined) vals.push(v);
 				}
 				if (vals.length === 0) return undefined;

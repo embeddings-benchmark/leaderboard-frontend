@@ -17,6 +17,14 @@
 
 	type Choice = 'light' | 'system' | 'dark';
 
+	// Module-stable options list so the `{#each}` doesn't re-allocate it
+	// per reactive read.
+	const OPTS: ReadonlyArray<{ k: Choice; title: string; label: string }> = [
+		{ k: 'light', title: 'Light theme', label: 'Light' },
+		{ k: 'system', title: 'Follow system theme', label: 'System' },
+		{ k: 'dark', title: 'Dark theme', label: 'Dark' }
+	];
+
 	let choice = $state<Choice>('system');
 
 	onMount(() => {
@@ -56,88 +64,48 @@
 </script>
 
 <div class="theme-toggle" role="radiogroup" aria-label="Color theme">
-	<button
-		type="button"
-		class="seg"
-		class:on={choice === 'light'}
-		role="radio"
-		aria-checked={choice === 'light'}
-		title="Light theme"
-		onclick={() => apply('light')}
-	>
-		<svg
-			viewBox="0 0 24 24"
-			width="14"
-			height="14"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="1.8"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
+	{#each OPTS as opt (opt.k)}
+		<button
+			type="button"
+			class="seg"
+			class:on={choice === opt.k}
+			role="radio"
+			aria-checked={choice === opt.k}
+			title={opt.title}
+			onclick={() => apply(opt.k)}
 		>
-			<circle cx="12" cy="12" r="4" />
-			<path d="M12 2v2" />
-			<path d="M12 20v2" />
-			<path d="m4.93 4.93 1.41 1.41" />
-			<path d="m17.66 17.66 1.41 1.41" />
-			<path d="M2 12h2" />
-			<path d="M20 12h2" />
-			<path d="m4.93 19.07 1.41-1.41" />
-			<path d="m17.66 6.34 1.41-1.41" />
-		</svg>
-		<span class="sr-only">Light</span>
-	</button>
-	<button
-		type="button"
-		class="seg"
-		class:on={choice === 'system'}
-		role="radio"
-		aria-checked={choice === 'system'}
-		title="Follow system theme"
-		onclick={() => apply('system')}
-	>
-		<svg
-			viewBox="0 0 24 24"
-			width="14"
-			height="14"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="1.8"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<rect x="2" y="3" width="20" height="14" rx="2" />
-			<path d="M8 21h8" />
-			<path d="M12 17v4" />
-		</svg>
-		<span class="sr-only">System</span>
-	</button>
-	<button
-		type="button"
-		class="seg"
-		class:on={choice === 'dark'}
-		role="radio"
-		aria-checked={choice === 'dark'}
-		title="Dark theme"
-		onclick={() => apply('dark')}
-	>
-		<svg
-			viewBox="0 0 24 24"
-			width="14"
-			height="14"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="1.8"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-		</svg>
-		<span class="sr-only">Dark</span>
-	</button>
+			<svg
+				viewBox="0 0 24 24"
+				width="14"
+				height="14"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				{#if opt.k === 'light'}
+					<circle cx="12" cy="12" r="4" />
+					<path d="M12 2v2" />
+					<path d="M12 20v2" />
+					<path d="m4.93 4.93 1.41 1.41" />
+					<path d="m17.66 17.66 1.41 1.41" />
+					<path d="M2 12h2" />
+					<path d="M20 12h2" />
+					<path d="m4.93 19.07 1.41-1.41" />
+					<path d="m17.66 6.34 1.41-1.41" />
+				{:else if opt.k === 'system'}
+					<rect x="2" y="3" width="20" height="14" rx="2" />
+					<path d="M8 21h8" />
+					<path d="M12 17v4" />
+				{:else}
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+				{/if}
+			</svg>
+			<span class="sr-only">{opt.label}</span>
+		</button>
+	{/each}
 </div>
 
 <style>
@@ -160,9 +128,6 @@
 		color: var(--text-subtle);
 		border-radius: 999px;
 		cursor: pointer;
-		transition:
-			color 0.16s ease,
-			background 0.16s ease;
 	}
 	.seg:hover {
 		color: var(--ink-strong);

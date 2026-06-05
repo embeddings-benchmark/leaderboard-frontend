@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { loadBenchmarkMenu } from '$lib/data/service';
-	import { isBenchmark, type Benchmark, type MenuEntry } from '$lib/types';
+	import { flattenMenu, type Benchmark, type MenuEntry } from '$lib/types';
 	import { env } from '$env/dynamic/public';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
@@ -63,13 +63,7 @@
 
 	function fillFromMenu(entries: MenuEntry[]) {
 		menuNames.clear();
-		const walk = (m: MenuEntry) => {
-			for (const c of m.children) {
-				if (isBenchmark(c)) menuNames.add(c.name);
-				else walk(c);
-			}
-		};
-		entries.forEach(walk);
+		for (const b of flattenMenu(entries)) menuNames.add(b.name);
 	}
 
 	async function loadAll(): Promise<Benchmark[]> {
@@ -136,9 +130,22 @@
 			.then(([list, menu]) => {
 				allBenchmarks = list.sort((a, b) => a.displayName.localeCompare(b.displayName));
 				fillFromMenu(menu);
-				MODALITIES = Array.from(new Set(list.flatMap((b) => b.modalities ?? []))).sort();
-				TASK_TYPES = Array.from(new Set(list.flatMap((b) => b.taskTypes ?? []))).sort();
-				DOMAINS = Array.from(new Set(list.flatMap((b) => b.domains ?? []))).sort();
+				// Single pass over the catalog to fill all 3 facet sets, instead of
+				// three separate flatMap+Set traversals. Plain Set is correct
+				// here — used as a local accumulator, never read reactively.
+				/* eslint-disable svelte/prefer-svelte-reactivity */
+				const mods = new Set<string>();
+				const types = new Set<string>();
+				const doms = new Set<string>();
+				/* eslint-enable svelte/prefer-svelte-reactivity */
+				for (const b of list) {
+					if (b.modalities) for (const m of b.modalities) mods.add(m);
+					if (b.taskTypes) for (const t of b.taskTypes) types.add(t);
+					if (b.domains) for (const d of b.domains) doms.add(d);
+				}
+				MODALITIES = [...mods].sort();
+				TASK_TYPES = [...types].sort();
+				DOMAINS = [...doms].sort();
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of TASK_TYPES) taskTypeFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
@@ -189,8 +196,16 @@
 			if (c === 0) c = a.displayName.localeCompare(b.displayName);
 			return dir * c;
 		};
-		const featured = allBenchmarks.filter((b) => menuNames.has(b.name) && matches(b)).sort(cmp);
-		const other = allBenchmarks.filter((b) => !menuNames.has(b.name) && matches(b)).sort(cmp);
+		// Single pass: partition into featured / other while filtering.
+		const featured: Benchmark[] = [];
+		const other: Benchmark[] = [];
+		for (const b of allBenchmarks) {
+			if (!matches(b)) continue;
+			if (menuNames.has(b.name)) featured.push(b);
+			else other.push(b);
+		}
+		featured.sort(cmp);
+		other.sort(cmp);
 		return [...featured, ...other];
 	});
 </script>
@@ -325,7 +340,7 @@
 						placeholder="Search task types…"
 						bind:value={taskTypeQuery}
 					/>
-					<div class="pills scroll">
+					<div class="pills scroll scroll-thin">
 						{#each visibleTaskTypes as t (t)}
 							<label class="pill type-fill" data-type={t}>
 								<input
@@ -355,7 +370,7 @@
 						placeholder="Search domains…"
 						bind:value={domainQuery}
 					/>
-					<div class="pills scroll">
+					<div class="pills scroll scroll-thin">
 						{#each visibleDomains as d (d)}
 							<label class="pill type-fill">
 								<input

@@ -81,6 +81,28 @@ export function isBenchmark(item: MenuEntry | Benchmark): item is Benchmark {
 	return 'displayName' in item;
 }
 
+/**
+ * Flatten the nested menu tree to its leaf benchmarks, preserving menu order.
+ * Cached by root array identity — the menu is fetched once and held in
+ * `responseCache`, so subsequent walks (compare, /tasks, /benchmarks,
+ * /tasks/[name]) share one traversal instead of re-walking per page.
+ */
+const _flattenCache = new WeakMap<readonly MenuEntry[], Benchmark[]>();
+export function flattenMenu(entries: readonly MenuEntry[]): Benchmark[] {
+	const cached = _flattenCache.get(entries);
+	if (cached) return cached;
+	const out: Benchmark[] = [];
+	const walk = (m: MenuEntry) => {
+		for (const c of m.children) {
+			if (isBenchmark(c)) out.push(c);
+			else walk(c);
+		}
+	};
+	for (const m of entries) walk(m);
+	_flattenCache.set(entries, out);
+	return out;
+}
+
 export type ModelType = 'dense' | 'cross-encoder' | 'late-interaction' | 'sparse' | 'router';
 
 export interface ModelMeta {
@@ -130,6 +152,9 @@ export interface SummaryRow {
 	meanPublic?: number | null;
 	meanPrivate?: number | null;
 	scoresByTaskType: Record<string, number>;
+	// Flat per-task mean (averaged across subsets / languages). Drives
+	// every existing per-task UI; the language filter overrides via
+	// the lazy /per-task endpoint when it lands.
 	scoresByTask: Record<string, number>;
 	// Tasks (within this benchmark) the model declares in its training
 	// datasets — used by PerTaskTab to surface a ⚠️ next to scores that

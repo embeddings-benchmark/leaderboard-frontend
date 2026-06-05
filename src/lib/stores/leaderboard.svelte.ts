@@ -1,5 +1,6 @@
 import type { Benchmark, BenchmarkSummary } from '$lib/types';
-import { DEFAULT_BENCHMARK_NAME, loadBenchmark, loadSummary } from '$lib/data/service';
+import { loadBenchmark, loadSummary } from '$lib/data/service';
+import { DEFAULT_BENCHMARK_NAME } from '$lib/data/defaults';
 
 interface LeaderboardState {
 	selected: string;

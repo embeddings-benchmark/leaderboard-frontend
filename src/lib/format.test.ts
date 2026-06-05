@@ -147,22 +147,20 @@ describe('hasValue', () => {
 });
 
 describe('heat', () => {
-	it('cell at the column max hits ~55% tint', () => {
-		const style = heat(0.8, 0.5, 0.8);
-		expect(style).toMatch(/55%/);
-		expect(style).toContain('var(--heat)');
+	it('cell at the column max hits the heat-55 class', () => {
+		expect(heat(0.8, 0.5, 0.8)).toBe('heat-55');
 	});
 
 	it('cell at the column min renders un-tinted', () => {
 		expect(heat(0.5, 0.5, 0.8)).toBe('');
 	});
 
-	it('halfway between min and max → ~28% tint', () => {
+	it('halfway between min and max → heat-28', () => {
 		// (0.65 - 0.5) / (0.8 - 0.5) = 0.5 → 0.5 * 55 = 27.5 → 28
-		expect(heat(0.65, 0.5, 0.8)).toMatch(/28%/);
+		expect(heat(0.65, 0.5, 0.8)).toBe('heat-28');
 	});
 
-	it('null score, non-finite bounds, or degenerate range ⇒ no style', () => {
+	it('null score, non-finite bounds, or degenerate range ⇒ empty', () => {
 		expect(heat(null, 0.5, 0.8)).toBe('');
 		expect(heat(undefined, 0.5, 0.8)).toBe('');
 		expect(heat(0.7, 0.8, 0.8)).toBe(''); // min == max
@@ -171,11 +169,11 @@ describe('heat', () => {
 		expect(heat(0.7, 0.5, NaN)).toBe('');
 	});
 
-	it('clamps scores above the column max to the 55% ceiling', () => {
-		expect(heat(2, 0, 1)).toMatch(/55%/);
+	it('clamps scores above the column max to heat-55', () => {
+		expect(heat(2, 0, 1)).toBe('heat-55');
 	});
 
-	it('clamps scores below the column min to no tint', () => {
+	it('clamps scores below the column min to empty', () => {
 		expect(heat(-1, 0, 1)).toBe('');
 	});
 });

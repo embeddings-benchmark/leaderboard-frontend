@@ -10,33 +10,12 @@
 		<meta name="color-scheme" content="light dark" />
 		<!-- Open the TLS handshake to the mteb FastAPI host (Hugging Face Space) in
 		     parallel with the HTML parse — every page makes at least one fetch
-		     against it, so the first request lands ~150 ms faster on cold hits. -->
+		     against it, so the first request lands ~150 ms faster on cold hits.
+		     `preconnect` already implies DNS resolution, so a separate
+		     `dns-prefetch` would be redundant. -->
 		<link rel="preconnect" href="https://mteb-leaderboardv2-api.hf.space" crossorigin />
-		<link rel="dns-prefetch" href="https://mteb-leaderboardv2-api.hf.space" />
-		<!-- Speculation Rules: prefetch the top-nav routes once the user shows
-		     intent (moderate eagerness = ~200 ms hover). Pairs with the
-		     `data-sveltekit-preload-data="hover"` on <body> which warms the
-		     SvelteKit route module + load functions. Together: same-origin
-		     code is ready, and the page's API responses land in the service
-		     cache (cachedHttp) on first activation. -->
-		<script type="speculationrules">
-			{
-				"prefetch": [
-					{
-						"where": {
-							"or": [
-								{ "href_matches": "/" },
-								{ "href_matches": "/benchmarks" },
-								{ "href_matches": "/models" },
-								{ "href_matches": "/tasks" },
-								{ "href_matches": "/compare" }
-							]
-						},
-						"eagerness": "moderate"
-					}
-				]
-			}
-		</script>
+		<!-- Theme pin runs first so it lands before any layout / speculation
+		     work — keeps the no-flash invariant tight on slow CPUs. -->
 		<script>
 			{
 				try {
@@ -51,9 +30,39 @@
 				}
 			}
 		</script>
+		<!-- Speculation Rules:
+		     - Home + /benchmarks stay `moderate` (~200 ms hover) since those are
+		       the most common destinations from any page.
+		     - /models, /tasks, /compare drop to `conservative` (prefetch on
+		       pointer-down) — users who never visit them save the prefetch
+		       cost, hover-flickers don't accidentally fetch.
+		     Pairs with `data-sveltekit-preload-data="hover"` on <body> for the
+		     SvelteKit route module + load functions. -->
+		<script type="speculationrules">
+			{
+				"prefetch": [
+					{
+						"where": {
+							"or": [{ "href_matches": "/" }, { "href_matches": "/benchmarks" }]
+						},
+						"eagerness": "moderate"
+					},
+					{
+						"where": {
+							"or": [
+								{ "href_matches": "/models" },
+								{ "href_matches": "/tasks" },
+								{ "href_matches": "/compare" }
+							]
+						},
+						"eagerness": "conservative"
+					}
+				]
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
+		%sveltekit.body%
 	</body>
 </html>

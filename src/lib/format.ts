@@ -20,7 +20,7 @@ export function humanizeType(s: string): string {
 /**
  * Resolve an API-relative URL (one starting with "/") against PUBLIC_API_URL.
  * Absolute URLs and empty/null inputs pass through unchanged. Used so the
- * backend can serve cache-friendly proxy paths (e.g. /icon/<name>) without
+ * backend can serve cache-friendly proxy paths (e.g. /v1/icon/<name>) without
  * the frontend having to know the API origin at every consumer.
  */
 export function apiUrl(path: string | null | undefined): string | undefined {
@@ -32,7 +32,7 @@ export function apiUrl(path: string | null | undefined): string | undefined {
 }
 
 /**
- * A benchmark icon may be a URL (flag SVG, hosted PNG, our /icon proxy path)
+ * A benchmark icon may be a URL (flag SVG, hosted PNG, our /v1/icon proxy path)
  * or short text/emoji ("🌍"). URLs get rendered as <img>; everything else
  * is rendered as text in the consumer's UI.
  */
@@ -128,26 +128,25 @@ export function hasValue(s: string): boolean {
 }
 
 /**
- * Heat-shading background for a score cell, normalised against the
- * column's own [min, max] range. The strongest cell in a column gets
- * ~55 % primary tint; the weakest gets 0 %. Mapping from min instead
- * of an absolute zero amplifies the difference inside columns where
- * every score clusters tightly (e.g. all between 0.70 and 0.78) —
- * before this change those columns rendered as one near-uniform
- * shade. Pass both bounds; ``null``/``undefined`` score, a non-finite
- * bound, or a degenerate range (max ≤ min, e.g. one row in the
- * column) all yield an empty string (no inline style).
+ * Zero-shot percentage label. ``-1`` is the "unknown" sentinel from the API
+ * — rendered as a warning marker so the user knows the value is missing
+ * rather than zero. Shared across SummaryTable, BenchScoreTable, ModelHoverPortal.
  */
-// Pre-cached background strings. ~1500 cells per SummaryTable render share
-// 56 distinct percentages, so a lookup beats a fresh template literal +
-// `color-mix()` resolution per cell. Inline `background-color` keeps
-// specificity above the `:nth-child(even)` row-stripe rule the way a
-// per-cell inline style always has.
-const HEAT_STYLE_CACHE: string[] = Array.from(
-	{ length: 56 },
-	(_, i) => `background-color: color-mix(in srgb, var(--heat) ${i}%, transparent);`
-);
+export function fmtZeroShot(pct: number): string {
+	if (pct === -1) return '⚠️ NA';
+	return `${pct.toFixed(0)}%`;
+}
 
+/**
+ * Heat-shading class for a score cell, normalised against the column's own
+ * [min, max] range. The strongest cell in a column gets ~55 % primary tint;
+ * the weakest gets 0 %. Returns ``heat-N`` (matching the static rules in
+ * ``app.css``) or ``''`` for null / out-of-range inputs.
+ *
+ * Was previously an inline ``style="background-color: …"`` string per cell —
+ * static classes let the browser's style cache dedupe, where unique inline
+ * styles per cell couldn't be shared at scale.
+ */
 export function heat(score: number | null | undefined, min: number, max: number): string {
 	if (score == null) return '';
 	if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
@@ -155,7 +154,7 @@ export function heat(score: number | null | undefined, min: number, max: number)
 	const ratio = Math.max(0, Math.min(1, (score - min) / (max - min)));
 	const pct = Math.round(ratio * 55);
 	if (pct === 0) return '';
-	return HEAT_STYLE_CACHE[pct];
+	return `heat-${pct}`;
 }
 
 /**
@@ -175,8 +174,14 @@ export function defaultDirFor<K extends string>(key: K, ascKeys: readonly K[]): 
  * non-positive max).
  */
 export function maxOf(vs: readonly (number | null | undefined)[]): number {
-	const nums = vs.filter((v): v is number => typeof v === 'number');
-	return nums.length === 0 ? 0 : Math.max(...nums);
+	let max = -Infinity;
+	let seen = false;
+	for (const v of vs) {
+		if (typeof v !== 'number') continue;
+		if (v > max) max = v;
+		seen = true;
+	}
+	return seen ? max : 0;
 }
 
 /**
@@ -186,8 +191,14 @@ export function maxOf(vs: readonly (number | null | undefined)[]): number {
  * as un-tinted cells.
  */
 export function minOf(vs: readonly (number | null | undefined)[]): number {
-	const nums = vs.filter((v): v is number => typeof v === 'number');
-	return nums.length === 0 ? 0 : Math.min(...nums);
+	let min = Infinity;
+	let seen = false;
+	for (const v of vs) {
+		if (typeof v !== 'number') continue;
+		if (v < min) min = v;
+		seen = true;
+	}
+	return seen ? min : 0;
 }
 
 /**
@@ -234,6 +245,33 @@ export function worstPerColumn<R, K extends string>(
 		worst[k] = min;
 	}
 	return worst;
+}
+
+/**
+ * Single-pass version of ``bestPerColumn`` + ``worstPerColumn``. Tables
+ * always need both bounds (the best cell for the bold-highlight, both
+ * bounds for the heat ramp), so combining halves the row × column work.
+ */
+export function bestWorstPerColumn<R, K extends string>(
+	keys: readonly K[],
+	rows: readonly R[],
+	getValue: (row: R, key: K) => number | undefined
+): { best: Record<string, number>; worst: Record<string, number> } {
+	const best: Record<string, number> = {};
+	const worst: Record<string, number> = {};
+	for (const k of keys) {
+		let mn = Infinity;
+		let mx = -Infinity;
+		for (const r of rows) {
+			const v = getValue(r, k);
+			if (v === undefined) continue;
+			if (v < mn) mn = v;
+			if (v > mx) mx = v;
+		}
+		best[k] = mx;
+		worst[k] = mn;
+	}
+	return { best, worst };
 }
 
 /**

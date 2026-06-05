@@ -158,31 +158,29 @@
 </div>
 
 <style>
+	/* Reusable noise-grain mask as a CSS var so the three .shell rules below
+	   share the same `url(...)`. The browser caches each unique data: URI
+	   once, but inlining the same string three times forces a re-parse on
+	   every layout build. */
+	:root {
+		--grain-dark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.025 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+		--grain-light: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.025 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+	}
 	.shell {
 		display: flex;
 		flex-direction: column;
 		min-height: 100vh;
 		/* Light-mode: a barely-there dark-noise grain over the cool
-		   off-white --bg. The previous warm peach gradient pulled the
-		   page into amber territory, which fought the blue accent now
-		   that the theme has pivoted away from coral. Dark mode keeps
-		   its own light-on-dark grain via the override below. */
-		background:
-			url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.025 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
-			var(--bg);
+		   off-white --bg. Dark mode swaps the grain mask below. */
+		background: var(--grain-dark), var(--bg);
 	}
-	/* Dark variant: drop the warm gradient and use a lighter grain mask. */
 	@media (prefers-color-scheme: dark) {
 		:root:not([data-theme='light']) .shell {
-			background:
-				url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.025 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
-				var(--bg);
+			background: var(--grain-light), var(--bg);
 		}
 	}
 	:root[data-theme='dark'] .shell {
-		background:
-			url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.025 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
-			var(--bg);
+		background: var(--grain-light), var(--bg);
 	}
 	.bar {
 		position: sticky;
@@ -196,8 +194,6 @@
 		gap: 16px;
 		padding: 10px 28px;
 		background: var(--bar-bg);
-		backdrop-filter: blur(14px) saturate(140%);
-		-webkit-backdrop-filter: blur(14px) saturate(140%);
 		border-bottom: 1px solid var(--border);
 	}
 	.subnav {

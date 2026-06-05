@@ -29,6 +29,7 @@
  */
 
 import type { Action } from 'svelte/action';
+import { onWindowResize, onWindowScroll } from './sticky-events';
 
 /**
  * Resolve the current sticky-bar offset (px). The header is `position: sticky;
@@ -54,6 +55,9 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	const overlay = document.createElement('div');
 	overlay.setAttribute('aria-hidden', 'true');
 	overlay.className = 'sticky-head-overlay';
+	// `will-change: transform` is set/cleared by `update()` only while the
+	// overlay is visible so the browser doesn't promote a layer that's
+	// `display: none` 90% of the page lifetime.
 	overlay.style.cssText = `
 		position: fixed;
 		top: ${stickyTopPx()}px;
@@ -61,7 +65,6 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		overflow: hidden;
 		pointer-events: none;
 		display: none;
-		will-change: transform;
 		contain: layout style paint;
 	`;
 
@@ -110,16 +113,20 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	}
 
 	function syncWidths() {
-		cloneTable.style.width = `${table.offsetWidth}px`;
 		const realThs = Array.from(realThead.querySelectorAll<HTMLTableCellElement>('th'));
 		const cloneThs = Array.from(cloneThead.querySelectorAll<HTMLTableCellElement>('th'));
-		for (let i = 0; i < realThs.length; i++) {
+		// Read all layout values first, then write — interleaving `offsetWidth`
+		// reads with `style.width` writes forces a synchronous reflow per
+		// column. On a ~150-col PerTask table that was the dominant resize
+		// cost on mobile Firefox (the file's original comment flagged it).
+		const tableW = table.offsetWidth;
+		const widths = realThs.map((th) => th.offsetWidth);
+		cloneTable.style.width = `${tableW}px`;
+		for (let i = 0; i < widths.length; i++) {
 			const cloneTh = cloneThs[i];
 			if (!cloneTh) continue;
-			const w = realThs[i].offsetWidth;
-			cloneTh.style.width = `${w}px`;
-			cloneTh.style.minWidth = `${w}px`;
-			cloneTh.style.maxWidth = `${w}px`;
+			const w = widths[i];
+			cloneTh.style.cssText = `width:${w}px;min-width:${w}px;max-width:${w}px`;
 		}
 	}
 
@@ -171,6 +178,7 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		if (pane && !pane.classList.contains('active')) {
 			if (overlayDisplayed) {
 				overlay.style.display = 'none';
+				overlay.style.willChange = '';
 				overlayDisplayed = false;
 			}
 			return;
@@ -188,6 +196,7 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		if (!shouldShow) {
 			if (overlayDisplayed) {
 				overlay.style.display = 'none';
+				overlay.style.willChange = '';
 				overlayDisplayed = false;
 			}
 			return;
@@ -215,6 +224,7 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		}
 		if (!overlayDisplayed) {
 			overlay.style.display = 'block';
+			overlay.style.willChange = 'transform';
 			overlayDisplayed = true;
 		}
 		inner.scrollLeft = wrapper.scrollLeft;
@@ -224,17 +234,24 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		layoutDirty = true;
 	}
 
-	// Forward clicks on the overlay's sort buttons (or any button-like control)
-	// to the matching real one by DOM-order index, so sorting works without
-	// having to scroll back up.
+	// Cached clone-button → real-button mapping. Invalidated by the same
+	// MutationObserver that watches `realThead` (see `scheduleContent`);
+	// recomputed lazily on the next click rather than per click.
+	let buttonMap: Map<HTMLButtonElement, HTMLButtonElement> | null = null;
+	function rebuildButtonMap(): Map<HTMLButtonElement, HTMLButtonElement> {
+		const map = new Map<HTMLButtonElement, HTMLButtonElement>();
+		const cloneBtns = inner.querySelectorAll('button');
+		const realBtns = realThead.querySelectorAll('button');
+		const n = Math.min(cloneBtns.length, realBtns.length);
+		for (let i = 0; i < n; i++) map.set(cloneBtns[i], realBtns[i]);
+		return map;
+	}
 	function onCloneClick(e: Event) {
 		const target = e.target as HTMLElement;
 		const cloneBtn = target.closest('button');
 		if (!cloneBtn || !inner.contains(cloneBtn)) return;
-		const cloneBtns = Array.from(inner.querySelectorAll('button'));
-		const realBtns = Array.from(realThead.querySelectorAll('button'));
-		const idx = cloneBtns.indexOf(cloneBtn);
-		const real = realBtns[idx];
+		if (!buttonMap) buttonMap = rebuildButtonMap();
+		const real = buttonMap.get(cloneBtn as HTMLButtonElement);
 		if (real) {
 			e.preventDefault();
 			real.click();
@@ -269,6 +286,8 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 			contentRaf = 0;
 			syncContent();
 			markLayoutDirty();
+			// Buttons may have shifted; force a rebuild on the next click.
+			buttonMap = null;
 		});
 	}
 
@@ -295,9 +314,9 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		paneMo.observe(paneAncestor, { attributes: true, attributeFilter: ['class'] });
 	}
 
-	window.addEventListener('scroll', scheduleUpdate, { passive: true });
+	const offScroll = onWindowScroll(scheduleUpdate);
 	wrapper.addEventListener('scroll', scheduleUpdate, { passive: true });
-	window.addEventListener('resize', scheduleResync);
+	const offResize = onWindowResize(scheduleResync);
 	inner.addEventListener('click', onCloneClick);
 
 	syncWidths();
@@ -311,9 +330,9 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 			ro.disconnect();
 			mo.disconnect();
 			paneMo?.disconnect();
-			window.removeEventListener('scroll', scheduleUpdate);
+			offScroll();
 			wrapper.removeEventListener('scroll', scheduleUpdate);
-			window.removeEventListener('resize', scheduleResync);
+			offResize();
 			inner.removeEventListener('click', onCloneClick);
 			overlay.remove();
 		}

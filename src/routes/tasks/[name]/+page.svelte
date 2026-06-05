@@ -12,13 +12,7 @@
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import { slug } from '$lib/format';
-	import {
-		isBenchmark,
-		type Benchmark,
-		type MenuEntry,
-		type TaskMeta,
-		type TaskScores
-	} from '$lib/types';
+	import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
 
 	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
 
@@ -41,15 +35,7 @@
 	$effect(() => {
 		(async () => {
 			const menu = await loadBenchmarkMenu();
-			const out: Benchmark[] = [];
-			const walk = (m: MenuEntry) => {
-				for (const c of m.children) {
-					if (isBenchmark(c)) out.push(c);
-					else walk(c);
-				}
-			};
-			menu.forEach(walk);
-			allBenchmarks = out;
+			allBenchmarks = flattenMenu(menu);
 		})();
 	});
 
@@ -94,11 +80,19 @@
 
 	// Hosting benchmarks come from the menu (cheap) — we don't need the
 	// scores payload to render the "In benchmarks: …" strip on the card.
+	// Pre-index task membership so we don't re-scan every benchmark's tasks
+	// array (~100 benchmarks × ~100 tasks worth of compares on every nav).
+	let benchTasksSets = $derived(allBenchmarks.map((b) => new Set(b.tasks)));
 	let benchmarks = $derived.by(() => {
 		if (!taskName || allBenchmarks.length === 0) return [];
-		return allBenchmarks
-			.filter((b) => b.tasks.includes(taskName))
-			.map((b) => ({ name: b.name, display: b.displayName }));
+		const out: { name: string; display: string }[] = [];
+		for (let i = 0; i < allBenchmarks.length; i++) {
+			if (benchTasksSets[i].has(taskName)) {
+				const b = allBenchmarks[i];
+				out.push({ name: b.name, display: b.displayName });
+			}
+		}
+		return out;
 	});
 
 	let task = $derived.by<TaskWithBenchmark | null>(() => {

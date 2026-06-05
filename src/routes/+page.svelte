@@ -8,7 +8,7 @@
 	import { resolve } from '$app/paths';
 	import { loadBenchmarkMenu, loadLeaders } from '$lib/data/service';
 	import {
-		isBenchmark,
+		flattenMenu,
 		type Benchmark,
 		type BenchmarkLeaders,
 		type LeaderRow,
@@ -47,24 +47,13 @@
 		comingSoon?: boolean;
 	};
 	const MODALITY_TILES: ModalityTileSpec[] = [
-		{ modality: 'image', label: 'General', preferred: 'MIEB(eng)' },
-		{ modality: 'audio', label: 'General', preferred: 'MAEB(beta)' },
-		{ modality: 'video', label: 'General', preferred: 'MVEB(beta)' }
+		{ modality: 'image', label: 'Image', preferred: 'MIEB(eng)' },
+		{ modality: 'audio', label: 'Audio', preferred: 'MAEB(beta)' },
+		{ modality: 'video', label: 'Video', preferred: 'MVEB(beta)' }
 	];
 
-	function flatten(entries: MenuEntry[]): Benchmark[] {
-		const out: Benchmark[] = [];
-		const walk = (e: MenuEntry) => {
-			for (const c of e.children) {
-				if (isBenchmark(c)) out.push(c);
-				else walk(c);
-			}
-		};
-		entries.forEach(walk);
-		return out;
-	}
-	let flat = $derived(flatten(menu));
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	let flat = $derived(flattenMenu(menu));
+	 
 	let byName = $derived(new Map(flat.map((b) => [b.name, b])));
 	function pick(name: string): Benchmark | undefined {
 		return byName.get(name);

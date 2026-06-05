@@ -37,10 +37,12 @@
 	box-shadow: var(--shadow-sm);
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior-x: contain;
-	/* `contain: layout style` isolates the table's layout/style cost from the
-	   rest of the page — a hover or sort-indicator change inside the table
-	   no longer forces the page to recompute its own layout. */
-	contain: layout style;
+	/* `contain: layout style paint` isolates the table's layout/style/paint
+	   cost from the rest of the page — a hover or sort-indicator change
+	   inside the table no longer forces the page to recompute or repaint.
+	   `paint` also clips the row-hover `box-shadow: inset 0 0 0 100vmax …`
+	   to the wrapper so the viewport-sized shadow can't bleed beyond it. */
+	contain: layout style paint;
 }
 
 .tbl {
@@ -83,7 +85,12 @@
 	content-visibility: auto;
 	contain-intrinsic-size: auto 36px;
 }
-.tbl tbody tr:nth-child(even) td {
+/* `:where()` zero-specificity wrap so per-cell `.heat-N` background classes
+   (single-class specificity) still win over the zebra stripe. Without it,
+   the chained selector beats `.heat-N` 0,0,2,3 vs 0,0,1,0 and every even
+   row paints `--row-alt` over its heat shade. Pinned rows below keep their
+   full specificity so they stay visually distinct over heat. */
+:where(.tbl tbody tr:nth-child(even)) td {
 	background: var(--row-alt);
 }
 .tbl tbody tr:hover td {
@@ -301,25 +308,26 @@
 	color: var(--text-subtle);
 	vertical-align: -2px;
 }
-[data-model-type='dense'] .type-icon,
-[data-model-type='dense'] .tbl-model-name {
-	color: var(--tint-blue-fg);
+/* Per-type tint as a single custom property on the host cell — the icon +
+   model name pick it up through one shared paint rule below. */
+[data-model-type='dense'] {
+	--type-tint: var(--tint-blue-fg);
 }
-[data-model-type='cross-encoder'] .type-icon,
-[data-model-type='cross-encoder'] .tbl-model-name {
-	color: var(--tint-orange-fg);
+[data-model-type='cross-encoder'] {
+	--type-tint: var(--tint-orange-fg);
 }
-[data-model-type='late-interaction'] .type-icon,
-[data-model-type='late-interaction'] .tbl-model-name {
-	color: var(--tint-green-fg);
+[data-model-type='late-interaction'] {
+	--type-tint: var(--tint-green-fg);
 }
-[data-model-type='sparse'] .type-icon,
-[data-model-type='sparse'] .tbl-model-name {
-	color: var(--tint-amber-fg);
+[data-model-type='sparse'] {
+	--type-tint: var(--tint-amber-fg);
 }
-[data-model-type='router'] .type-icon,
-[data-model-type='router'] .tbl-model-name {
-	color: var(--tint-purple-fg);
+[data-model-type='router'] {
+	--type-tint: var(--tint-purple-fg);
+}
+[data-model-type] .type-icon,
+[data-model-type] .tbl-model-name {
+	color: var(--type-tint, inherit);
 }
 
 /* Rank pill — shared across SummaryTable and ModelScoreTable so the

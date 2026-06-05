@@ -1,27 +1,7 @@
-<script lang="ts">
-	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
-	import { pinnedModels } from '$lib/stores/pinned.svelte';
-	import {
-		bestPerColumn,
-		fmtParamsUnit,
-		fmtParamsValue,
-		fmtPct,
-		heat,
-		humanizeType,
-		maxOf,
-		minOf,
-		worstPerColumn
-	} from '$lib/format';
-	import { stickyHead } from '$lib/actions/sticky-head';
-	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
-	import { createSortState } from '$lib/stores/sort.svelte';
-	import { isBoundaryCross } from '$lib/cell-hover';
-	import ModelCellName from './ModelCellName.svelte';
-	import PinButton from './PinButton.svelte';
-	import ModelHoverPortal from './ModelHoverPortal.svelte';
-	import HoverPortal from './HoverPortal.svelte';
-	import MarkdownText from './MarkdownText.svelte';
-
+<script lang="ts" module>
+	// Tooltip copy is invariant across instances and benchmarks. Promoted
+	// to a module-scope const so each SummaryTable mount doesn't re-build
+	// the same object literal.
 	const INFO = {
 		rank: {
 			title: 'Rank (Borda)',
@@ -85,6 +65,32 @@
 		Summarization:
 			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.'
 	};
+</script>
+
+<script lang="ts">
+	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
+	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import {
+		bestWorstPerColumn,
+		fmtParamsUnit,
+		fmtParamsValue,
+		fmtPct,
+		fmtZeroShot,
+		heat,
+		humanizeType,
+		maxOf,
+		minOf
+	} from '$lib/format';
+	import { stickyHead } from '$lib/actions/sticky-head';
+	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
+	import { createSortState } from '$lib/stores/sort.svelte';
+	import { safeIdle } from '$lib/idle';
+	import { isBoundaryCross } from '$lib/cell-hover';
+	import ModelCellName from './ModelCellName.svelte';
+	import PinButton from './PinButton.svelte';
+	import ModelHoverPortal from './ModelHoverPortal.svelte';
+	import HoverPortal from './HoverPortal.svelte';
+	import MarkdownText from './MarkdownText.svelte';
 
 	interface Props {
 		summary: BenchmarkSummary;
@@ -129,11 +135,11 @@
 			case 'meanTaskType':
 				return { v: row.meanTaskType ?? 0, missing: row.meanTaskType == null };
 			case 'meanPublic': {
-				const v = liveMeanPublic(row);
+				const v = publicMeansByRow.get(row) ?? null;
 				return { v: v ?? 0, missing: v == null };
 			}
 			case 'meanPrivate': {
-				const v = liveMeanPrivate(row);
+				const v = privateMeansByRow.get(row) ?? null;
 				return { v: v ?? 0, missing: v == null };
 			}
 		}
@@ -150,9 +156,16 @@
 		if (sort.key) {
 			const dir = sort.dir === 'asc' ? 1 : -1;
 			const key = sort.key;
+			// Precompute the comparison value once per row (was once per comparison —
+			// O(N log N) calls to `getValue` collapsed to O(N)). Matters most for
+			// meanPublic/meanPrivate where `getValue` would otherwise re-walk the
+			// publicTaskNames Set inside each comparison.
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity
+			const byRow = new Map<SummaryRow, { v: number | string; missing: boolean }>();
+			for (const r of rows) byRow.set(r, getValue(r, key));
 			rows = [...rows].sort((a, b) => {
-				const va = getValue(a, key);
-				const vb = getValue(b, key);
+				const va = byRow.get(a)!;
+				const vb = byRow.get(b)!;
 				// Always push "missing" values to the bottom regardless of direction.
 				if (va.missing && !vb.missing) return 1;
 				if (!va.missing && vb.missing) return -1;
@@ -161,10 +174,15 @@
 				return ((va.v as number) - (vb.v as number)) * dir;
 			});
 		}
-		// Float pinned rows to the top while preserving their order in the sorted set.
+		// Float pinned rows to the top in a single partition pass.
 		if (pinnedModels.size === 0) return rows;
-		const isPinned = (r: SummaryRow) => pinnedModels.has(r.model.name);
-		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
+		const pinned: SummaryRow[] = [];
+		const unpinned: SummaryRow[] = [];
+		for (const r of rows) {
+			if (pinnedModels.has(r.model.name)) pinned.push(r);
+			else unpinned.push(r);
+		}
+		return [...pinned, ...unpinned];
 	});
 
 	// Progressive row render — Firefox benefits a lot (cold first-paint
@@ -186,56 +204,78 @@
 		if (signature === lastRowSignature) return;
 		lastRowSignature = signature;
 		const myVersion = ++growVersion;
-		visibleRows = Math.min(INITIAL_ROW_CHUNK, total);
-		if (visibleRows >= total) return;
+		// Small tables fit in the first chunk — render everything immediately
+		// and skip the 60ms debounce + idle scheduling overhead.
+		if (total <= INITIAL_ROW_CHUNK) {
+			visibleRows = total;
+			return;
+		}
+		visibleRows = INITIAL_ROW_CHUNK;
 		if (rowKickoffTimer) clearTimeout(rowKickoffTimer);
 		rowKickoffTimer = setTimeout(() => {
 			rowKickoffTimer = null;
 			if (myVersion !== growVersion) return;
-			const idle = (cb: () => void): number =>
-				'requestIdleCallback' in window
-					? window.requestIdleCallback(cb, { timeout: 500 })
-					: (setTimeout(cb, 0) as unknown as number);
 			const grow = () => {
 				if (myVersion !== growVersion) return;
 				visibleRows = Math.min(visibleRows + ROW_CHUNK_STEP, total);
-				if (visibleRows < total) idle(grow);
+				if (visibleRows < total) safeIdle(grow);
 			};
-			idle(grow);
+			safeIdle(grow);
 		}, 60);
 	});
 	let renderedRows = $derived(sortedRows.slice(0, visibleRows));
-
-	function fmtZeroShot(pct: number): string {
-		if (pct === -1) return '⚠️ NA';
-		return `${pct.toFixed(0)}%`;
-	}
 
 	// Display the per-task-type columns A→Z. The API preserves
 	// benchmark-specific order, but readers scan a wide table faster
 	// when columns are alphabetised (and the mean columns to the left
 	// stay anchored). `localeCompare` keeps "STS" before "Summarization"
 	// regardless of locale, etc.
-	let sortedTaskTypes = $derived([...summary.taskTypes].sort((a, b) => a.localeCompare(b)));
-	let best = $derived(
-		bestPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
+	// `summary.taskTypes` is pre-sorted at the service boundary.
+	let sortedTaskTypes = $derived(summary.taskTypes);
+	let typeBests = $derived(
+		bestWorstPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
 	);
-	let worst = $derived(
-		worstPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
-	);
-	let bestMeanTask = $derived(maxOf(summary.rows.map((r) => r.meanTask)));
-	let worstMeanTask = $derived(minOf(summary.rows.map((r) => r.meanTask)));
-	let bestMeanTaskType = $derived(maxOf(summary.rows.map((r) => r.meanTaskType)));
-	let worstMeanTaskType = $derived(minOf(summary.rows.map((r) => r.meanTaskType)));
+	let best = $derived(typeBests.best);
+	let worst = $derived(typeBests.worst);
+	// Walk rows once and produce all the per-column bests/worsts at once.
+	let meanStats = $derived.by(() => {
+		let bTask = -Infinity,
+			wTask = Infinity,
+			bType = -Infinity,
+			wType = Infinity;
+		let sawTask = false,
+			sawType = false;
+		for (const r of summary.rows) {
+			if (typeof r.meanTask === 'number') {
+				if (r.meanTask > bTask) bTask = r.meanTask;
+				if (r.meanTask < wTask) wTask = r.meanTask;
+				sawTask = true;
+			}
+			if (typeof r.meanTaskType === 'number') {
+				if (r.meanTaskType > bType) bType = r.meanTaskType;
+				if (r.meanTaskType < wType) wType = r.meanTaskType;
+				sawType = true;
+			}
+		}
+		return {
+			bestMeanTask: sawTask ? bTask : 0,
+			worstMeanTask: sawTask ? wTask : 0,
+			bestMeanTaskType: sawType ? bType : 0,
+			worstMeanTaskType: sawType ? wType : 0
+		};
+	});
+	let bestMeanTask = $derived(meanStats.bestMeanTask);
+	let worstMeanTask = $derived(meanStats.worstMeanTask);
+	let bestMeanTaskType = $derived(meanStats.bestMeanTaskType);
+	let worstMeanTaskType = $derived(meanStats.worstMeanTaskType);
 	// Column visibility is declarative — `summary.aggregations` lists exactly
 	// which mean columns belong on this benchmark's leaderboard. Avoids
 	// inferring from the score data (which led to ViDoRe showing an empty
 	// Mean (TaskType) column it doesn't actually compute).
-	let aggs = $derived(new Set(summary.aggregations ?? []));
-	let showMeanTask = $derived(aggs.has('mean_task'));
-	let showMeanTaskType = $derived(aggs.has('mean_task_type'));
-	let showTaskTypes = $derived(aggs.has('task_types'));
-	let showPublicPrivate = $derived(aggs.has('public_private'));
+	let showMeanTask = $derived(summary.aggregations?.includes('mean_task') ?? false);
+	let showMeanTaskType = $derived(summary.aggregations?.includes('mean_task_type') ?? false);
+	let showTaskTypes = $derived(summary.aggregations?.includes('task_types') ?? false);
+	let showPublicPrivate = $derived(summary.aggregations?.includes('public_private') ?? false);
 	// Recompute Mean (Public) / Mean (Private) from the model's per-task scores
 	// using the benchmark's `tasksMeta[].isPublic` flag. This way the means
 	// update live when the user filters the task set, instead of staying frozen
@@ -274,14 +314,29 @@
 		if (!showPublicPrivate) return null;
 		return meanOver(row, privateTaskNames);
 	}
-	let bestMeanPublic = $derived(maxOf(summary.rows.map(liveMeanPublic)));
-	let worstMeanPublic = $derived(minOf(summary.rows.map(liveMeanPublic)));
-	let bestMeanPrivate = $derived(maxOf(summary.rows.map(liveMeanPrivate)));
-	let worstMeanPrivate = $derived(minOf(summary.rows.map(liveMeanPrivate)));
-
-	function isBestScore(row: SummaryRow, taskType: string): boolean {
-		return row.scoresByTaskType[taskType] === best[taskType];
-	}
+	// Compute the column arrays once and reuse for both bounds —
+	// `meanOver` is the expensive part (per-row Set iteration).
+	let publicMeans = $derived(summary.rows.map(liveMeanPublic));
+	let privateMeans = $derived(summary.rows.map(liveMeanPrivate));
+	// Per-row index of the same means so the sort comparator and cell
+	// template can look up by row identity instead of re-calling
+	// `meanOver` once per comparison / once per render.
+	let publicMeansByRow = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<SummaryRow, number | null>();
+		summary.rows.forEach((r, i) => m.set(r, publicMeans[i]));
+		return m;
+	});
+	let privateMeansByRow = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<SummaryRow, number | null>();
+		summary.rows.forEach((r, i) => m.set(r, privateMeans[i]));
+		return m;
+	});
+	let bestMeanPublic = $derived(maxOf(publicMeans));
+	let worstMeanPublic = $derived(minOf(publicMeans));
+	let bestMeanPrivate = $derived(maxOf(privateMeans));
+	let worstMeanPrivate = $derived(minOf(privateMeans));
 
 	// Tooltip portal: we render a single tooltip element at the SummaryTable's
 	// root (outside the <table> + .scroll wrapper) and update its position/content
@@ -576,48 +631,44 @@
 						</td>
 						{#if showMeanTask}
 							<td
-								class="tbl-num"
+								class="tbl-num {heat(row.meanTask, worstMeanTask, bestMeanTask)}"
 								class:tbl-best={row.meanTask === bestMeanTask}
-								style={heat(row.meanTask, worstMeanTask, bestMeanTask)}
 							>
 								{fmtPct(row.meanTask)}
 							</td>
 						{/if}
 						{#if showMeanTaskType}
 							<td
-								class="tbl-num"
+								class="tbl-num {heat(row.meanTaskType, worstMeanTaskType, bestMeanTaskType)}"
 								class:tbl-best={row.meanTaskType === bestMeanTaskType}
-								style={heat(row.meanTaskType, worstMeanTaskType, bestMeanTaskType)}
 							>
 								{fmtPct(row.meanTaskType)}
 							</td>
 						{/if}
 						{#if showPublicPrivate}
-							{@const mp = liveMeanPublic(row)}
-							{@const mpr = liveMeanPrivate(row)}
+							{@const mp = publicMeansByRow.get(row) ?? null}
+							{@const mpr = privateMeansByRow.get(row) ?? null}
 							<td
-								class="tbl-num"
+								class="tbl-num {heat(mp, worstMeanPublic, bestMeanPublic)}"
 								class:tbl-best={mp != null && mp === bestMeanPublic}
-								style={heat(mp, worstMeanPublic, bestMeanPublic)}
 							>
 								{fmtPct(mp)}
 							</td>
 							<td
-								class="tbl-num"
+								class="tbl-num {heat(mpr, worstMeanPrivate, bestMeanPrivate)}"
 								class:tbl-best={mpr != null && mpr === bestMeanPrivate}
-								style={heat(mpr, worstMeanPrivate, bestMeanPrivate)}
 							>
 								{fmtPct(mpr)}
 							</td>
 						{/if}
 						{#if showTaskTypes}
 							{#each sortedTaskTypes as tt (tt)}
+								{@const v = row.scoresByTaskType[tt]}
 								<td
-									class="tbl-num"
-									class:tbl-best={isBestScore(row, tt)}
-									style={heat(row.scoresByTaskType[tt], worst[tt], best[tt])}
+									class="tbl-num {heat(v, worst[tt], best[tt])}"
+									class:tbl-best={v !== undefined && v === best[tt]}
 								>
-									{row.scoresByTaskType[tt] !== undefined ? fmtPct(row.scoresByTaskType[tt]) : ''}
+									{v !== undefined ? fmtPct(v) : ''}
 								</td>
 							{/each}
 						{/if}
@@ -688,9 +739,7 @@
 		cursor: pointer;
 		color: var(--text-muted);
 		font-weight: 600;
-		transition:
-			background 0.12s,
-			color 0.12s;
+		transition: color 0.12s;
 	}
 	.sort-btn.tbl-num {
 		justify-content: flex-end;

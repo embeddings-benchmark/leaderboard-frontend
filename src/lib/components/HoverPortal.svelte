@@ -95,24 +95,10 @@
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: var(--primary);
+		/* Per-model-type tint via `--type-tint` (set on `[data-model-type]`
+		   in `leaderboard-table.css`). Falls back to the primary accent
+		   for non-model tooltips (column headers). */
+		color: var(--type-tint, var(--primary));
 		margin-bottom: 4px;
-	}
-	/* Per-model-type tint on the title. Same colour map as the table
-	   cells (see leaderboard-table.css `[data-model-type='…']`). */
-	.hover-portal[data-model-type='dense'] .hover-title {
-		color: var(--tint-blue-fg);
-	}
-	.hover-portal[data-model-type='cross-encoder'] .hover-title {
-		color: var(--tint-orange-fg);
-	}
-	.hover-portal[data-model-type='late-interaction'] .hover-title {
-		color: var(--tint-green-fg);
-	}
-	.hover-portal[data-model-type='sparse'] .hover-title {
-		color: var(--tint-amber-fg);
-	}
-	.hover-portal[data-model-type='router'] .hover-title {
-		color: var(--tint-purple-fg);
 	}
 </style>

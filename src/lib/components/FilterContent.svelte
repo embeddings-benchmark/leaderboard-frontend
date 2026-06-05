@@ -133,7 +133,10 @@
 		label: string;
 		clear: () => void;
 	}
-	let chips = $derived.by(() => {
+	// Split into per-section derived so toggling a model filter doesn't
+	// invalidate the customize chips (and vice versa) — each section only
+	// re-runs when its own inputs change.
+	let modelChips = $derived.by(() => {
 		const list: Chip[] = [];
 		if (filters.nameQuery.trim()) {
 			list.push({
@@ -198,6 +201,10 @@
 				clear: () => filters.setAll('modelModalities', MODEL_MODALITIES, true)
 			});
 		}
+		return list;
+	});
+	let customizeChips = $derived.by(() => {
+		const list: Chip[] = [];
 		const hasTT = filters.availableTaskTypes.length > 0;
 		if (hasTT && filters.taskTypes.size !== filters.availableTaskTypes.length) {
 			list.push({
@@ -245,6 +252,7 @@
 		}
 		return list;
 	});
+	let chips = $derived([...modelChips, ...customizeChips]);
 
 	let activeModelCount = $derived.by(() => {
 		let n = 0;
@@ -288,20 +296,23 @@
 		return n;
 	});
 
-	let filteredLanguages = $derived(
-		langQuery.trim()
-			? filters.availableLanguages.filter((l) =>
-					l.toLowerCase().includes(langQuery.toLowerCase().trim())
-				)
-			: filters.availableLanguages
+	let filteredLanguages = $derived.by(() => {
+		// Lowercase + trim the query ONCE; `.filter` callback then only
+		// lowercases each candidate (was redoing both per language).
+		const q = langQuery.trim().toLowerCase();
+		if (!q) return filters.availableLanguages;
+		return filters.availableLanguages.filter((l) => l.toLowerCase().includes(q));
+	});
+	// Pre-sorted full list — sort is invariant under the search query, so
+	// running it inside the per-keystroke derived was pure waste.
+	let allTaskNamesSorted = $derived(
+		filters.availableTasks.map((t) => t.name).sort((a, b) => a.localeCompare(b))
 	);
-	let filteredTasks = $derived(
-		taskQuery.trim()
-			? filters.availableTasks
-					.map((t) => t.name)
-					.filter((n) => n.toLowerCase().includes(taskQuery.toLowerCase().trim()))
-			: filters.availableTasks.map((t) => t.name)
-	);
+	let filteredTasks = $derived.by(() => {
+		const q = taskQuery.trim().toLowerCase();
+		if (!q) return allTaskNamesSorted;
+		return allTaskNamesSorted.filter((n) => n.toLowerCase().includes(q));
+	});
 
 	function resetAll() {
 		filters.resetCustomize();
@@ -664,7 +675,7 @@
 							placeholder="Search languages…"
 							bind:value={langQuery}
 						/>
-						<div class="pills scroll-y">
+						<div class="pills scroll-y scroll-thin">
 							{#each filteredLanguages as l (l)}
 								<button
 									type="button"
@@ -709,7 +720,7 @@
 							placeholder="Search tasks…"
 							bind:value={taskQuery}
 						/>
-						<div class="pills scroll-y">
+						<div class="pills scroll-y scroll-thin">
 							{#each filteredTasks as name (name)}
 								<button
 									type="button"

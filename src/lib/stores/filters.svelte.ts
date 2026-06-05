@@ -138,11 +138,15 @@ function createFilters() {
 		state.availableLanguages = sortedLanguages;
 		state.availableMinModelSizeM = niceLow;
 		state.availableMaxModelSizeM = niceHigh;
-		state.taskTypes = new SvelteSet(summary.taskTypes);
-		state.domains = new SvelteSet(sortedDomains);
-		state.modalities = new SvelteSet(sortedModalities);
-		state.languages = new SvelteSet(sortedLanguages);
-		state.tasks = new SvelteSet(summary.tasks);
+		// Replace contents in place rather than swapping the SvelteSet reference.
+		// Reassigning the Set forces every chip / FilterContent subscriber to
+		// re-bind from scratch; mutating notifies once per mutation but lets
+		// consumers see the new contents on the same identity.
+		replaceSet(state.taskTypes, summary.taskTypes);
+		replaceSet(state.domains, sortedDomains);
+		replaceSet(state.modalities, sortedModalities);
+		replaceSet(state.languages, sortedLanguages);
+		replaceSet(state.tasks, summary.tasks);
 		// Reset the chosen range to the new bounds so switching benchmarks
 		// doesn't leave the slider stuck at an invisible position.
 		state.minModelSizeM = niceLow;
@@ -182,17 +186,24 @@ function createFilters() {
 			state.zeroShot = zs;
 		if (p.get('st') === '1') state.sentenceTransformersOnly = true;
 		const mt = p.get('mtypes');
-		if (mt !== null) state.modelTypes = new SvelteSet(decodeSet(mt));
+		if (mt !== null) replaceSet(state.modelTypes, decodeSet(mt));
 		const mm = p.get('mmods');
-		if (mm !== null) state.modelModalities = new SvelteSet(decodeSet(mm));
+		if (mm !== null) replaceSet(state.modelModalities, decodeSet(mm));
 		const tt = p.get('tt');
-		if (tt !== null) state.taskTypes = new SvelteSet(decodeSet(tt));
+		if (tt !== null) replaceSet(state.taskTypes, decodeSet(tt));
 		const lang = p.get('lang');
-		if (lang !== null) state.languages = new SvelteSet(decodeSet(lang));
+		if (lang !== null) replaceSet(state.languages, decodeSet(lang));
 		const dom = p.get('dom');
-		if (dom !== null) state.domains = new SvelteSet(decodeSet(dom));
+		if (dom !== null) replaceSet(state.domains, decodeSet(dom));
 		const mods = p.get('mods');
-		if (mods !== null) state.modalities = new SvelteSet(decodeSet(mods));
+		if (mods !== null) replaceSet(state.modalities, decodeSet(mods));
+		const tks = p.get('tks');
+		if (tks !== null) replaceSet(state.tasks, decodeSet(tks));
+	}
+
+	function replaceSet(target: SvelteSet<string>, source: Iterable<string>) {
+		target.clear();
+		for (const v of source) target.add(v);
 	}
 
 	// Writes the current filter state back to the URL. Each set field only
@@ -202,7 +213,20 @@ function createFilters() {
 	// (e.g. `initFor` is invoked from an `$effect`) — without it, the
 	// state-reads below would bind to the outer effect and a single state
 	// change would loop the entire reactive graph.
+	//
+	// `syncTimer` debounces: 13 sites call `sync()` (one per setter), and a
+	// reset / hydrate burst calls 5-7 of them back-to-back. Coalescing to one
+	// `replaceState` per microtask collapses that to a single URL rebuild.
+	let syncScheduled = false;
 	function sync() {
+		if (syncScheduled) return;
+		syncScheduled = true;
+		queueMicrotask(() => {
+			syncScheduled = false;
+			doSync();
+		});
+	}
+	function doSync() {
 		untrack(() =>
 			updateUrl({
 				q: state.nameQuery || null,
@@ -229,7 +253,8 @@ function createFilters() {
 				mods:
 					state.modalities.size === state.availableModalities.length
 						? null
-						: encodeSet(state.modalities)
+						: encodeSet(state.modalities),
+				tks: state.tasks.size === state.availableTasks.length ? null : encodeSet(state.tasks)
 			})
 		);
 	}
@@ -262,17 +287,18 @@ function createFilters() {
 		state.availability = 'both';
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
-		state.modelTypes = new SvelteSet<string>(MODEL_TYPES);
-		state.modelModalities = new SvelteSet<string>(MODEL_MODALITIES);
+		replaceSet(state.modelTypes, MODEL_TYPES);
+		replaceSet(state.modelModalities, MODEL_MODALITIES);
 		sync();
 	}
 
 	function resetCustomize() {
-		state.taskTypes = new SvelteSet(state.availableTaskTypes);
-		state.domains = new SvelteSet(state.availableDomains);
-		state.modalities = new SvelteSet(state.availableModalities);
-		state.languages = new SvelteSet(state.availableLanguages);
-		state.tasks = new SvelteSet(state.availableTasks.map((t) => t.name));
+		replaceSet(state.taskTypes, state.availableTaskTypes);
+		replaceSet(state.domains, state.availableDomains);
+		replaceSet(state.modalities, state.availableModalities);
+		replaceSet(state.languages, state.availableLanguages);
+		state.tasks.clear();
+		for (const t of state.availableTasks) state.tasks.add(t.name);
 		sync();
 	}
 
@@ -417,39 +443,47 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	const fullModalities = isFullSet(filters.modalities, filters.availableModalities);
 	const fullLanguages = isFullSet(filters.languages, filters.availableLanguages);
 	const fullTasks = isFullSet(filters.tasks, summary.tasks);
+	const fullView = fullTypes && fullDomains && fullModalities && fullLanguages && fullTasks;
 
-	const visibleTasks = summary.tasksMeta.filter((t) => {
-		if (!fullTypes && !filters.taskTypes.has(t.type)) return false;
-		if (!fullDomains && !t.domains.some((d) => filters.domains.has(d))) return false;
-		if (!fullModalities && !(t.modalities ?? []).some((m) => filters.modalities.has(m)))
-			return false;
-		if (!fullLanguages && !t.languages.some((l) => filters.languages.has(l))) return false;
-		if (!fullTasks && !filters.tasks.has(t.name)) return false;
-		return true;
-	});
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
-	const visibleTaskNames = new Set(visibleTasks.map((t) => t.name));
-	// `summary.taskTypes` holds the display labels (after backend
-	// `_split_on_capital` + renames like `Any2AnyRetrieval` → `Retrieval`).
-	// `tasksMeta[i].type` is the raw label, so filtering against it
-	// would drop renamed columns. When no filter is active, pass
-	// `summary.taskTypes` through verbatim.
+	// Skip the `.filter()` allocation when no task-affecting filter is active —
+	// `visibleTasks === summary.tasksMeta`, `taskTypesOut === summary.taskTypes`,
+	// `taskNamesOut === summary.tasks`. Saves the alloc + Set creation on the
+	// common "user is only typing in the name search box" path.
+	let visibleTasks: TaskMeta[];
 	let taskTypesOut: string[];
-	if (fullTypes && fullDomains && fullModalities && fullLanguages && fullTasks) {
+	let taskNamesOut: string[];
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const tasksByType = new Map<string, string[]>();
+	if (fullView) {
+		visibleTasks = summary.tasksMeta;
 		taskTypesOut = summary.taskTypes;
+		taskNamesOut = summary.tasks;
 	} else {
+		visibleTasks = summary.tasksMeta.filter((t) => {
+			if (!fullTypes && !filters.taskTypes.has(t.type)) return false;
+			if (!fullDomains && !t.domains.some((d) => filters.domains.has(d))) return false;
+			if (!fullModalities && !(t.modalities ?? []).some((m) => filters.modalities.has(m)))
+				return false;
+			if (!fullLanguages && !t.languages.some((l) => filters.languages.has(l))) return false;
+			if (!fullTasks && !filters.tasks.has(t.name)) return false;
+			return true;
+		});
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const visibleTaskNames = new Set(visibleTasks.map((t) => t.name));
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const visibleTaskTypes = new Set(visibleTasks.map((t) => t.type));
-		// Keep display labels that match either the raw type or a live
-		// scoresByTaskType key.
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const liveKeys = new Set<string>();
-		for (const r of summary.rows)
-			for (const k of Object.keys(r.scoresByTaskType ?? {})) liveKeys.add(k);
-		taskTypesOut = summary.taskTypes.filter((t) => visibleTaskTypes.has(t) || liveKeys.has(t));
+		// Drop type columns no visible task feeds — backend strips spaces from
+		// display labels, so `summary.taskTypes` keys line up with `tasksMeta[i].type`.
+		taskTypesOut = summary.taskTypes.filter((t) => visibleTaskTypes.has(t));
+		taskNamesOut = summary.tasks.filter((t) => visibleTaskNames.has(t));
+		// Bucket visible tasks by raw type once so the per-row aggregate loop
+		// below is O(rows × visibleTasks) instead of O(rows × types × visibleTasks).
+		for (const t of visibleTasks) {
+			const arr = tasksByType.get(t.type);
+			if (arr) arr.push(t.name);
+			else tasksByType.set(t.type, [t.name]);
+		}
 	}
-
-	const taskNamesOut = summary.tasks.filter((t) => visibleTaskNames.has(t));
 
 	const q = filters.nameQuery.trim().toLowerCase();
 	const rows = summary.rows
@@ -473,6 +507,14 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 
 			if (filters.modelTypes.size > 0 && !filters.modelTypes.has(m.modelType)) return false;
 
+			if (
+				filters.modelModalities.size > 0 &&
+				filters.modelModalities.size < MODEL_MODALITIES.length
+			) {
+				const mm = m.modalities ?? ['text'];
+				if (!mm.some((x) => filters.modelModalities.has(x))) return false;
+			}
+
 			// Size filter is inactive until the user actually moves the slider.
 			// Once active, it both applies the [min, max] bracket AND drops
 			// unsized (proprietary) models — a deliberate "you opted in to
@@ -490,15 +532,14 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			return true;
 		})
 		.map((row) => {
-			// With filters narrowing the slice, recompute means
-			// client-side (null for partial coverage, so partially-
-			// covered models don't outrank fully-evaluated peers).
-			// With no filter, trust the API — some backends (MIEB)
-			// compute Mean (Task) as mean-of-per-type-means rather
-			// than mean-of-tasks, so a naive recompute would diverge.
+			// Under filter: recompute every aggregate from the visible per-task
+			// scalars (null on partial coverage, matching the backend's
+			// `_skipna_false_mean`). With no filter, trust the API — MIEB's
+			// Mean (Task) is mean-of-per-type-means, not mean-of-tasks.
 			let meanTask: number | null = row.meanTask;
 			let meanTaskType: number | null = row.meanTaskType;
-			if (!fullTypes || !fullDomains || !fullModalities || !fullLanguages || !fullTasks) {
+			let scoresByTaskType: Record<string, number> = row.scoresByTaskType;
+			if (!fullView) {
 				let taskSum = 0;
 				let taskN = 0;
 				for (const t of taskNamesOut) {
@@ -510,20 +551,39 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				}
 				meanTask =
 					taskNamesOut.length > 0 && taskN === taskNamesOut.length ? taskSum / taskN : null;
-				let typeSum = 0;
-				let typeN = 0;
+
+				scoresByTaskType = {};
 				for (const tt of taskTypesOut) {
-					const v = row.scoresByTaskType[tt];
+					const typeTasks = tasksByType.get(tt);
+					if (!typeTasks || typeTasks.length === 0) continue;
+					let typeSum = 0;
+					let typeN = 0;
+					for (const name of typeTasks) {
+						const v = row.scoresByTask[name];
+						if (v !== undefined) {
+							typeSum += v;
+							typeN++;
+						}
+					}
+					if (typeN === typeTasks.length) {
+						scoresByTaskType[tt] = typeSum / typeN;
+					}
+				}
+
+				let mttSum = 0;
+				let mttN = 0;
+				for (const tt of taskTypesOut) {
+					const v = scoresByTaskType[tt];
 					if (v !== undefined) {
-						typeSum += v;
-						typeN++;
+						mttSum += v;
+						mttN++;
 					}
 				}
 				meanTaskType =
-					taskTypesOut.length > 0 && typeN === taskTypesOut.length ? typeSum / typeN : null;
+					taskTypesOut.length > 0 && mttN === taskTypesOut.length ? mttSum / mttN : null;
 			}
 
-			return { ...row, meanTask, meanTaskType };
+			return { ...row, meanTask, meanTaskType, scoresByTaskType };
 		});
 
 	// Re-rank over the visible-task slice via Borda count, matching the

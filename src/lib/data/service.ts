@@ -11,8 +11,16 @@ import type {
 	TaskMeta,
 	TaskScores
 } from '$lib/types';
-import { BENCHMARK_INDEX, BENCHMARK_MENU, DEFAULT_BENCHMARK_NAME } from './mockBenchmarks';
-import { buildMockSummary } from './mockSummary';
+import { DEFAULT_BENCHMARK_NAME } from './defaults';
+
+// Mock-data modules are dynamic-imported below so prod bundles (which run with
+// `PUBLIC_API_URL` set + `USE_MOCK=0`) never ship the ~800-line fixture set.
+type MockModule = typeof import('./mockBenchmarks');
+type MockSummaryModule = typeof import('./mockSummary');
+let _mockMod: Promise<MockModule> | null = null;
+let _mockSumMod: Promise<MockSummaryModule> | null = null;
+const loadMockBenchmarks = () => (_mockMod ??= import('./mockBenchmarks'));
+const loadMockSummaryMod = () => (_mockSumMod ??= import('./mockSummary'));
 
 // `$env/dynamic/public` is read at request time so the build doesn't fail when
 // either env var is unset.
@@ -32,26 +40,49 @@ function noApiError(scope: string): Error {
 	);
 }
 
+// All app loaders go through the versioned `/v1/` API surface.
+// Infra paths the backend keeps at root (`/icon/...`, `/health`,
+// `/metrics`) aren't routed through here, so the prefix is safe.
+const API_BASE = `${API}/v1`;
+
 async function http<T>(path: string): Promise<T> {
-	const res = await fetch(`${API}${path}`);
+	const res = await fetch(`${API_BASE}${path}`);
 	if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`);
 	return (await res.json()) as T;
 }
 
-// Session-scoped in-memory cache. Re-opening /tasks, /models, or any
-// already-seen benchmark page becomes a synchronous cache hit — no network,
-// no JSON parse. We dedupe in-flight requests so a quick double-trigger (e.g.
-// effect re-fire from a filter change) doesn't fire two parallel fetches.
+// Session-scoped LRU cache. Re-opening /tasks, /models, or any already-seen
+// benchmark page becomes a synchronous cache hit — no network, no JSON parse.
+// In-flight requests are deduped so a quick double-trigger doesn't fire two
+// parallel fetches. Bounded so a long-lived tab that visits many benchmarks
+// can't grow the cache without bound (each summary can be MB-sized).
+const RESPONSE_CACHE_MAX = 64;
 const responseCache = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
 
+function cacheTouch(path: string, value: unknown) {
+	// Map preserves insertion order; re-inserting moves to most-recent.
+	if (responseCache.has(path)) responseCache.delete(path);
+	responseCache.set(path, value);
+	while (responseCache.size > RESPONSE_CACHE_MAX) {
+		const oldest = responseCache.keys().next().value;
+		if (oldest === undefined) break;
+		responseCache.delete(oldest);
+	}
+}
+
 async function cachedHttp<T>(path: string): Promise<T> {
-	if (responseCache.has(path)) return responseCache.get(path) as T;
+	if (responseCache.has(path)) {
+		// Touch to refresh LRU position.
+		const v = responseCache.get(path) as T;
+		cacheTouch(path, v);
+		return v;
+	}
 	const existing = inflight.get(path);
 	if (existing) return existing as Promise<T>;
 	const p = http<T>(path)
 		.then((v) => {
-			responseCache.set(path, v);
+			cacheTouch(path, v);
 			inflight.delete(path);
 			return v;
 		})
@@ -87,8 +118,19 @@ function fillOrgAndDisplay(m: ModelMeta | null | undefined): ModelMeta | null | 
 	return m;
 }
 
+// Cache: enrichment is a one-way mutation, so the second call on a cached
+// summary is wasted work iterating every row. WeakSet membership marks
+// already-touched payloads so we skip cleanly.
+const _enrichedSummaries = new WeakSet<BenchmarkSummary>();
 function enrichSummary(s: BenchmarkSummary): BenchmarkSummary {
+	if (_enrichedSummaries.has(s)) return s;
 	for (const row of s.rows) fillOrgAndDisplay(row.model);
+	// Sort once at the boundary so SummaryTable / PerTaskTab consumers can
+	// pass `summary.taskTypes` / `summary.tasks` through without a per-render
+	// `[...arr].sort()` copy in their derived blocks.
+	s.taskTypes = [...s.taskTypes].sort((a, b) => a.localeCompare(b));
+	s.tasks = [...s.tasks].sort((a, b) => a.localeCompare(b));
+	_enrichedSummaries.add(s);
 	return s;
 }
 
@@ -105,7 +147,7 @@ function enrichModelScores(s: ModelScores): ModelScores {
 export async function loadBenchmarkMenu(): Promise<MenuEntry[]> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadBenchmarkMenu');
-		return BENCHMARK_MENU;
+		return (await loadMockBenchmarks()).BENCHMARK_MENU;
 	}
 	return cachedHttp<MenuEntry[]>('/benchmarks/menu');
 }
@@ -113,6 +155,7 @@ export async function loadBenchmarkMenu(): Promise<MenuEntry[]> {
 export async function loadBenchmark(name: string): Promise<Benchmark> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadBenchmark');
+		const { BENCHMARK_INDEX } = await loadMockBenchmarks();
 		const benchmark = BENCHMARK_INDEX[name];
 		if (!benchmark) throw new Error(`Unknown benchmark: ${name}`);
 		return benchmark;
@@ -123,6 +166,7 @@ export async function loadBenchmark(name: string): Promise<Benchmark> {
 export async function loadSummary(benchmarkName: string): Promise<BenchmarkSummary> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadSummary');
+		const { buildMockSummary } = await loadMockSummaryMod();
 		return buildMockSummary(benchmarkName);
 	}
 	// Path is `/scores` (consistent with /tasks/{name}/scores and
@@ -218,6 +262,7 @@ function buildQuery(params: Record<string, unknown>): string {
 export async function loadTasks(filters: TaskFilters = {}): Promise<TaskMeta[]> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadTasks');
+		const { buildMockSummary } = await loadMockSummaryMod();
 		return buildMockSummary(DEFAULT_BENCHMARK_NAME).tasksMeta;
 	}
 	return cachedHttp<TaskMeta[]>(`/tasks${buildQuery(filters as Record<string, unknown>)}`);
@@ -226,6 +271,7 @@ export async function loadTasks(filters: TaskFilters = {}): Promise<TaskMeta[]> 
 export async function loadTask(name: string): Promise<TaskMeta> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadTask');
+		const { buildMockSummary } = await loadMockSummaryMod();
 		const meta = buildMockSummary(DEFAULT_BENCHMARK_NAME).tasksMeta.find((t) => t.name === name);
 		if (!meta) throw new Error(`Unknown task: ${name}`);
 		return meta;
@@ -236,6 +282,7 @@ export async function loadTask(name: string): Promise<TaskMeta> {
 export async function loadTaskScores(name: string): Promise<TaskScores> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadTaskScores');
+		const { buildMockSummary } = await loadMockSummaryMod();
 		const summary = buildMockSummary(DEFAULT_BENCHMARK_NAME);
 		const meta = summary.tasksMeta.find((t) => t.name === name);
 		if (!meta) throw new Error(`Unknown task: ${name}`);
@@ -260,6 +307,7 @@ export async function loadTaskScores(name: string): Promise<TaskScores> {
 export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[]> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadModels');
+		const { buildMockSummary } = await loadMockSummaryMod();
 		return buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.map((r) => r.model);
 	}
 	const out = await cachedHttp<ModelMeta[]>(
@@ -272,6 +320,7 @@ export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[
 export async function loadModel(name: string): Promise<ModelMeta> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadModel');
+		const { buildMockSummary } = await loadMockSummaryMod();
 		const meta = buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.find(
 			(r) => r.model.name === name
 		)?.model;
@@ -285,6 +334,7 @@ export async function loadModel(name: string): Promise<ModelMeta> {
 
 export async function loadModelScores(name: string): Promise<ModelScores> {
 	if (!API) {
+		const { buildMockSummary } = await loadMockSummaryMod();
 		const summary = buildMockSummary(DEFAULT_BENCHMARK_NAME);
 		const row = summary.rows.find((r) => r.model.name === name);
 		if (!row) throw new Error(`Unknown model: ${name}`);
@@ -309,5 +359,3 @@ export async function loadModelScores(name: string): Promise<ModelScores> {
 		await cachedHttp<ModelScores>(`/models/${encodeURIComponent(name)}/scores`)
 	);
 }
-
-export { DEFAULT_BENCHMARK_NAME };

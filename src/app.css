@@ -1,5 +1,5 @@
 :root {
-	--font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+	--font-sans: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
 	--font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
 	/* Raw palettes — keep both per token so we can compose with light-dark()
@@ -64,10 +64,11 @@
 	--tip-bg-dark: #1f2329;
 	--tip-fg-dark: #f1f3f5;
 	--tip-label-dark: #9aa3ad;
-	/* Top-bar background — translucent so the page surface peeks through the
-	   blur. Pair per theme rather than mixing the same alpha both ways. */
-	--bar-bg-light: rgb(255, 255, 255, 0.82);
-	--bar-bg-dark: rgb(20, 22, 27, 0.78);
+	/* Top-bar background. Opaque now that there's no `backdrop-filter` blur —
+	   a translucent value here would let scrolled content show through and
+	   wash out the toolbar text. */
+	--bar-bg-light: #fff;
+	--bar-bg-dark: #1d1f26;
 
 	/* Live tokens — chosen by the browser based on the resolved color-scheme
 	   (system preference, or manually pinned via `data-theme`). */
@@ -127,82 +128,10 @@
 	color-scheme: dark;
 }
 
-/* Progressive-enhancement fallback for browsers older than Baseline 2024-05
-   (no `light-dark()` support — Safari ≤17.4 etc). The media query still
-   delivers a dark palette; manual pinning is best-effort. */
-@supports not (color: light-dark(white, black)) {
-	:root {
-		--bg: var(--bg-light);
-		--surface: var(--surface-light);
-		--surface-muted: var(--surface-muted-light);
-		--border: var(--border-light);
-		--border-strong: var(--border-strong-light);
-		--text: var(--text-light);
-		--text-muted: var(--text-muted-light);
-		--text-subtle: var(--text-subtle-light);
-		--ink-strong: var(--ink-strong-light);
-		--primary: var(--primary-light);
-		--primary-strong: var(--primary-strong-light);
-		--primary-soft: var(--primary-soft-light);
-		--heat: var(--heat-light);
-		--link: var(--link-light);
-		--row-alt: var(--row-alt-light);
-		--row-hover: var(--row-hover-light);
-		--shadow-sm: var(--shadow-sm-light);
-		--bar-bg: var(--bar-bg-light);
-		--tip-bg: var(--tip-bg-light);
-		--tip-fg: var(--tip-fg-light);
-		--tip-label: var(--tip-label-light);
-	}
-	@media (prefers-color-scheme: dark) {
-		:root:not([data-theme='light']) {
-			--bg: var(--bg-dark);
-			--surface: var(--surface-dark);
-			--surface-muted: var(--surface-muted-dark);
-			--border: var(--border-dark);
-			--border-strong: var(--border-strong-dark);
-			--text: var(--text-dark);
-			--text-muted: var(--text-muted-dark);
-			--text-subtle: var(--text-subtle-dark);
-			--ink-strong: var(--ink-strong-dark);
-			--primary: var(--primary-dark);
-			--primary-strong: var(--primary-strong-dark);
-			--primary-soft: var(--primary-soft-dark);
-			--heat: var(--heat-dark);
-			--link: var(--link-dark);
-			--row-alt: var(--row-alt-dark);
-			--row-hover: var(--row-hover-dark);
-			--shadow-sm: var(--shadow-sm-dark);
-			--bar-bg: var(--bar-bg-dark);
-			--tip-bg: var(--tip-bg-dark);
-			--tip-fg: var(--tip-fg-dark);
-			--tip-label: var(--tip-label-dark);
-		}
-	}
-	:root[data-theme='dark'] {
-		--bg: var(--bg-dark);
-		--surface: var(--surface-dark);
-		--surface-muted: var(--surface-muted-dark);
-		--border: var(--border-dark);
-		--border-strong: var(--border-strong-dark);
-		--text: var(--text-dark);
-		--text-muted: var(--text-muted-dark);
-		--text-subtle: var(--text-subtle-dark);
-		--ink-strong: var(--ink-strong-dark);
-		--primary: var(--primary-dark);
-		--primary-strong: var(--primary-strong-dark);
-		--primary-soft: var(--primary-soft-dark);
-		--heat: var(--heat-dark);
-		--link: var(--link-dark);
-		--row-alt: var(--row-alt-dark);
-		--row-hover: var(--row-hover-dark);
-		--shadow-sm: var(--shadow-sm-dark);
-		--bar-bg: var(--bar-bg-dark);
-		--tip-bg: var(--tip-bg-dark);
-		--tip-fg: var(--tip-fg-dark);
-		--tip-label: var(--tip-label-dark);
-	}
-}
+/* `light-dark()` requires Baseline 2024-05 (Safari ≥17.5, Chrome 123, Firefox 120).
+   Older browsers fall back to the light side via the default value resolution,
+   which is acceptable for a tiny tail. The previous `@supports not` block
+   triplicated the entire token table for ~30-month-old browsers — dropped. */
 
 * {
 	box-sizing: border-box;
@@ -250,26 +179,29 @@ code {
 	color: var(--text-subtle);
 }
 
-/* Per-modality colour pair via `.modality-tint[data-modality=text|image|audio|video]`. */
+/* Per-modality colour pair via `.modality-tint[data-modality=text|image|audio|video]`.
+   Each variant sets the tint-pair custom properties; one paint rule below
+   reads them, collapsing 4 declaration blocks into 4 var-only blocks + 1
+   shared paint rule. */
+[data-modality='text'] {
+	--modality-tint: var(--tint-teal);
+	--modality-tint-fg: var(--tint-teal-fg);
+}
+[data-modality='image'] {
+	--modality-tint: var(--tint-blue);
+	--modality-tint-fg: var(--tint-blue-fg);
+}
+[data-modality='audio'] {
+	--modality-tint: var(--tint-amber);
+	--modality-tint-fg: var(--tint-amber-fg);
+}
+[data-modality='video'] {
+	--modality-tint: var(--tint-purple);
+	--modality-tint-fg: var(--tint-purple-fg);
+}
 .modality-tint {
-	background: var(--surface-muted);
-	color: var(--text-muted);
-}
-.modality-tint[data-modality='text'] {
-	background: var(--tint-teal);
-	color: var(--tint-teal-fg);
-}
-.modality-tint[data-modality='image'] {
-	background: var(--tint-blue);
-	color: var(--tint-blue-fg);
-}
-.modality-tint[data-modality='audio'] {
-	background: var(--tint-amber);
-	color: var(--tint-amber-fg);
-}
-.modality-tint[data-modality='video'] {
-	background: var(--tint-purple);
-	color: var(--tint-purple-fg);
+	background: var(--modality-tint, var(--surface-muted));
+	color: var(--modality-tint-fg, var(--text-muted));
 }
 
 /* Hero lead paragraph used by every top-level index hero (/, /tasks,
@@ -289,8 +221,6 @@ code {
 	margin: 12px 0 18px;
 	padding: 10px 12px;
 	background: var(--bar-bg);
-	backdrop-filter: blur(14px) saturate(140%);
-	-webkit-backdrop-filter: blur(14px) saturate(140%);
 	border: 1px solid var(--border);
 	border-radius: 10px;
 	box-shadow: var(--shadow-sm);
@@ -387,6 +317,192 @@ code {
 .muted {
 	margin: 0;
 	color: var(--text-muted);
+}
+
+/* Shared thin scrollbar — applied to internally-scrolling regions
+   (filter pill lists, tab strips, task-info tables) so they don't
+   each redeclare the same `::-webkit-scrollbar` rules. */
+.scroll-thin {
+	scrollbar-width: thin;
+}
+.scroll-thin::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+	background: var(--border-strong);
+	border-radius: 3px;
+}
+
+/* Heat-shading classes for leaderboard table cells. ~1500 cells per
+   SummaryTable render share 55 distinct percentages. Static classes let
+   the browser's style cache dedupe; the inline-style alternative would
+   ship a fresh `style="background-color: …"` attribute per cell with
+   no caching. See `heat()` / `heatClass()` in src/lib/format.ts. */
+.heat-1 {
+	background-color: color-mix(in srgb, var(--heat) 1%, transparent);
+}
+.heat-2 {
+	background-color: color-mix(in srgb, var(--heat) 2%, transparent);
+}
+.heat-3 {
+	background-color: color-mix(in srgb, var(--heat) 3%, transparent);
+}
+.heat-4 {
+	background-color: color-mix(in srgb, var(--heat) 4%, transparent);
+}
+.heat-5 {
+	background-color: color-mix(in srgb, var(--heat) 5%, transparent);
+}
+.heat-6 {
+	background-color: color-mix(in srgb, var(--heat) 6%, transparent);
+}
+.heat-7 {
+	background-color: color-mix(in srgb, var(--heat) 7%, transparent);
+}
+.heat-8 {
+	background-color: color-mix(in srgb, var(--heat) 8%, transparent);
+}
+.heat-9 {
+	background-color: color-mix(in srgb, var(--heat) 9%, transparent);
+}
+.heat-10 {
+	background-color: color-mix(in srgb, var(--heat) 10%, transparent);
+}
+.heat-11 {
+	background-color: color-mix(in srgb, var(--heat) 11%, transparent);
+}
+.heat-12 {
+	background-color: color-mix(in srgb, var(--heat) 12%, transparent);
+}
+.heat-13 {
+	background-color: color-mix(in srgb, var(--heat) 13%, transparent);
+}
+.heat-14 {
+	background-color: color-mix(in srgb, var(--heat) 14%, transparent);
+}
+.heat-15 {
+	background-color: color-mix(in srgb, var(--heat) 15%, transparent);
+}
+.heat-16 {
+	background-color: color-mix(in srgb, var(--heat) 16%, transparent);
+}
+.heat-17 {
+	background-color: color-mix(in srgb, var(--heat) 17%, transparent);
+}
+.heat-18 {
+	background-color: color-mix(in srgb, var(--heat) 18%, transparent);
+}
+.heat-19 {
+	background-color: color-mix(in srgb, var(--heat) 19%, transparent);
+}
+.heat-20 {
+	background-color: color-mix(in srgb, var(--heat) 20%, transparent);
+}
+.heat-21 {
+	background-color: color-mix(in srgb, var(--heat) 21%, transparent);
+}
+.heat-22 {
+	background-color: color-mix(in srgb, var(--heat) 22%, transparent);
+}
+.heat-23 {
+	background-color: color-mix(in srgb, var(--heat) 23%, transparent);
+}
+.heat-24 {
+	background-color: color-mix(in srgb, var(--heat) 24%, transparent);
+}
+.heat-25 {
+	background-color: color-mix(in srgb, var(--heat) 25%, transparent);
+}
+.heat-26 {
+	background-color: color-mix(in srgb, var(--heat) 26%, transparent);
+}
+.heat-27 {
+	background-color: color-mix(in srgb, var(--heat) 27%, transparent);
+}
+.heat-28 {
+	background-color: color-mix(in srgb, var(--heat) 28%, transparent);
+}
+.heat-29 {
+	background-color: color-mix(in srgb, var(--heat) 29%, transparent);
+}
+.heat-30 {
+	background-color: color-mix(in srgb, var(--heat) 30%, transparent);
+}
+.heat-31 {
+	background-color: color-mix(in srgb, var(--heat) 31%, transparent);
+}
+.heat-32 {
+	background-color: color-mix(in srgb, var(--heat) 32%, transparent);
+}
+.heat-33 {
+	background-color: color-mix(in srgb, var(--heat) 33%, transparent);
+}
+.heat-34 {
+	background-color: color-mix(in srgb, var(--heat) 34%, transparent);
+}
+.heat-35 {
+	background-color: color-mix(in srgb, var(--heat) 35%, transparent);
+}
+.heat-36 {
+	background-color: color-mix(in srgb, var(--heat) 36%, transparent);
+}
+.heat-37 {
+	background-color: color-mix(in srgb, var(--heat) 37%, transparent);
+}
+.heat-38 {
+	background-color: color-mix(in srgb, var(--heat) 38%, transparent);
+}
+.heat-39 {
+	background-color: color-mix(in srgb, var(--heat) 39%, transparent);
+}
+.heat-40 {
+	background-color: color-mix(in srgb, var(--heat) 40%, transparent);
+}
+.heat-41 {
+	background-color: color-mix(in srgb, var(--heat) 41%, transparent);
+}
+.heat-42 {
+	background-color: color-mix(in srgb, var(--heat) 42%, transparent);
+}
+.heat-43 {
+	background-color: color-mix(in srgb, var(--heat) 43%, transparent);
+}
+.heat-44 {
+	background-color: color-mix(in srgb, var(--heat) 44%, transparent);
+}
+.heat-45 {
+	background-color: color-mix(in srgb, var(--heat) 45%, transparent);
+}
+.heat-46 {
+	background-color: color-mix(in srgb, var(--heat) 46%, transparent);
+}
+.heat-47 {
+	background-color: color-mix(in srgb, var(--heat) 47%, transparent);
+}
+.heat-48 {
+	background-color: color-mix(in srgb, var(--heat) 48%, transparent);
+}
+.heat-49 {
+	background-color: color-mix(in srgb, var(--heat) 49%, transparent);
+}
+.heat-50 {
+	background-color: color-mix(in srgb, var(--heat) 50%, transparent);
+}
+.heat-51 {
+	background-color: color-mix(in srgb, var(--heat) 51%, transparent);
+}
+.heat-52 {
+	background-color: color-mix(in srgb, var(--heat) 52%, transparent);
+}
+.heat-53 {
+	background-color: color-mix(in srgb, var(--heat) 53%, transparent);
+}
+.heat-54 {
+	background-color: color-mix(in srgb, var(--heat) 54%, transparent);
+}
+.heat-55 {
+	background-color: color-mix(in srgb, var(--heat) 55%, transparent);
 }
 
 .empty {

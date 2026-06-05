@@ -39,9 +39,7 @@
 	.backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgb(var(--shadow-tint) / 0.3);
-		backdrop-filter: blur(2px);
-		-webkit-backdrop-filter: blur(2px);
+		background: rgb(var(--shadow-tint) / 0.45);
 		z-index: 200;
 		animation: fade 0.18s ease;
 	}

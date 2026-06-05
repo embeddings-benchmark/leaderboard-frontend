@@ -105,8 +105,7 @@
 		color: inherit;
 		transition:
 			transform 0.12s ease,
-			border-color 0.12s ease,
-			box-shadow 0.12s ease;
+			border-color 0.12s ease;
 	}
 	.card:hover {
 		transform: translateY(-1px);
@@ -129,37 +128,29 @@
 		height: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	.card[data-modality='text'] {
-		--card-accent: var(--tint-teal-fg);
+	/* Single gradient — per-modality blocks just swap the tint pair. */
+	.card[data-modality] {
 		background: linear-gradient(
 			180deg,
-			color-mix(in srgb, var(--tint-teal) 55%, var(--surface)) 0%,
+			color-mix(in srgb, var(--card-tint, var(--border)) 55%, var(--surface)) 0%,
 			var(--surface) 64px
 		);
+	}
+	.card[data-modality='text'] {
+		--card-tint: var(--tint-teal);
+		--card-accent: var(--tint-teal-fg);
 	}
 	.card[data-modality='image'] {
+		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-modality='audio'] {
+		--card-tint: var(--tint-amber);
 		--card-accent: var(--tint-amber-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-modality='video'] {
+		--card-tint: var(--tint-purple);
 		--card-accent: var(--tint-purple-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card-head {
 		display: flex;

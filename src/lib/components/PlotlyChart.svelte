@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import type { Data, Layout, Config } from 'plotly.js';
+	import { onThemeChange } from '$lib/theme-bus';
 
 	interface Props {
 		data: Data[];
@@ -28,9 +29,20 @@
 	 *  for our tokens is a `light-dark(...)` expression — not something Plotly
 	 *  understands. Resolving through the var requires applying it as a real
 	 *  CSS color on a probe element and reading the computed style back. */
+	// Cached across all calls within one theme — data/config changes shouldn't
+	// re-probe the DOM. Invalidated below via `onThemeChange` so the next
+	// `buildLayout()` reads the new palette.
+	let cachedColors: { text: string; muted: string; grid: string; surface: string } | null = null;
 	function themeColors() {
+		if (cachedColors) return cachedColors;
 		if (typeof window === 'undefined') {
-			return { text: 'var(--tip-bg)', muted: '#5a6470', grid: '#cdd0d6', surface: '#ffffff' };
+			cachedColors = {
+				text: 'var(--tip-bg)',
+				muted: '#5a6470',
+				grid: '#cdd0d6',
+				surface: '#ffffff'
+			};
+			return cachedColors;
 		}
 		const probe = document.createElement('span');
 		probe.style.position = 'absolute';
@@ -47,7 +59,8 @@
 		const grid = resolve('--border', '#cdd0d6');
 		const surface = resolve('--surface', '#ffffff');
 		probe.remove();
-		return { text, muted, grid, surface };
+		cachedColors = { text, muted, grid, surface };
+		return cachedColors;
 	}
 
 	function buildLayout(): Partial<Layout> {
@@ -139,22 +152,16 @@
 		await Plotly.newPlot(el, data, buildLayout(), { ...defaultConfig, ...config });
 
 		// React to manual toggle (writes `data-theme` on <html>) and to OS
-		// preference changes (no attribute set — plain media-query flip).
-		const mo = new MutationObserver(() =>
-			Plotly?.react(el, data, buildLayout(), { ...defaultConfig, ...config })
-		);
-		mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+		// preference changes — both routed through the shared dispatcher in
+		// `theme-bus` so we share one observer/media listener across all charts.
+		const offTheme = onThemeChange(() => {
+			cachedColors = null;
+			Plotly?.react(el, data, buildLayout(), { ...defaultConfig, ...config });
+		});
 
-		const mq = window.matchMedia('(prefers-color-scheme: dark)');
-		const onMq = () => Plotly?.react(el, data, buildLayout(), { ...defaultConfig, ...config });
-		mq.addEventListener('change', onMq);
-
-		// Cleanup on destroy is handled in onDestroy below; stash the disposers
-		// on a closure so onDestroy can reach them.
-		teardown = () => {
-			mo.disconnect();
-			mq.removeEventListener('change', onMq);
-		};
+		// Cleanup on destroy is handled in onDestroy below; stash the disposer
+		// on a closure so onDestroy can reach it.
+		teardown = offTheme;
 	});
 
 	let teardown: (() => void) | null = null;

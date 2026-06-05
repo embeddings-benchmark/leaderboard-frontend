@@ -5,8 +5,9 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { resolve } from '$app/paths';
-	import { bestPerColumn, heat, humanizeType, slug, worstPerColumn } from '$lib/format';
+	import { bestWorstPerColumn, heat, humanizeType, slug } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
+	import { safeIdle } from '$lib/idle';
 	import MarkdownText from './MarkdownText.svelte';
 	import ModelCellName from './ModelCellName.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
@@ -123,13 +124,23 @@
 			taskTipHideTimer = null;
 		}
 	}
-	// Lookup keyed by task name — robust if the backend reorders or
-	// omits entries.
+	// Lookup keyed by task name — cached by `tasksMeta` identity in a
+	// WeakMap so filter-driven summary recomputes that return the same
+	// `tasksMeta` array don't rebuild the index.
+	const _taskMetaCache = new WeakMap<
+		readonly (typeof summary.tasksMeta)[number][],
+		Map<string, (typeof summary.tasksMeta)[number]>
+	>();
 	let taskMetaByName = $derived.by(() => {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const m = new Map<string, (typeof summary.tasksMeta)[number]>();
-		for (const t of summary.tasksMeta ?? []) m.set(t.name, t);
-		return m;
+		const meta = summary.tasksMeta ?? [];
+		let cached = _taskMetaCache.get(meta);
+		if (!cached) {
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity
+			cached = new Map<string, (typeof summary.tasksMeta)[number]>();
+			for (const t of meta) cached.set(t.name, t);
+			_taskMetaCache.set(meta, cached);
+		}
+		return cached;
 	});
 	function showTaskTip(e: PointerEvent | FocusEvent, taskName: string) {
 		cancelTaskTipHide();
@@ -159,9 +170,24 @@
 	// Task columns are rendered A→Z so wide leaderboards are scannable.
 	// API ordering is whatever the benchmark registered; alphabetising
 	// here keeps it stable as the user filters the task set.
-	let sortedTasks = $derived([...summary.tasks].sort((a, b) => a.localeCompare(b)));
-	let best = $derived(bestPerColumn(sortedTasks, summary.rows, (r, t) => r.scoresByTask[t]));
-	let worst = $derived(worstPerColumn(sortedTasks, summary.rows, (r, t) => r.scoresByTask[t]));
+	// `summary.tasks` is pre-sorted at the service boundary.
+	let sortedTasks = $derived(summary.tasks);
+	function scoreFor(row: SummaryRow, task: string): number | undefined {
+		return row.scoresByTask[task];
+	}
+	let taskBests = $derived(bestWorstPerColumn(sortedTasks, summary.rows, scoreFor));
+	let best = $derived(taskBests.best);
+	let worst = $derived(taskBests.worst);
+	// Per-row Set of trained-on task names — cell template would otherwise
+	// run `Array.includes` per cell (200×200 = up to 1.2M ops on a re-render).
+	let trainedByModel = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<string, Set<string>>();
+		for (const r of summary.rows) {
+			m.set(r.model.name, new Set(r.trainedOnTasks ?? []));
+		}
+		return m;
+	});
 
 	let sortedRows = $derived.by(() => {
 		let rows = summary.rows;
@@ -175,8 +201,8 @@
 					);
 				}
 				const taskName = key.slice(5);
-				const va = a.scoresByTask[taskName];
-				const vb = b.scoresByTask[taskName];
+				const va = scoreFor(a, taskName);
+				const vb = scoreFor(b, taskName);
 				if (va === undefined && vb === undefined) return 0;
 				if (va === undefined) return 1;
 				if (vb === undefined) return -1;
@@ -220,16 +246,12 @@
 		rowKickoffTimer = setTimeout(() => {
 			rowKickoffTimer = null;
 			if (myVersion !== growVersion) return;
-			const idle = (cb: () => void): number =>
-				'requestIdleCallback' in window
-					? window.requestIdleCallback(cb, { timeout: 500 })
-					: (setTimeout(cb, 0) as unknown as number);
 			const grow = () => {
 				if (myVersion !== growVersion) return;
 				visibleRows = Math.min(visibleRows + ROW_CHUNK_STEP, total);
-				if (visibleRows < total) idle(grow);
+				if (visibleRows < total) safeIdle(grow);
 			};
-			idle(grow);
+			safeIdle(grow);
 		}, 60);
 	});
 
@@ -288,6 +310,7 @@
 				</thead>
 				<tbody>
 					{#each renderedRows as row (row.model.name)}
+						{@const rowTrained = trainedByModel.get(row.model.name)}
 						<tr class:pinned={pinnedModels.has(row.model.name)}>
 							<td class="tbl-pin-col tbl-sticky-pin">
 								<PinButton name={row.model.name} />
@@ -303,14 +326,14 @@
 								<ModelCellName model={row.model} />
 							</td>
 							{#each sortedTasks as task (task)}
-								{@const trained = row.trainedOnTasks?.includes(task) ?? false}
+								{@const trained = rowTrained?.has(task) ?? false}
+								{@const v = scoreFor(row, task)}
 								<td
-									class="tbl-num"
-									class:tbl-best={row.scoresByTask[task] === best[task]}
+									class="tbl-num {heat(v, worst[task], best[task])}"
+									class:tbl-best={v === best[task]}
 									class:trained-on={trained}
-									style={heat(row.scoresByTask[task], worst[task], best[task])}
 								>
-									{fmt(row.scoresByTask[task])}{#if trained}<button
+									{fmt(v)}{#if trained}<button
 											type="button"
 											class="trained-warn"
 											data-tip="Model lists this task in its training datasets — score is not zero-shot."

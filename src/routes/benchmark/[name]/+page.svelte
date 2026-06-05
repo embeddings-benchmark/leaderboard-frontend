@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
+	import { safeIdle, safeCancelIdle } from '$lib/idle';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 
@@ -96,28 +97,20 @@
 		// full pre-mount budget. Skip if the user already navigates away.
 		let cancelled = false;
 		let handle: number | null = null;
-		const idle = (cb: () => void): number =>
-			'requestIdleCallback' in window
-				? window.requestIdleCallback(cb, { timeout: 2000 })
-				: (setTimeout(cb, 250) as unknown as number);
-		const cancel = (id: number): void => {
-			if ('cancelIdleCallback' in window) window.cancelIdleCallback(id);
-			else clearTimeout(id);
-		};
 		function next() {
 			if (cancelled) return;
 			const tab = pending.shift();
 			if (!tab) return;
-			handle = idle(() => {
+			handle = safeIdle(() => {
 				if (cancelled) return;
 				visited.add(tab);
 				next();
-			}) as number;
+			}, 2000);
 		}
 		next();
 		return () => {
 			cancelled = true;
-			if (handle !== null) cancel(handle);
+			if (handle !== null) safeCancelIdle(handle);
 		};
 	});
 

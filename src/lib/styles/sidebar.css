@@ -152,18 +152,12 @@
 }
 /* Long task-type / domain lists scroll internally — leave the rest of the
    sidebar room. */
+/* Add `.scroll-thin` (from app.css) alongside `.scroll` to get the styled
+   scrollbar; this rule just sizes the scrollport itself. */
 .pills.scroll {
 	max-height: 320px;
 	overflow-y: auto;
 	padding-right: 4px;
-	scrollbar-width: thin;
-}
-.pills.scroll::-webkit-scrollbar {
-	width: 6px;
-}
-.pills.scroll::-webkit-scrollbar-thumb {
-	background: var(--border-strong);
-	border-radius: 3px;
 }
 .pill {
 	display: inline-flex;
@@ -181,14 +175,7 @@
    carries the visual state. */
 .pill input {
 	position: absolute;
-	width: 1px;
-	height: 1px;
-	margin: -1px;
-	padding: 0;
-	border: 0;
-	clip: rect(0 0 0 0);
-	overflow: hidden;
-	white-space: nowrap;
+	clip-path: inset(50%);
 }
 .pill:has(input:checked) {
 	font-weight: 600;

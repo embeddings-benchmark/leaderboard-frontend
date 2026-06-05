@@ -117,17 +117,17 @@
 						<ModelCellName model={s.model} />
 					</td>
 					<td
-						class="tbl-num mean-cell"
+						class="tbl-num mean-cell {s.score == null ? '' : heat(s.score, worstScore, bestScore)}"
 						class:partial={s.score == null}
-						style={s.score == null ? '' : heat(s.score, worstScore, bestScore)}
 						title={s.score == null ? 'Not evaluated on every subset' : undefined}
 						>{fmtPct(s.score)}</td
 					>
 					{#each subsets as sub (sub)}
 						{@const v = s.subsetScores[sub]}
 						<td
-							class="tbl-num sub"
-							style={v !== undefined ? heat(v, worstPerSubset[sub], bestPerSubset[sub]) : ''}
+							class="tbl-num sub {v !== undefined
+								? heat(v, worstPerSubset[sub], bestPerSubset[sub])
+								: ''}"
 						>
 							{v !== undefined ? fmtPct(v) : '—'}
 						</td>

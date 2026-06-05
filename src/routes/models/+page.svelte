@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { loadModels } from '$lib/data/service';
+	import { safeIdle } from '$lib/idle';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
@@ -88,10 +89,12 @@
 		return true;
 	}
 
+	// Split filter / sort so name-query keystrokes (which only narrow rows)
+	// don't trigger a full re-sort. The sort only re-runs when its inputs
+	// (`sort`, `sortDir`, or the filtered list identity) change.
+	let matched = $derived(ALL_MODELS.filter(passes));
 	let filtered = $derived.by(() => {
-		const list = ALL_MODELS.filter(passes);
-		// Comparator always computes "ascending" raw cmp; sortDir flips at the
-		// end so the direction toggle is a single point of control.
+		const list = [...matched];
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
@@ -133,16 +136,12 @@
 		kickoffTimer = setTimeout(() => {
 			kickoffTimer = null;
 			if (myVersion !== growVersion) return;
-			const idle = (cb: () => void): number =>
-				'requestIdleCallback' in window
-					? window.requestIdleCallback(cb, { timeout: 500 })
-					: (setTimeout(cb, 0) as unknown as number);
 			const grow = () => {
 				if (myVersion !== growVersion) return;
 				visibleCount = Math.min(visibleCount + CHUNK_STEP, total);
-				if (visibleCount < total) idle(grow);
+				if (visibleCount < total) safeIdle(grow);
 			};
-			idle(grow);
+			safeIdle(grow);
 		}, 80);
 	});
 	let visibleModels = $derived(filtered.slice(0, visibleCount));

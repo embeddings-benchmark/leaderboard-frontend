@@ -28,10 +28,24 @@ export function getParam(name: string): string | null {
 	return readParams().get(name);
 }
 
-/** Patch URL params; ``null``/``''``/``undefined`` deletes. */
+/**
+ * Patch URL params; ``null``/``''``/``undefined`` deletes.
+ *
+ * We hold a long-lived URL instance and just mutate its `searchParams` so we
+ * don't pay the URL parse cost on every filter-store sync. The href can drift
+ * if other code calls `pushState`/popstate; we resync from `window.location`
+ * whenever the path changes between calls.
+ */
+let _url: URL | null = null;
+let _lastPath = '';
 export function updateUrl(updates: Record<string, string | null | undefined>): void {
 	if (typeof window === 'undefined') return;
-	const url = new URL(window.location.href);
+	const path = window.location.pathname + window.location.search + window.location.hash;
+	if (!_url || _lastPath !== path) {
+		_url = new URL(window.location.href);
+		_lastPath = path;
+	}
+	const url = _url;
 	let changed = false;
 	for (const [k, v] of Object.entries(updates)) {
 		const existing = url.searchParams.get(k);
@@ -55,13 +69,20 @@ export function updateUrl(updates: Record<string, string | null | undefined>): v
 		// while only mutating its query string.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		replaceState(url, {});
+		_lastPath = url.pathname + url.search + url.hash;
 	}
 }
 
 /** Encode a set of names into a comma-joined param (URL-safe components). */
 export function encodeSet(values: Iterable<string>): string | null {
-	const arr = [...values].filter(Boolean).map(encodeURIComponent);
-	return arr.length ? arr.join(',') : null;
+	// Single-pass build instead of [...values].filter().map().join() (3 allocs).
+	let out = '';
+	for (const v of values) {
+		if (!v) continue;
+		if (out) out += ',';
+		out += encodeURIComponent(v);
+	}
+	return out || null;
 }
 
 /** Inverse of ``encodeSet`` — returns ``[]`` for missing / empty values. */

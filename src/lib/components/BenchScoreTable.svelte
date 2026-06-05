@@ -21,7 +21,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { createSortState } from '$lib/stores/sort.svelte';
-	import { fmtPct, heat, maxOf, minOf, slug } from '$lib/format';
+	import { fmtPct, fmtZeroShot, heat, maxOf, minOf, slug } from '$lib/format';
 	import SortHeader from './SortHeader.svelte';
 
 	interface Props {
@@ -62,10 +62,6 @@
 	let worstMeanTask = $derived(minOf(rows.map((r) => r.meanTask)));
 	let bestMeanTaskType = $derived(maxOf(rows.map((r) => r.meanTaskType)));
 	let worstMeanTaskType = $derived(minOf(rows.map((r) => r.meanTaskType)));
-
-	function fmtZeroShot(p: number): string {
-		return p === -1 ? '⚠️ NA' : `${p}%`;
-	}
 </script>
 
 <div class="tbl-scroll" use:stickyHScroll>
@@ -104,10 +100,10 @@
 						<span class="rank-pill" class:top={s.rank === 1}>#{s.rank}</span>
 						<span class="rank-total">/ {s.totalModels}</span>
 					</td>
-					<td class="tbl-num" style={heat(s.meanTask, worstMeanTask, bestMeanTask)}
+					<td class="tbl-num {heat(s.meanTask, worstMeanTask, bestMeanTask)}"
 						>{fmtPct(s.meanTask)}</td
 					>
-					<td class="tbl-num" style={heat(s.meanTaskType, worstMeanTaskType, bestMeanTaskType)}>
+					<td class="tbl-num {heat(s.meanTaskType, worstMeanTaskType, bestMeanTaskType)}">
 						{fmtPct(s.meanTaskType)}
 					</td>
 					<td class="tbl-num">{fmtZeroShot(s.zeroShotPct)}</td>

@@ -21,6 +21,7 @@
  */
 
 import type { Action } from 'svelte/action';
+import { onWindowResize, onWindowScroll } from './sticky-events';
 
 // Same `::-webkit-scrollbar { height: 10px }` rule that `.tbl-scroll`
 // uses (see leaderboard-table.css). Pad the overlay slightly above so
@@ -52,8 +53,6 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		z-index: 40;
 		background: var(--bar-bg, var(--surface));
 		border-top: 1px solid var(--border);
-		backdrop-filter: blur(14px) saturate(140%);
-		-webkit-backdrop-filter: blur(14px) saturate(140%);
 		display: none;
 	`;
 
@@ -209,10 +208,10 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		paneMo.observe(paneAncestor, { attributes: true, attributeFilter: ['class'] });
 	}
 
-	window.addEventListener('scroll', scheduleUpdate, { passive: true });
+	const offScroll = onWindowScroll(scheduleUpdate);
 	wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
 	overlay.addEventListener('scroll', onOverlayScroll, { passive: true });
-	window.addEventListener('resize', scheduleResync);
+	const offResize = onWindowResize(scheduleResync);
 
 	update();
 
@@ -221,10 +220,10 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 			if (rafId) cancelAnimationFrame(rafId);
 			ro.disconnect();
 			paneMo?.disconnect();
-			window.removeEventListener('scroll', scheduleUpdate);
+			offScroll();
 			wrapper.removeEventListener('scroll', onWrapperScroll);
 			overlay.removeEventListener('scroll', onOverlayScroll);
-			window.removeEventListener('resize', scheduleResync);
+			offResize();
 			overlay.remove();
 		}
 	};

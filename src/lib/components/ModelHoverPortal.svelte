@@ -1,10 +1,7 @@
 <script lang="ts" module>
 	import type { SummaryRow } from '$lib/types';
+	import { fmtZeroShot } from '$lib/format';
 
-	function fmtZeroShot(pct: number): string {
-		if (pct === -1) return '⚠️ NA';
-		return `${pct.toFixed(0)}%`;
-	}
 	function fmtParams(b: number): string {
 		if (!b) return '—';
 		return b >= 1 ? `${b.toFixed(1)} B` : `${(b * 1000).toFixed(0)} M`;
@@ -16,9 +13,14 @@
 
 	// Shared hover-row set for SummaryTable, PerTaskTab, PerLanguageTab.
 	// Org goes in the title (`<org> / <displayName>`), not a separate row.
+	// Memoised by row identity: a hover storm over the same 5–10 cells
+	// reuses the same array instead of reallocating 6 objects per cell.
+	const _rowsCache = new WeakMap<SummaryRow, { k: string; v: string }[]>();
 	export function rowsForModel(row: SummaryRow): { k: string; v: string }[] {
+		const cached = _rowsCache.get(row);
+		if (cached) return cached;
 		const m = row.model;
-		return [
+		const out = [
 			{ k: 'Type', v: m.modelType },
 			{ k: 'Active params', v: fmtParams(row.activeParamsB) },
 			{ k: 'Zero-shot', v: fmtZeroShot(row.zeroShotPct) },
@@ -26,6 +28,8 @@
 			{ k: 'Max tokens', v: row.maxTokens ? fmtInt(row.maxTokens) : '—' },
 			{ k: 'Released', v: m.releaseDate ?? '—' }
 		];
+		_rowsCache.set(row, out);
+		return out;
 	}
 </script>
 
@@ -100,26 +104,12 @@
 		font-weight: 500;
 		color: var(--tip-fg);
 	}
-	/* Per-model-type tint on the Type row's value (mirrors the
-	   title tint owned by HoverPortal). */
-	:global(.hover-portal[data-model-type='dense']) .type-value {
-		color: var(--tint-blue-fg);
-		font-weight: 700;
-	}
-	:global(.hover-portal[data-model-type='cross-encoder']) .type-value {
-		color: var(--tint-orange-fg);
-		font-weight: 700;
-	}
-	:global(.hover-portal[data-model-type='late-interaction']) .type-value {
-		color: var(--tint-green-fg);
-		font-weight: 700;
-	}
-	:global(.hover-portal[data-model-type='sparse']) .type-value {
-		color: var(--tint-amber-fg);
-		font-weight: 700;
-	}
-	:global(.hover-portal[data-model-type='router']) .type-value {
-		color: var(--tint-purple-fg);
+	/* Per-model-type tint on the Type row's value. Uses the shared
+	   `--type-tint` custom property (set on `[data-model-type]` in
+	   leaderboard-table.css) so the value matches the title tint
+	   without a per-type rule list. */
+	.type-value {
+		color: var(--type-tint, inherit);
 		font-weight: 700;
 	}
 </style>

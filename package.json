@@ -34,7 +34,6 @@
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@types/node": "^24",
 		"@types/plotly.js": "^3.0.10",
-		"@types/plotly.js-dist-min": "^2.3.4",
 		"@vitest/coverage-v8": "^4.1.8",
 		"eslint": "^10.2.0",
 		"eslint-config-prettier": "^10.1.8",
@@ -56,8 +55,7 @@
 		"vitest": "^4.1.8"
 	},
 	"dependencies": {
-		"plotly.js": "^3.6.0",
-		"plotly.js-dist-min": "^3.5.1"
+		"plotly.js": "^3.6.0"
 	},
 	"engines": {
 		"node": ">=24"
