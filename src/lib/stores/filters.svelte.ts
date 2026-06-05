@@ -590,36 +590,41 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			return { ...row, meanTask, meanTaskType, scoresByTaskType };
 		});
 
-	// Re-rank over the visible-task slice via Borda count, matching the
-	// API's own ranking algorithm. The API rank is for the full
-	// benchmark — once the user filters tasks down, that rank no longer
-	// reflects the filtered subset. A naive sort by Mean(Task) would
-	// over-promote single-task specialists; Borda points (per task:
-	// (n - position)) cancel that bias the same way the backend does.
-	// Local accumulator in a pure transformation — plain Map is correct here.
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
-	const bordaPoints = new Map<string, number>();
-	for (const taskName of taskNamesOut) {
-		const ranked = rows
-			.map((r) => ({ name: r.model.name, v: r.scoresByTask[taskName] }))
-			.filter((r): r is { name: string; v: number } => r.v !== undefined)
-			.sort((a, b) => b.v - a.v);
-		ranked.forEach((r, i) => {
-			bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (ranked.length - i));
-		});
+	// Re-rank only when the task set actually changed. Row-only filters
+	// (name query, availability, model type, size, zero-shot, …) leave
+	// every visible model's relationship to the full task set intact,
+	// so the API's original Borda rank still applies — recomputing
+	// would relabel the top-visible row as #1 just because peers got
+	// hidden, which reads as a wrong ranking. Only when the task set
+	// narrows (`!fullView`) does the rank need a fresh Borda pass over
+	// the visible-task slice.
+	let rankedRows: typeof rows;
+	if (fullView) {
+		rankedRows = rows;
+	} else {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const bordaPoints = new Map<string, number>();
+		for (const taskName of taskNamesOut) {
+			const ranked = rows
+				.map((r) => ({ name: r.model.name, v: r.scoresByTask[taskName] }))
+				.filter((r): r is { name: string; v: number } => r.v !== undefined)
+				.sort((a, b) => b.v - a.v);
+			ranked.forEach((r, i) => {
+				bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (ranked.length - i));
+			});
+		}
+		rankedRows = rows
+			.map((row) => ({ row, borda: bordaPoints.get(row.model.name) ?? 0 }))
+			.sort((a, b) => {
+				if (a.borda !== b.borda) return b.borda - a.borda;
+				// Tiebreak: higher Mean(Task) first; nulls (incomplete coverage)
+				// land at the bottom of any tie.
+				const am = a.row.meanTask ?? -Infinity;
+				const bm = b.row.meanTask ?? -Infinity;
+				return bm - am;
+			})
+			.map(({ row }, i) => ({ ...row, rank: i + 1 }));
 	}
-
-	const rankedRows = rows
-		.map((row) => ({ row, borda: bordaPoints.get(row.model.name) ?? 0 }))
-		.sort((a, b) => {
-			if (a.borda !== b.borda) return b.borda - a.borda;
-			// Tiebreak: higher Mean(Task) first; nulls (incomplete coverage)
-			// land at the bottom of any tie.
-			const am = a.row.meanTask ?? -Infinity;
-			const bm = b.row.meanTask ?? -Infinity;
-			return bm - am;
-		})
-		.map(({ row }, i) => ({ ...row, rank: i + 1 }));
 
 	return {
 		...summary,

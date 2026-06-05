@@ -279,7 +279,7 @@
 						</div>
 					{/if}
 					<div class="row">
-						<dt>Reference paper</dt>
+						<dt>Reference</dt>
 						<dd>
 							{#if task.meta.reference}
 								<!-- External paper URL -->

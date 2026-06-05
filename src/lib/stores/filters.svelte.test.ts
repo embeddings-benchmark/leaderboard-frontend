@@ -124,22 +124,13 @@ describe('applyFilters: no narrowing', () => {
 		expect(a.meanTaskType).toBeCloseTo(0.65, 5);
 	});
 
-	it('re-ranks rows by Borda count, not the API rank', () => {
+	it('preserves the API order + rank when no task-set narrowing is active', () => {
+		// Row-only filters (search query, availability, …) shouldn't relabel
+		// peers' ranks just because some rows got hidden. Without any filter
+		// active, the unfiltered view must keep the fixture's API order.
 		const out = applyFilters(fixtureSummary());
-		// Hand-compute Borda per task with n=4 rows (n-position = 4,3,2,1).
-		//   T1 desc: A(0.9), D(0.8), B(0.7), C(0.6) → A=4, D=3, B=2, C=1
-		//   T2 desc: B(0.8), C(0.7), D(0.6), A(0.5) → B=4, C=3, D=2, A=1
-		//   T3 desc: B(0.7), A(0.6), C(0.5), D(0.4) → B=4, A=3, C=2, D=1
-		// Totals: A=8, B=10, C=6, D=6 → B, A, then C/D tiebreak on Mean(Task).
-		const names = out.rows.map((r) => r.model.name);
-		expect(names[0]).toBe('org/B');
-		expect(names[1]).toBe('org/A');
-		// C: mean = (0.6+0.7+0.5)/3 = 0.6; D: (0.8+0.6+0.4)/3 = 0.6 — tied; mean
-		// tiebreak doesn't separate them so we just assert both are present at 3/4.
-		expect(names.slice(2).sort()).toEqual(['org/C', 'org/D']);
-		// Rank is the new ordinal, not the original.
-		expect(out.rows[0].rank).toBe(1);
-		expect(out.rows[1].rank).toBe(2);
+		expect(out.rows.map((r) => r.model.name)).toEqual(['org/A', 'org/B', 'org/C', 'org/D']);
+		expect(out.rows.map((r) => r.rank)).toEqual([1, 2, 3, 4]);
 	});
 });
 

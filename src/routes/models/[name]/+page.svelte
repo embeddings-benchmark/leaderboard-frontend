@@ -187,7 +187,7 @@
 				</div>
 				<dl class="spec-list">
 					<div class="row">
-						<dt>Model page</dt>
+						<dt>Reference</dt>
 						<dd>
 							{#if model.url}
 								<!-- External model URL (HuggingFace etc.) -->
