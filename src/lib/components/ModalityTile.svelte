@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { Benchmark, LeaderRow } from '$lib/types';
+	import { splitModelName } from '$lib/format';
 	import ModalityIcon from './ModalityIcon.svelte';
 
 	// 1-decimal score format (`fmtPct` in format.ts uses 2 decimals,
@@ -48,7 +49,9 @@
 			<span class="mod-title">{benchmark.displayName}</span>
 			{#if topLeader}
 				<span class="mod-meta">
-					Leader: {topLeader.model.displayName} · {fmtScore(topLeader.meanTask)}
+					Leader: {splitModelName(topLeader.model.name).displayName} · {fmtScore(
+						topLeader.meanTask
+					)}
 				</span>
 			{:else}
 				<span class="mod-meta">{benchmark.numModels ?? 0} models</span>

@@ -24,10 +24,37 @@ make deploy-build     # BASE_PATH=/leaderboardv2 build (matches CI)
 make preview          # serve build/ on http://localhost:4173
 ```
 
-`PUBLIC_API_URL` (the mteb FastAPI base, e.g. `http://localhost:8000`) is
-required at build time. Set it in `.env.local` for local dev, or pass
-`PUBLIC_USE_MOCK=1` to fall back to the deterministic mock generators under
-`src/lib/data/mock*.ts` for offline UI work.
+### Environment
+
+| Var               | When set                                                                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_API_URL`  | Required for normal use. Points at the mteb FastAPI base (e.g. `http://localhost:8000`). Inlined at build time.                                    |
+| `PUBLIC_USE_MOCK` | Opt-in offline fallback. When set to `1` AND `PUBLIC_API_URL` is empty, every loader returns deterministic mock data from `src/lib/data/mock*.ts`. |
+
+```sh
+# Normal dev — talk to a local mteb FastAPI
+echo 'PUBLIC_API_URL=http://localhost:8000' > .env.local
+
+# Offline UI work — no backend running
+echo 'PUBLIC_USE_MOCK=1' > .env.local
+```
+
+Behaviour summary:
+
+- `PUBLIC_API_URL` set → every fetch goes through `/v1/...` on that host. Mock
+  modules are dynamic-imported only on the offline branch and tree-shake out
+  of the prod build entirely.
+- `PUBLIC_API_URL` empty + `PUBLIC_USE_MOCK=1` → loaders synthesise summaries,
+  task lists, model lists, and per-benchmark menus from the seeded fixtures
+  under `src/lib/data/mockBenchmarks.ts` + `mockSummary.ts`. A few endpoints
+  have no offline analogue and return empty (notably `loadPerLanguage` —
+  PerLanguageTab renders `'—'`).
+- `PUBLIC_API_URL` empty + no `PUBLIC_USE_MOCK` → every loader throws a clear
+  error so misconfiguration surfaces immediately instead of rendering blanks.
+
+Both vars are `PUBLIC_*` so SvelteKit/Vite inline them at build time —
+`USE_MOCK` is evaluated as a constant and the bundler eliminates the dead
+branch in prod.
 
 ## Routes
 

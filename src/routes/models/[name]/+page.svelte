@@ -111,22 +111,24 @@
 		return `${resolve('/compare')}?${params.toString()}`;
 	}
 	function buildCsv() {
+		// Column order mirrors the on-screen `BenchScoreTable`: Benchmark,
+		// Zero-shot, Rank, Total Models, Mean (Task), Mean (TaskType).
 		const headers = [
 			'Benchmark',
+			'Zero-shot',
 			'Rank',
 			'Total Models',
 			'Mean (Task)',
-			'Mean (TaskType)',
-			'Zero-shot'
+			'Mean (TaskType)'
 		];
 		const pct = (v: number | null | undefined) => (v == null ? null : (v * 100).toFixed(2));
 		const rows: CsvCell[][] = rawRows.map((s) => [
 			s.benchmarkName,
+			s.zeroShotPct === -1 ? 'NA' : s.zeroShotPct,
 			s.rank,
 			s.totalModels,
 			pct(s.meanTask),
-			pct(s.meanTaskType),
-			s.zeroShotPct === -1 ? 'NA' : s.zeroShotPct
+			pct(s.meanTaskType)
 		]);
 		return { headers, rows };
 	}

@@ -21,7 +21,7 @@
 		modalities: string[];
 		description: string;
 		benchmarks: string[];
-		numModels: number;
+		mainScore: string;
 	}
 
 	// Curated order — matches the `.type-pill[data-stype=…]` palette below.
@@ -71,7 +71,7 @@
 							: []),
 					description: m.description ?? '',
 					benchmarks: occurrences.get(m.name) ?? [],
-					numModels: m.numModels ?? 0
+					mainScore: m.mainScore ?? ''
 				}));
 				entries.sort((a, b) => a.name.localeCompare(b.name));
 				ALL_TASKS = entries;
@@ -102,7 +102,7 @@
 		{ id: 'type', label: 'Type' },
 		{ id: 'benchmarks', label: 'Benchmark count' },
 		{ id: 'languages', label: 'Language count' },
-		{ id: 'models', label: 'Models evaluated' }
+		{ id: 'metric', label: 'Main metric' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];
 	type SortDir = 'asc' | 'desc';
@@ -111,7 +111,7 @@
 		type: 'asc',
 		benchmarks: 'desc',
 		languages: 'desc',
-		models: 'desc'
+		metric: 'asc'
 	};
 
 	let query = $state('');
@@ -242,8 +242,8 @@
 				cmp = a.benchmarks.length - b.benchmarks.length;
 			} else if (sort === 'languages') {
 				cmp = a.languages.length - b.languages.length;
-			} else if (sort === 'models') {
-				cmp = a.numModels - b.numModels;
+			} else if (sort === 'metric') {
+				cmp = a.mainScore.localeCompare(b.mainScore);
 			} else {
 				cmp = 0;
 			}
@@ -382,8 +382,8 @@
 									<dd>{t.domains.length}</dd>
 								</div>
 								<div>
-									<dt>Models evaluated</dt>
-									<dd>{t.numModels}</dd>
+									<dt>Main metric</dt>
+									<dd class="metric">{t.mainScore || '—'}</dd>
 								</div>
 							</dl>
 							{#if t.modalities.length > 0}
@@ -747,6 +747,17 @@
 		font-size: 14px;
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
+	}
+	/* Main-metric values like `ndcg_at_10` or `cosine_spearman` are long and
+	   non-numeric — render them in mono at a smaller size so they fit the
+	   stat cell without wrapping. */
+	.stats dd.metric {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		color: var(--ink-strong);
+		overflow-wrap: anywhere;
 	}
 	.badges {
 		display: flex;

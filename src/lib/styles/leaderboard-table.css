@@ -293,23 +293,10 @@
 	font-weight: 600;
 }
 
-/* Model-type cluster — the small lucide glyph beside the model name on
-   every model-row table (SummaryTable, ModelScoreTable, PerTaskTab,
-   PerLanguageTab). Icon + name share the same --tint-*-fg per model
-   type so the pair reads as one coloured cluster; the org prefix and
-   slash stay muted so the model name is the visual anchor. The host
-   `<td class="tbl-sticky-col">` carries `data-model-type={…}` and the
-   per-type rules below paint via descendant selectors. */
-.type-icon {
-	display: inline-flex;
-	align-items: center;
-	flex-shrink: 0;
-	margin-right: 6px;
-	color: var(--text-subtle);
-	vertical-align: -2px;
-}
-/* Per-type tint as a single custom property on the host cell — the icon +
-   model name pick it up through one shared paint rule below. */
+/* Per-type tint as a single custom property on the host cell. The model
+   name in the row cell picks it up via the shared paint rule below, and
+   HoverPortal / ModelHoverPortal use the same property for their title
+   + Type-row value. */
 [data-model-type='dense'] {
 	--type-tint: var(--tint-blue-fg);
 }
@@ -325,7 +312,6 @@
 [data-model-type='router'] {
 	--type-tint: var(--tint-purple-fg);
 }
-[data-model-type] .type-icon,
 [data-model-type] .tbl-model-name {
 	color: var(--type-tint, inherit);
 }

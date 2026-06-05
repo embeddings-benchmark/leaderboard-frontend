@@ -90,6 +90,7 @@
 	import PinButton from './PinButton.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 	import HoverPortal from './HoverPortal.svelte';
+	import InfoDot from './InfoDot.svelte';
 	import MarkdownText from './MarkdownText.svelte';
 
 	interface Props {
@@ -456,6 +457,7 @@
 						aria-sort={sort.aria('rank')}
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('rank')}>
+							<InfoDot ariaLabel="What is {INFO.rank.title}?" />
 							<span>Rank</span>
 							<span class="ind" class:on={sort.key === 'rank'}>{sort.icon('rank')}</span>
 						</button>
@@ -471,6 +473,7 @@
 						onfocusout={hideTip}
 					>
 						<button class="sort-btn" onclick={() => sort.click('model')}>
+							<InfoDot ariaLabel="What is {INFO.model.title}?" />
 							<span>Model</span>
 							<span class="ind" class:on={sort.key === 'model'}>{sort.icon('model')}</span>
 						</button>
@@ -486,6 +489,7 @@
 						aria-sort={sort.aria('totalParams')}
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('totalParams')}>
+							<InfoDot ariaLabel="What is {INFO.totalParams.title}?" />
 							<span>Total Params</span>
 							<span class="ind" class:on={sort.key === 'totalParams'}
 								>{sort.icon('totalParams')}</span
@@ -503,6 +507,7 @@
 						aria-sort={sort.aria('zeroShot')}
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
+							<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
 							<span>Zero-shot</span>
 							<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
 						</button>
@@ -519,6 +524,7 @@
 							aria-sort={sort.aria('meanTask')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTask')}>
+								<InfoDot ariaLabel="What is {INFO.meanTask.title}?" />
 								<span>Mean (Task)</span>
 								<span class="ind" class:on={sort.key === 'meanTask'}>{sort.icon('meanTask')}</span>
 							</button>
@@ -536,6 +542,7 @@
 							aria-sort={sort.aria('meanTaskType')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTaskType')}>
+								<InfoDot ariaLabel="What is {INFO.meanTaskType.title}?" />
 								<span>Mean (TaskType)</span>
 								<span class="ind" class:on={sort.key === 'meanTaskType'}
 									>{sort.icon('meanTaskType')}</span
@@ -555,6 +562,7 @@
 							aria-sort={sort.aria('meanPublic')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPublic')}>
+								<InfoDot ariaLabel="What is {INFO.meanPublic.title}?" />
 								<span>Mean (Public)</span>
 								<span class="ind" class:on={sort.key === 'meanPublic'}
 									>{sort.icon('meanPublic')}</span
@@ -572,6 +580,7 @@
 							aria-sort={sort.aria('meanPrivate')}
 						>
 							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPrivate')}>
+								<InfoDot ariaLabel="What is {INFO.meanPrivate.title}?" />
 								<span>Mean (Private)</span>
 								<span class="ind" class:on={sort.key === 'meanPrivate'}
 									>{sort.icon('meanPrivate')}</span
@@ -594,6 +603,7 @@
 								onfocusout={desc ? hideTip : undefined}
 							>
 								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
+									{#if desc}<InfoDot ariaLabel="What is {humanizeType(tt)}?" />{/if}
 									<span>{humanizeType(tt)}</span>
 									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
 								</button>

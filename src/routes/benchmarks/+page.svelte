@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { loadBenchmarkMenu } from '$lib/data/service';
-	import { flattenMenu, type Benchmark, type MenuEntry } from '$lib/types';
-	import { env } from '$env/dynamic/public';
+	import { loadBenchmarks } from '$lib/data/service';
+	import type { Benchmark } from '$lib/types';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
@@ -13,10 +12,7 @@
 	import { humanizeType } from '$lib/format';
 	import { getParam, updateUrl } from '$lib/url-state';
 
-	const API = env.PUBLIC_API_URL?.trim() ?? '';
-
 	let allBenchmarks = $state<Benchmark[]>([]);
-	const menuNames = new SvelteSet<string>();
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let query = $state(getParam('q') ?? '');
@@ -61,18 +57,6 @@
 		});
 	});
 
-	function fillFromMenu(entries: MenuEntry[]) {
-		menuNames.clear();
-		for (const b of flattenMenu(entries)) menuNames.add(b.name);
-	}
-
-	async function loadAll(): Promise<Benchmark[]> {
-		if (!API) return [];
-		// include_hidden surfaces benchmarks with display_on_leaderboard=False.
-		const res = await fetch(`${API}/benchmarks?include_hidden=true`);
-		if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-		return (await res.json()) as Benchmark[];
-	}
 
 	// Filter sets are seeded with every value so the default state is
 	// "everything on"; `filteredAll` treats `size === ALL.length` as filter-off
@@ -126,10 +110,9 @@
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 
 	$effect(() => {
-		Promise.all([loadAll(), loadBenchmarkMenu()])
-			.then(([list, menu]) => {
+		loadBenchmarks(true)
+			.then((list) => {
 				allBenchmarks = list.sort((a, b) => a.displayName.localeCompare(b.displayName));
-				fillFromMenu(menu);
 				// Single pass over the catalog to fill all 3 facet sets, instead of
 				// three separate flatMap+Set traversals. Plain Set is correct
 				// here — used as a local accumulator, never read reactively.
@@ -197,11 +180,15 @@
 			return dir * c;
 		};
 		// Single pass: partition into featured / other while filtering.
+		// "Featured" = `displayOnLeaderboard !== false` (the curated menu
+		// set the backend returns when `include_hidden=true` flips the
+		// flag for off-menu entries) — saves a second `/menu` round-trip
+		// since this info is already on every Benchmark.
 		const featured: Benchmark[] = [];
 		const other: Benchmark[] = [];
 		for (const b of allBenchmarks) {
 			if (!matches(b)) continue;
-			if (menuNames.has(b.name)) featured.push(b);
+			if (b.displayOnLeaderboard !== false) featured.push(b);
 			else other.push(b);
 		}
 		featured.sort(cmp);

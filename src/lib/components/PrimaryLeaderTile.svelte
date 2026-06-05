@@ -5,7 +5,7 @@
 
 	import { resolve } from '$app/paths';
 	import type { Benchmark, BenchmarkLeaders } from '$lib/types';
-	import ModelTypeIcon from './ModelTypeIcon.svelte';
+	import { splitModelName } from '$lib/format';
 
 	type TintKey = 'multilingual' | 'retrieval' | 'english';
 
@@ -30,10 +30,12 @@
 		if (max == null) return `>${fmtParams(min)}`;
 		return `${fmtParams(min)}–${fmtParams(max)}`;
 	}
-	function fmtScore(v: number | null | undefined): string {
-		if (v == null) return '—';
-		return (v * 100).toFixed(1);
-	}
+	// Loader returns buckets ascending by size (smallest → biggest). Reverse
+	// so the largest-model bucket sits at the top — matches the convention
+	// of "best/biggest first" rankings.
+	let orderedBuckets = $derived(
+		leaders && leaders !== 'loading' && leaders !== 'error' ? [...leaders.buckets].reverse() : []
+	);
 </script>
 
 <article class="prim" data-key={tintKey}>
@@ -49,26 +51,17 @@
 		<div class="prim-state">Loading…</div>
 	{:else if leaders === 'error'}
 		<div class="prim-state error">Couldn't load.</div>
-	{:else if leaders.buckets.every((bk) => !bk.leader)}
+	{:else if orderedBuckets.every((bk) => !bk.leader)}
 		<div class="prim-state">No size-bucketed data yet.</div>
 	{:else}
+		<div class="prim-list-head">Top models</div>
 		<ul class="prim-buckets">
-			{#each leaders.buckets as bk (`${bk.min}-${bk.max ?? 'inf'}`)}
+			{#each orderedBuckets as bk (`${bk.min}-${bk.max ?? 'inf'}`)}
 				{@const r = bk.leader}
 				{#if r}
 					<li class="bucket">
 						<span class="bk-chip">{bucketLabel(bk.min, bk.max)}</span>
-						<span class="bk-model" data-model-type={r.model.modelType}>
-							<span class="bk-icon">
-								<ModelTypeIcon type={r.model.modelType} size={11} />
-							</span>
-							<span class="bk-name">
-								<span class="bk-org">{r.model.org}</span>/<span class="bk-display"
-									>{r.model.displayName}</span
-								>
-							</span>
-						</span>
-						<span class="bk-score">{fmtScore(r.meanTask)}</span>
+						<span class="bk-name">{splitModelName(r.model.name).displayName}</span>
 					</li>
 				{/if}
 			{/each}
@@ -167,6 +160,14 @@
 	.prim-state.error {
 		color: var(--tint-orange-fg, #c0432e);
 	}
+	.prim-list-head {
+		font-size: 10px;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+		margin: 4px 0 2px;
+	}
 	.prim-buckets {
 		list-style: none;
 		margin: 0;
@@ -177,7 +178,7 @@
 	}
 	.bucket {
 		display: grid;
-		grid-template-columns: 80px 1fr auto;
+		grid-template-columns: 80px 1fr;
 		align-items: center;
 		gap: 10px;
 		padding: 7px 4px;
@@ -187,7 +188,11 @@
 		border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 	}
 	.bk-chip {
-		justify-self: start;
+		/* Stretch to the grid cell + center text so every bucket chip
+		   reads at the same width regardless of its label
+		   (`<500M` vs `500M–1B` etc.). */
+		justify-self: stretch;
+		text-align: center;
 		padding: 3px 8px;
 		font-size: 11px;
 		font-weight: 700;
@@ -199,39 +204,12 @@
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 	}
-	.bk-model {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		min-width: 0;
-	}
-	.bk-icon {
-		display: inline-flex;
-		width: 16px;
-		height: 16px;
-		align-items: center;
-		justify-content: center;
-		border-radius: 4px;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		flex-shrink: 0;
-	}
 	.bk-name {
+		font-weight: 600;
+		color: var(--text);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		min-width: 0;
-	}
-	.bk-org {
-		color: var(--text-muted);
-	}
-	.bk-display {
-		font-weight: 600;
-		color: var(--text);
-	}
-	.bk-score {
-		font-weight: 700;
-		color: var(--tint-fg);
-		font-variant-numeric: tabular-nums;
 	}
 </style>

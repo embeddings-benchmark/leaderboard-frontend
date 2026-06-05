@@ -1251,14 +1251,16 @@
 		align-items: center;
 		gap: 6px;
 	}
+	/* Bold-only winner styling — was using the per-model `--c` colour
+	   which defaulted to a pink/red hue on the first column and read
+	   as "bad". The bold weight alone reads as "best" without colour
+	   carrying any value judgement. */
 	.metric-val.winner {
-		color: var(--c);
 		font-weight: 800;
-		background: color-mix(in srgb, var(--c) 8%, transparent);
 	}
 	.trophy {
 		font-size: 11px;
-		color: var(--c);
+		color: var(--text-subtle);
 	}
 	.section-head {
 		background: var(--surface-muted);
@@ -1308,9 +1310,12 @@
 		font-size: 11px;
 		font-weight: 700;
 	}
+	/* Best-rank pill: neutral surface + bold ink — same rationale as
+	   `.metric-val.winner` above. */
 	.bench-cell .rank-pill.best {
-		background: color-mix(in srgb, var(--c) 15%, white);
-		color: var(--c);
+		background: var(--surface);
+		color: var(--ink-strong);
+		font-weight: 800;
 	}
 
 	.radar-card {

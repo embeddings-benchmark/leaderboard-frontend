@@ -2,6 +2,7 @@ import { env } from '$env/dynamic/public';
 import type {
 	Benchmark,
 	BenchmarkLeaders,
+	BenchmarkPerLanguage,
 	BenchmarkSummary,
 	MenuEntry,
 	ModelFilters,
@@ -152,6 +153,20 @@ export async function loadBenchmarkMenu(): Promise<MenuEntry[]> {
 	return cachedHttp<MenuEntry[]>('/benchmarks/menu');
 }
 
+/** Flat list of every benchmark. `includeHidden=true` also returns
+ *  off-menu benchmarks (`display_on_leaderboard=False`) so the
+ *  /benchmarks catalogue can render them with the "newer version
+ *  available" hint. */
+export async function loadBenchmarks(includeHidden = false): Promise<Benchmark[]> {
+	if (!API) {
+		if (!USE_MOCK) throw noApiError('loadBenchmarks');
+		const { BENCHMARK_INDEX } = await loadMockBenchmarks();
+		return Object.values(BENCHMARK_INDEX);
+	}
+	const qs = includeHidden ? '?include_hidden=true' : '';
+	return cachedHttp<Benchmark[]>(`/benchmarks${qs}`);
+}
+
 export async function loadBenchmark(name: string): Promise<Benchmark> {
 	if (!API) {
 		if (!USE_MOCK) throw noApiError('loadBenchmark');
@@ -174,6 +189,22 @@ export async function loadSummary(benchmarkName: string): Promise<BenchmarkSumma
 	// deprecated alias for one frontend deploy window.
 	return enrichSummary(
 		await cachedHttp<BenchmarkSummary>(`/benchmarks/${encodeURIComponent(benchmarkName)}/scores`)
+	);
+}
+
+/**
+ * Per-(model, language) mean main_score for a benchmark. Lazy-loaded by
+ * PerLanguageTab — replaces the synthetic placeholder formula. Returns
+ * an empty rows list when the backend has no per-language data (e.g.
+ * a benchmark with no `language` column in its long frame).
+ */
+export async function loadPerLanguage(benchmarkName: string): Promise<BenchmarkPerLanguage> {
+	if (!API) {
+		if (!USE_MOCK) throw noApiError('loadPerLanguage');
+		return { benchmarkName, rows: [] };
+	}
+	return cachedHttp<BenchmarkPerLanguage>(
+		`/benchmarks/${encodeURIComponent(benchmarkName)}/per-language`
 	);
 }
 
@@ -213,8 +244,6 @@ export async function loadLeaders(
 								rank: top.rank,
 								model: {
 									name: top.model.name,
-									displayName: top.model.displayName,
-									org: top.model.org,
 									modelType: top.model.modelType
 								},
 								meanTask: top.meanTask,

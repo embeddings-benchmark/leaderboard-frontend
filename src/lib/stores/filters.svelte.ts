@@ -93,6 +93,10 @@ function createFilters() {
 		if (!summary) return;
 
 		// Local accumulators — not held by $state, so plain Set is correct.
+		// Languages come from `tasksMeta[i].languages` which the backend
+		// emits in benchmark-scoped form via `scoped_task_meta_schema`
+		// (so a task pinned to `languages=['eng']` doesn't leak its full
+		// class-level union into the per-benchmark filter sidebar).
 		/* eslint-disable svelte/prefer-svelte-reactivity */
 		const domains = new Set<string>();
 		const modalities = new Set<string>();

@@ -105,10 +105,15 @@
 		};
 	});
 
-	// Real per-hf_subset scores come straight from /tasks/{name}/scores. For
-	// single-subset tasks (most retrieval benchmarks) the list is just one
-	// column — we don't try to fabricate extra ones.
-	let subsets = $derived<string[]>(scoresPayload?.subsets ?? []);
+	// Real per-hf_subset scores come straight from /tasks/{name}/scores.
+	// For single-subset tasks (most retrieval benchmarks) the per-subset
+	// breakdown adds nothing — the Mean column already shows the value.
+	// Drop the subset list when there's only one (regardless of whether
+	// it's the literal `default` name or some other singleton) so the
+	// table renders without the redundant subset column.
+	let subsets = $derived<string[]>(
+		(scoresPayload?.subsets ?? []).length > 1 ? (scoresPayload?.subsets ?? []) : []
+	);
 
 	let scores = $derived.by<ModelScore[]>(() => {
 		if (!scoresPayload) return [];
@@ -267,6 +272,12 @@
 					{/each}
 				</div>
 				<dl class="spec-list">
+					{#if task.meta.mainScore}
+						<div class="row">
+							<dt>Main metric</dt>
+							<dd><code>{task.meta.mainScore}</code></dd>
+						</div>
+					{/if}
 					<div class="row">
 						<dt>Reference paper</dt>
 						<dd>

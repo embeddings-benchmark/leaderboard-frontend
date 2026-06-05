@@ -40,17 +40,22 @@
 		return base && p.startsWith(base) ? p.slice(base.length) || '/' : p;
 	});
 
-	// "Benchmarks" matches `/`, `/benchmark/...` (detail), and `/benchmarks`
-	// (the all-list page). The other tabs have their own nav entries.
-	function isBenchmarkRoute(p: string) {
+	// `/` (home) and `/benchmarks` (all-list) are now separate top-nav
+	// entries. `/benchmark/{name}` (the per-benchmark detail page) is owned
+	// by Benchmarks so the detail view doesn't sit "outside" any nav tab.
+	function isHomeRoute(p: string) {
 		const trimmed = p.replace(/\/$/, '') || '/';
-		if (trimmed === '/') return true;
+		return trimmed === '/';
+	}
+	function isBenchmarksRoute(p: string) {
+		const trimmed = p.replace(/\/$/, '') || '/';
 		if (trimmed === '/benchmarks' || trimmed.startsWith('/benchmarks/')) return true;
 		if (trimmed === '/benchmark' || trimmed.startsWith('/benchmark/')) return true;
 		return false;
 	}
 	const NAV = [
-		{ label: 'Benchmarks', href: resolve('/'), match: isBenchmarkRoute },
+		{ label: 'Home', href: resolve('/'), match: isHomeRoute },
+		{ label: 'Benchmarks', href: resolve('/benchmarks'), match: isBenchmarksRoute },
 		{ label: 'Models', href: resolve('/models'), match: (p: string) => p.startsWith('/models') },
 		{ label: 'Tasks', href: resolve('/tasks'), match: (p: string) => p.startsWith('/tasks') },
 		{ label: 'Compare', href: resolve('/compare'), match: (p: string) => p.startsWith('/compare') }

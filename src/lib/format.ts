@@ -117,6 +117,19 @@ export function ariaSort<K extends string>(
  * ``null``/``undefined`` becomes ``"—"`` so cells with missing data
  * render as a clear placeholder instead of ``"NaN"``.
  */
+/**
+ * Split a canonical ``org/name`` HuggingFace identifier into its two
+ * segments. The API never ships ``org`` / ``displayName`` separately on
+ * lightweight payloads (e.g. `LeaderModel`) — consumers derive them
+ * here so the wire stays tight. Returns ``{ org: '', displayName: name }``
+ * when no slash is present.
+ */
+export function splitModelName(name: string): { org: string; displayName: string } {
+	const i = name.indexOf('/');
+	if (i < 0) return { org: '', displayName: name };
+	return { org: name.slice(0, i), displayName: name.slice(i + 1) };
+}
+
 export function fmtPct(score: number | null | undefined): string {
 	if (score == null) return '—';
 	return (score * 100).toFixed(2);

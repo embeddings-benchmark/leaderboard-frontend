@@ -13,6 +13,7 @@
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 	import SortHeader from './SortHeader.svelte';
 	import PinButton from './PinButton.svelte';
+	import InfoDot from './InfoDot.svelte';
 
 	type Tip = {
 		showFor: (t: HTMLElement, row: SummaryRow) => void;
@@ -97,6 +98,7 @@
 		visible: boolean;
 		title: string;
 		type: string;
+		mainScore: string;
 		description: string;
 		x: number;
 		y: number;
@@ -105,6 +107,7 @@
 		visible: false,
 		title: '',
 		type: '',
+		mainScore: '',
 		description: '',
 		x: 0,
 		y: 0
@@ -151,6 +154,7 @@
 			visible: true,
 			title: taskName,
 			type: meta?.type ? humanizeType(meta.type) : '',
+			mainScore: meta?.mainScore ?? '',
 			description: meta?.description ?? '',
 			x: clampTaskTipX(r.left + r.width / 2),
 			y: r.bottom
@@ -303,7 +307,11 @@
 								onfocusin={(e) => showTaskTip(e, task)}
 								onfocusout={hideTaskTip}
 							>
-								<SortHeader {sort} field={k} label={task} ellipsis />
+								<SortHeader {sort} field={k} label={task} ellipsis>
+									{#snippet info()}
+										<InfoDot ariaLabel="What is {task}?" />
+									{/snippet}
+								</SortHeader>
 							</th>
 						{/each}
 					</tr>
@@ -380,6 +388,11 @@
 				{taskTip.title}
 			</a>
 			{#if taskTip.type}<span class="task-tip-type">{taskTip.type}</span>{/if}
+			{#if taskTip.mainScore}
+				<span class="task-tip-metric">
+					Metric: <code>{taskTip.mainScore}</code>
+				</span>
+			{/if}
 			{#if taskTip.description}
 				<span class="task-tip-body"><MarkdownText text={taskTip.description} /></span>
 			{:else}
@@ -484,6 +497,19 @@
 		text-transform: uppercase;
 		color: var(--primary);
 		margin-bottom: 6px;
+	}
+	.task-tip-metric {
+		display: block;
+		font-size: 11px;
+		color: var(--tip-label);
+		margin-bottom: 6px;
+	}
+	.task-tip-metric code {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--tip-fg);
+		background: none;
+		padding: 0;
 	}
 	.task-tip-body {
 		display: block;

@@ -65,8 +65,11 @@ export interface TaskMeta {
 	annotationsCreators?: string | null;
 	dialect?: string[] | null;
 	sampleCreation?: string | null;
-	// Count of distinct models that have at least one score on this task —
-	// surfaced on the /tasks overview cards as "Models evaluated".
+	// Primary metric the task is scored on (e.g. ``ndcg_at_10``,
+	// ``cosine_spearman``). Surfaced on the /tasks card, the task detail
+	// page, and the PerTaskTab column tooltip.
+	mainScore?: string | null;
+	// Count of distinct models that have at least one score on this task.
 	numModels?: number;
 }
 
@@ -173,14 +176,29 @@ export interface BenchmarkSummary {
 	aggregations: BenchmarkAggregation[];
 }
 
+// `/v1/benchmarks/{name}/per-language` payload — one row per model with
+// its mean main_score per language label (e.g. "English" → 0.732).
+// Loaded lazily by PerLanguageTab on mount. Keys match the language
+// labels emitted on `Benchmark.languages` / `TaskMeta.languages` so
+// joins are direct.
+export interface BenchmarkPerLanguageRow {
+	modelName: string;
+	scoresByLanguage: Record<string, number>;
+}
+export interface BenchmarkPerLanguage {
+	benchmarkName: string;
+	rows: BenchmarkPerLanguageRow[];
+}
+
 // Slim per-size-bucket response from `/benchmarks/{name}/leaders` —
 // used by the home page so we don't have to pull a full /scores
 // payload (several MB on multilingual benchmarks) just to render
 // 4 mini-leaderboard rows.
 export interface LeaderModel {
+	// Canonical `org/name` HuggingFace identifier. Consumers split on
+	// `/` (via `splitModelName` in `$lib/format`) when they need
+	// display-only segments.
 	name: string;
-	displayName: string;
-	org: string;
 	modelType: ModelType;
 }
 export interface LeaderRow {

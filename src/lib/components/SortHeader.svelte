@@ -8,6 +8,7 @@
 	// type-checked.
 
 	import type { SortState } from '$lib/stores/sort.svelte';
+	import type { Snippet } from 'svelte';
 
 	interface Props {
 		sort: SortState<K>;
@@ -18,8 +19,11 @@
 		 * PerTaskTab where task names like "AmazonReviewsClassification"
 		 * would otherwise blow the column width. */
 		ellipsis?: boolean;
+		/** Optional content rendered before the label (e.g. an InfoDot).
+		 * Sits inline at the same baseline as the column name. */
+		info?: Snippet;
 	}
-	let { sort, field, label, align = 'right', ellipsis = false }: Props = $props();
+	let { sort, field, label, align = 'right', ellipsis = false, info }: Props = $props();
 </script>
 
 <button
@@ -28,6 +32,7 @@
 	class:tbl-sort-left={align === 'left'}
 	onclick={() => sort.click(field)}
 >
+	{@render info?.()}
 	<span class:ellipsis>{label}</span>
 	<span class="tbl-sort-ind" class:on={sort.key === field}>{sort.icon(field)}</span>
 </button>

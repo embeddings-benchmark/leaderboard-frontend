@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
+	import type { BenchmarkPerLanguage, BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import { isBoundaryCross } from '$lib/cell-hover';
 	import { stickyHead } from '$lib/actions/sticky-head';
@@ -7,33 +7,33 @@
 	import { type CsvCell } from '$lib/csv';
 	import { heat as heatBase } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
+	import { loadPerLanguage } from '$lib/data/service';
 	import ModelCellName from './ModelCellName.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
 	import PinButton from './PinButton.svelte';
 	import SortHeader from './SortHeader.svelte';
 	import { onMount } from 'svelte';
 
-	// Synthetic per-language score generator is a placeholder until the
-	// backend ships real per-language data. Read `PUBLIC_USE_MOCK` via
-	// `import.meta.env` so Vite inlines it as a string literal at build
-	// time — when the flag isn't `'1'`, the `if (USE_MOCK)` block below is
-	// `if (false)` and the bundler dead-code-eliminates both the import
-	// call AND the dynamic chunk it points at. In prod the tab renders
-	// '—' for every cell (the tab is only mounted at all for benchmarks
-	// that opt in via `language_view`).
-	const USE_MOCK = (import.meta.env.PUBLIC_USE_MOCK as string | undefined) === '1';
-	let fakeLangScoreImpl = $state<
-		((row: SummaryRow, langIdx: number, firstTaskType: string) => number | null) | null
-	>(null);
+	// Real per-(model, language) scores from
+	// `/v1/benchmarks/{name}/per-language`. Lazy-fetched on tab mount so
+	// the Summary tab doesn't pay the explode + group_by cost. Until the
+	// fetch resolves the table renders `'—'` placeholders; once `data`
+	// is set the derived blocks rebuild against real scores.
+	let data = $state<BenchmarkPerLanguage | null>(null);
+	let scoresByModel = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<string, Record<string, number>>();
+		if (data) for (const r of data.rows) m.set(r.modelName, r.scoresByLanguage);
+		return m;
+	});
 	onMount(() => {
-		if (!USE_MOCK) return;
-		import('$lib/data/mockPerLanguage').then((m) => {
-			fakeLangScoreImpl = m.fakeLangScore;
+		loadPerLanguage(summary.benchmarkName).then((d) => {
+			data = d;
 		});
 	});
-	function fakeLangScore(row: SummaryRow, langIdx: number): number | null {
-		if (!fakeLangScoreImpl) return null;
-		return fakeLangScoreImpl(row, langIdx, summary.taskTypes[0] ?? '');
+	function langScore(row: SummaryRow, lang: string): number | null {
+		const v = scoresByModel.get(row.model.name)?.[lang];
+		return typeof v === 'number' ? v * 100 : null;
 	}
 
 	type Tip = {
@@ -80,8 +80,8 @@
 
 	function rowMean(row: SummaryRow): number | null {
 		const vals: number[] = [];
-		for (let i = 0; i < LANGUAGES.length; i++) {
-			const v = fakeLangScore(row, i);
+		for (const lang of LANGUAGES) {
+			const v = langScore(row, lang);
 			if (v != null) vals.push(v);
 		}
 		if (vals.length === 0) return null;
@@ -91,18 +91,18 @@
 	function extremaPerLang(): { best: Record<string, number>; worst: Record<string, number> } {
 		const best: Record<string, number> = {};
 		const worst: Record<string, number> = {};
-		LANGUAGES.forEach((lang, idx) => {
+		for (const lang of LANGUAGES) {
 			let max = -Infinity;
 			let min = Infinity;
 			for (const r of summary.rows) {
-				const v = fakeLangScore(r, idx);
+				const v = langScore(r, lang);
 				if (v == null) continue;
 				if (v > max) max = v;
 				if (v < min) min = v;
 			}
 			best[lang] = max;
 			worst[lang] = min;
-		});
+		}
 		return { best, worst };
 	}
 	let langExtrema = $derived(extremaPerLang());
@@ -133,17 +133,16 @@
 		if (sort.key) {
 			const dir = sort.dir === 'asc' ? 1 : -1;
 			const key = sort.key;
-			// Resolve the language column once instead of `LANGUAGES.indexOf`
-			// per comparison.
-			const langIdx = key.startsWith('lang:') ? LANGUAGES.indexOf(key.slice(5)) : -1;
+			// Resolve the language label once instead of slicing the key per comparison.
+			const sortLang = key.startsWith('lang:') ? key.slice(5) : '';
 			rows = [...rows].sort((a, b) => {
 				if (key === 'model') {
 					return (
 						a.model.displayName.toLowerCase().localeCompare(b.model.displayName.toLowerCase()) * dir
 					);
 				}
-				const va: number | null = key === 'mean' ? rowMean(a) : fakeLangScore(a, langIdx);
-				const vb: number | null = key === 'mean' ? rowMean(b) : fakeLangScore(b, langIdx);
+				const va: number | null = key === 'mean' ? rowMean(a) : langScore(a, sortLang);
+				const vb: number | null = key === 'mean' ? rowMean(b) : langScore(b, sortLang);
 				// Push nulls to the bottom regardless of direction.
 				if (va == null && vb == null) return 0;
 				if (va == null) return 1;
@@ -178,7 +177,7 @@
 			row.rank,
 			row.model.name,
 			round(rowMean(row)),
-			...LANGUAGES.map((_, i) => round(fakeLangScore(row, i)))
+			...LANGUAGES.map((lang) => round(langScore(row, lang)))
 		]);
 		return { headers, rows };
 	}
@@ -236,8 +235,8 @@
 						>
 							{fmt(mean)}
 						</td>
-						{#each LANGUAGES as lang, idx (lang)}
-							{@const score = fakeLangScore(row, idx)}
+						{#each LANGUAGES as lang (lang)}
+							{@const score = langScore(row, lang)}
 							<td
 								class="tbl-num {heat(score, worst[lang], best[lang])}"
 								class:tbl-best={score != null && score === best[lang]}

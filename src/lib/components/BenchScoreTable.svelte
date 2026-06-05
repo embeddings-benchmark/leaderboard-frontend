@@ -71,6 +71,9 @@
 				<th class="sticky" aria-sort={sort.aria('benchmark')}>
 					<SortHeader {sort} field="benchmark" label="Benchmark" align="left" />
 				</th>
+				<th class="tbl-num" aria-sort={sort.aria('zeroShot')}>
+					<SortHeader {sort} field="zeroShot" label="Zero-shot" />
+				</th>
 				<th class="tbl-num" aria-sort={sort.aria('rank')}>
 					<SortHeader {sort} field="rank" label="Rank" />
 				</th>
@@ -79,9 +82,6 @@
 				</th>
 				<th class="tbl-num" aria-sort={sort.aria('meanTaskType')}>
 					<SortHeader {sort} field="meanTaskType" label="Mean (TaskType)" />
-				</th>
-				<th class="tbl-num" aria-sort={sort.aria('zeroShot')}>
-					<SortHeader {sort} field="zeroShot" label="Zero-shot" />
 				</th>
 			</tr>
 		</thead>
@@ -96,6 +96,7 @@
 							{s.benchmarkDisplay}
 						</a>
 					</td>
+					<td class="tbl-num">{fmtZeroShot(s.zeroShotPct)}</td>
 					<td class="tbl-num">
 						<span class="rank-pill" class:top={s.rank === 1}>#{s.rank}</span>
 						<span class="rank-total">/ {s.totalModels}</span>
@@ -106,7 +107,6 @@
 					<td class="tbl-num {heat(s.meanTaskType, worstMeanTaskType, bestMeanTaskType)}">
 						{fmtPct(s.meanTaskType)}
 					</td>
-					<td class="tbl-num">{fmtZeroShot(s.zeroShotPct)}</td>
 				</tr>
 			{/each}
 		</tbody>

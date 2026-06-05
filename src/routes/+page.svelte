@@ -1,21 +1,15 @@
 <script lang="ts">
-	// Home page: three primary tiles (Multilingual / Retrieval /
-	// English) each showing a top-per-size-bucket ranking so smaller
-	// models also surface, a modality strip below for Image/Audio/
-	// Video, and a tabbed nested-category browser below that.
+	// Home page: three primary leader tiles (Multilingual / Retrieval /
+	// English) above four collapsible sections — Language, Modality,
+	// Retrieval, Domain — each driven by the backend's
+	// `HOME_BENCHMARK_ENTRIES` menu. Tabs are gone; the menu's flat
+	// 4-section shape now drives the layout directly.
 
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { loadBenchmarkMenu, loadLeaders } from '$lib/data/service';
-	import {
-		flattenMenu,
-		type Benchmark,
-		type BenchmarkLeaders,
-		type LeaderRow,
-		type MenuEntry
-	} from '$lib/types';
-	import CategoryTabs from '$lib/components/CategoryTabs.svelte';
-	import ModalityTile from '$lib/components/ModalityTile.svelte';
+	import { flattenMenu, type Benchmark, type BenchmarkLeaders, type MenuEntry } from '$lib/types';
+	import MenuSection from '$lib/components/MenuSection.svelte';
 	import PrimaryLeaderTile from '$lib/components/PrimaryLeaderTile.svelte';
 
 	let menu = $state<MenuEntry[]>([]);
@@ -40,20 +34,9 @@
 		{ key: 'retrieval', label: 'Retrieval', preferred: 'RTEB(beta)' },
 		{ key: 'english', label: 'General', preferred: 'MTEB(eng, v2)' }
 	];
-	type ModalityTileSpec = {
-		modality: 'image' | 'audio' | 'video';
-		label: string;
-		preferred?: string;
-		comingSoon?: boolean;
-	};
-	const MODALITY_TILES: ModalityTileSpec[] = [
-		{ modality: 'image', label: 'Image', preferred: 'MIEB(eng)' },
-		{ modality: 'audio', label: 'Audio', preferred: 'MAEB(beta)' },
-		{ modality: 'video', label: 'Video', preferred: 'MVEB(beta)' }
-	];
 
 	let flat = $derived(flattenMenu(menu));
-	 
+
 	let byName = $derived(new Map(flat.map((b) => [b.name, b])));
 	function pick(name: string): Benchmark | undefined {
 		return byName.get(name);
@@ -66,27 +49,6 @@
 		>
 	);
 
-	// TODO(new-feed): "Recently added" section above the tabs panel
-	// once the backend exposes a `createdAt` field.
-	type ResolvedModalityTile = {
-		modality: 'image' | 'audio' | 'video';
-		label: string;
-		b: Benchmark | null;
-		comingSoon: boolean;
-	};
-	let modalityTiles = $derived.by<ResolvedModalityTile[]>(() => {
-		const out: ResolvedModalityTile[] = [];
-		for (const m of MODALITY_TILES) {
-			if (m.comingSoon) {
-				out.push({ modality: m.modality, label: m.label, b: null, comingSoon: true });
-				continue;
-			}
-			const b = m.preferred ? pick(m.preferred) : undefined;
-			if (b) out.push({ modality: m.modality, label: m.label, b, comingSoon: false });
-		}
-		return out;
-	});
-
 	// Size buckets in MILLIONS of parameters (wire format expected by
 	// `/benchmarks/{name}/leaders?buckets=…`). `null` second element
 	// = open-ended top bucket. Chip labels switch units at ≥1000M.
@@ -97,17 +59,11 @@
 		[5000, null]
 	];
 
-	// Per-benchmark leaders cache. Each card loads independently;
-	// primaries fetch all size buckets, modality tiles only the
-	// overall top (single open-ended bucket).
+	// Per-benchmark leaders cache for the primary hero tiles.
 	let primaryLeaders = $state<Record<string, BenchmarkLeaders | 'loading' | 'error'>>({});
-	let modalityLeaders = $state<Record<string, LeaderRow | null | 'loading' | 'error'>>({});
 
-	// `untrack` on the cache writes so the effect doesn't re-fire on
-	// its own state mutations (same pattern as filters.svelte.ts).
 	$effect(() => {
 		const ps = primaries;
-		const ms = modalityTiles;
 		untrack(() => {
 			for (const p of ps) {
 				if (primaryLeaders[p.b.name]) continue;
@@ -120,31 +76,13 @@
 						primaryLeaders[p.b.name] = 'error';
 					});
 			}
-			for (const m of ms) {
-				const b = m.b;
-				if (!b || modalityLeaders[b.name]) continue;
-				modalityLeaders[b.name] = 'loading';
-				loadLeaders(b.name, [[0, null]])
-					.then((r) => {
-						modalityLeaders[b.name] = r.buckets[0]?.leader ?? null;
-					})
-					.catch(() => {
-						modalityLeaders[b.name] = 'error';
-					});
-			}
 		});
 	});
 
-	const TAB_ORDER = [
-		'General Purpose',
-		'Retrieval',
-		'Image',
-		'Audio',
-		'Domain-Specific',
-		'Language-specific',
-		'Other',
-		'Miscellaneous'
-	];
+	// Sections in the order the backend declares them (matches the
+	// HOME_BENCHMARK_ENTRIES order: Language → Modality → Retrieval →
+	// Domain).
+	let sections = $derived(menu);
 </script>
 
 <div class="page">
@@ -172,24 +110,11 @@
 			</div>
 		</section>
 
-		<section class="modality" aria-label="Other modalities">
-			<div class="mod-grid">
-				{#each modalityTiles as m (m.modality)}
-					<ModalityTile
-						modality={m.modality}
-						label={m.label}
-						benchmark={m.b}
-						comingSoon={m.comingSoon}
-						leader={m.b ? modalityLeaders[m.b.name] : undefined}
-					/>
-				{/each}
-			</div>
-		</section>
-
-		<!-- TODO(new-feed): mount the "Recently added" cards here once
-		     the backend exposes a `createdAt` field. -->
-
-		<CategoryTabs {menu} tabOrder={TAB_ORDER} />
+		<div class="sections">
+			{#each sections as s (s.name)}
+				<MenuSection entry={s} />
+			{/each}
+		</div>
 	{/if}
 </div>
 
@@ -243,22 +168,13 @@
 		grid-template-columns: repeat(3, 1fr);
 		gap: 14px;
 	}
-	.modality {
-		margin-bottom: 24px;
-	}
-	.mod-grid {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 12px;
+	.sections {
+		display: flex;
+		flex-direction: column;
 	}
 
 	@media (max-width: 980px) {
 		.primary-grid {
-			grid-template-columns: 1fr;
-		}
-	}
-	@media (max-width: 760px) {
-		.mod-grid {
 			grid-template-columns: 1fr;
 		}
 	}
