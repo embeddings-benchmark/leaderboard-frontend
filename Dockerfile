@@ -49,10 +49,15 @@ server {
     }
 
     location / {
-        # 404.html is the adapter-static SPA fallback (svelte.config.js
-        # `fallback: '404.html'`). Falling back to index.html instead
-        # would serve the home page for unknown URLs.
-        try_files $uri $uri/ /404.html =404;
+        # adapter-static emits prerendered routes as `<route>.html` files
+        # (e.g. /benchmark/BEIR/+page.svelte → build/benchmark/BEIR.html).
+        # Without the `.html` lookup nginx never finds them — every deep
+        # link falls through to /404.html (the SPA fallback), which has
+        # no per-route meta tags so share-card crawlers see a blank
+        # shell. Try in order: exact file, exact dir (uses its
+        # index.html), file with `.html` appended, then the SPA
+        # fallback for routes that were intentionally not prerendered.
+        try_files $uri $uri/ $uri.html /404.html =404;
     }
 }
 NGINX
