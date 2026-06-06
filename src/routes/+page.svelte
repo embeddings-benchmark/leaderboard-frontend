@@ -7,7 +7,7 @@
 
 	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { loadBenchmarkMenu, loadLeaders } from '$lib/data/service';
+	import { loadBenchmark, loadBenchmarkMenu, loadLeaders } from '$lib/data/service';
 	import { flattenMenu, type Benchmark, type BenchmarkLeaders, type MenuEntry } from '$lib/types';
 	import MenuSection from '$lib/components/MenuSection.svelte';
 	import PrimaryLeaderTile from '$lib/components/PrimaryLeaderTile.svelte';
@@ -43,11 +43,42 @@
 		return byName.get(name);
 	}
 
+	// Featured tiles are independent of the curated menu: pick from the
+	// menu when present, but if a primary benchmark was removed from the
+	// home menu we still want it on the home page, so fetch it directly.
+	// `primaryFetched` caches the per-name fallback result so the effect
+	// doesn't re-fire endlessly.
+	let primaryFetched = $state<Record<string, Benchmark | 'loading' | 'error'>>({});
+
+	$effect(() => {
+		const present = byName;
+		untrack(() => {
+			for (const p of PRIMARIES) {
+				if (present.has(p.preferred)) continue;
+				if (primaryFetched[p.preferred]) continue;
+				primaryFetched[p.preferred] = 'loading';
+				loadBenchmark(p.preferred)
+					.then((b) => {
+						primaryFetched[p.preferred] = b;
+					})
+					.catch(() => {
+						primaryFetched[p.preferred] = 'error';
+					});
+			}
+		});
+	});
+
 	// Resolve lazily so the layout still renders if a name is missing.
 	let primaries = $derived(
-		PRIMARIES.map((p) => ({ ...p, b: pick(p.preferred) })).filter((p) => !!p.b) as Array<
-			Primary & { b: Benchmark }
-		>
+		PRIMARIES.map((p) => {
+			const fromMenu = pick(p.preferred);
+			if (fromMenu) return { ...p, b: fromMenu };
+			const fallback = primaryFetched[p.preferred];
+			if (fallback && fallback !== 'loading' && fallback !== 'error') {
+				return { ...p, b: fallback };
+			}
+			return { ...p, b: undefined };
+		}).filter((p) => !!p.b) as Array<Primary & { b: Benchmark }>
 	);
 
 	// Size buckets in MILLIONS of parameters (wire format expected by

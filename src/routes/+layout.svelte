@@ -3,13 +3,27 @@
 	import '$lib/styles/leaderboard-table.css';
 	import '$lib/styles/sidebar.css';
 	import { onMount } from 'svelte';
-	import { beforeNavigate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate } from '$app/navigation';
 	import { page, updated } from '$app/state';
 	import { base, resolve } from '$app/paths';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
-	
+	import { filters } from '$lib/stores/filters.svelte';
+
 	let { children } = $props();
+
+	// Name search is a per-page find-in-table gesture, not a sticky
+	// filter — clear it on cross-page navigation so typing "octen" on
+	// /models doesn't pre-populate the same query on /benchmark/BEIR.
+	// A page that legitimately wants to restore a previous query carries
+	// it via `?q=…` and the filters store reads that param itself on
+	// mount; rebuilding from the URL keeps deep-link behaviour intact.
+	afterNavigate(({ from, to }) => {
+		if (!to) return;
+		if (from?.url?.pathname === to.url.pathname) return;
+		const urlQ = to.url.searchParams.get('q') ?? '';
+		if (filters.nameQuery !== urlQ) filters.nameQuery = urlQ;
+	});
 
 	// $app/state's `updated.current` flips to true when the poll detects a new
 	// deployed version (svelte.config.js `kit.version.pollInterval`). Force a

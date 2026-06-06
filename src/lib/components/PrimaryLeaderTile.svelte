@@ -5,7 +5,7 @@
 
 	import { resolve } from '$app/paths';
 	import type { Benchmark, BenchmarkLeaders } from '$lib/types';
-	import { splitModelName } from '$lib/format';
+	import { apiUrl, isIconUrl, splitModelName } from '$lib/format';
 
 	type TintKey = 'multilingual' | 'retrieval' | 'english';
 
@@ -44,7 +44,22 @@
 		<span class="prim-open" aria-hidden="true">Open →</span>
 	</header>
 	<a class="prim-title" href={resolve('/benchmark/[name]', { name: benchmark.name })}>
-		{benchmark.displayName}
+		{#if benchmark.icon}
+			{#if isIconUrl(benchmark.icon)}
+				<img
+					class="prim-icon"
+					src={apiUrl(benchmark.icon)}
+					alt=""
+					width="22"
+					height="22"
+					loading="lazy"
+					decoding="async"
+				/>
+			{:else}
+				<span class="prim-icon prim-icon-text" aria-hidden="true">{benchmark.icon}</span>
+			{/if}
+		{/if}
+		<span class="prim-title-text">{benchmark.displayName}</span>
 	</a>
 	<span class="prim-sub">{benchmark.numModels ?? 0} models · {benchmark.tasks.length} tasks</span>
 	{#if leaders === 'loading' || leaders === undefined}
@@ -141,6 +156,32 @@
 		text-decoration: none;
 		margin-top: 2px;
 		position: static;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.prim-icon {
+		width: 22px;
+		height: 22px;
+		flex-shrink: 0;
+		border-radius: 4px;
+		object-fit: contain;
+		background: color-mix(in srgb, var(--surface) 60%, var(--tint));
+	}
+	.prim-icon-text {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 18px;
+		line-height: 1;
+		background: transparent;
+	}
+	.prim-title-text {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.prim-title::after {
 		content: '';

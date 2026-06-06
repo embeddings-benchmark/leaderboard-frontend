@@ -484,9 +484,18 @@ export const filters = createFilters();
 
 function isFullSet(selected: Set<string>, available: string[]): boolean {
 	// "Full" = every currently-visible item is picked, so no narrowing
-	// is being applied. We deliberately do NOT treat empty as "no
-	// filter": when the user clears every chip in a category they want
-	// to see nothing match (an explicit "exclude everything" gesture).
+	// is being applied. We deliberately do NOT treat selected=empty as
+	// "no filter": when the user clears every chip in a category they
+	// want to see nothing match (an explicit "exclude everything" gesture).
+	//
+	// HOWEVER, when there's nothing to filter in the first place
+	// (`available` is empty — e.g. RTEB exposes taskTypes=[]), there are
+	// no chips, no narrowing is possible, and returning false here would
+	// flip `fullView` off and cause `applyFilters` to drop every task
+	// (the .has(...) check on the empty selected set is always false →
+	// `!fullTypes && !filters.taskTypes.has(...) → return false`). Treat
+	// "no facet" as "no narrowing" so the data passes through.
+	if (available.length === 0) return true;
 	//
 	// Why not the cheaper `selected.size === available.length` shortcut?
 	// After a server-scoped summary refetch (e.g. language filter
@@ -554,6 +563,20 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	}
 
 	const q = filters.nameQuery.trim().toLowerCase();
+	// "Did the user pick something that narrows the row set, other than
+	// typing in the name search?" — name search is a find-in-table
+	// gesture and shouldn't relabel ranks. Any of the other filters
+	// (availability / instructions / model type / size / zero-shot / …)
+	// being active means the visible set is a deliberate subset and the
+	// re-rank below should renumber 1..N.
+	const rowFilterActive =
+		filters.availability !== 'both' ||
+		filters.instructions !== 'both' ||
+		filters.sentenceTransformersOnly ||
+		filters.modelTypes.size !== MODEL_TYPES.length ||
+		filters.modelModalities.size !== MODEL_MODALITIES.length ||
+		filters.sizeActive ||
+		filters.zeroShot !== 'allow_all';
 	const rows = summary.rows
 		.filter((row) => {
 			const m = row.model;
@@ -672,17 +695,26 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			return { ...row, meanTask, meanTaskType, scoresByTaskType };
 		});
 
-	// Re-rank only when the task set actually changed. Row-only filters
-	// (name query, availability, model type, size, zero-shot, …) leave
-	// every visible model's relationship to the full task set intact,
-	// so the API's original Borda rank still applies — recomputing
-	// would relabel the top-visible row as #1 just because peers got
-	// hidden, which reads as a wrong ranking. Only when the task set
-	// narrows (`!fullView`) does the rank need a fresh Borda pass over
-	// the visible-task slice.
+	// Re-rank to match what the user is actually looking at:
+	//   • Task set narrowed (`!fullView`) → fresh Borda over the visible
+	//     task slice (a model's per-task wins against a different
+	//     opponent set produce a different total).
+	//   • Row set narrowed by a deliberate facet (model availability /
+	//     size / type / zero-shot / …) but task set intact → preserve
+	//     the API's Borda ORDER (still correct against the same task
+	//     set) and just renumber 1..N over the visible rows. Otherwise
+	//     the top-visible row keeps its original e.g. rank=12 which is
+	//     confusing when it's the only model on screen.
+	//   • Name search only (or nothing) → keep the API ranks as-is.
+	//     The name search is a find-in-table gesture, not a filter that
+	//     should re-rank the matches as if they were the universe.
 	let rankedRows: typeof rows;
 	if (fullView) {
-		rankedRows = rows;
+		if (rowFilterActive) {
+			rankedRows = rows.map((row, i) => ({ ...row, rank: i + 1 }));
+		} else {
+			rankedRows = rows;
+		}
 	} else {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const bordaPoints = new Map<string, number>();

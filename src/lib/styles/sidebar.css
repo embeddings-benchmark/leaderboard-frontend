@@ -236,6 +236,20 @@
 	border-color: var(--primary);
 	color: var(--primary-strong);
 }
+/* Per-modality tint when checked — text → teal, image → blue,
+   audio → amber, video → purple. Reads the `--modality-tint*` pair set
+   globally by `[data-modality=…]` in app.css. Pill itself carries the
+   `data-modality` attribute so the tint kicks in only on the benchmarks
+   / tasks catalog pages where modalities are facet-style filters. */
+.modality-fill[data-modality]:has(input:checked) {
+	background: var(--modality-tint);
+	border-color: color-mix(in srgb, var(--modality-tint-fg) 35%, transparent);
+	color: var(--modality-tint-fg);
+}
+.modality-fill[data-modality]:has(input:checked):hover {
+	filter: brightness(0.97);
+	background: var(--modality-tint);
+}
 
 @media (max-width: 640px) {
 	/* Mobile: in-flow at 340 px would leave the main column ~50 px wide;

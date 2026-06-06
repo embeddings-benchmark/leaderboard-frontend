@@ -13,7 +13,7 @@
 	import CopyableId from '$lib/components/CopyableId.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
-	import { apiUrl, isIconUrl } from '$lib/format';
+	import { apiUrl, isIconUrl, sortModalities } from '$lib/format';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
@@ -31,6 +31,10 @@
 	let benchmark = $derived(
 		leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null
 	);
+	// Hero accent follows the canonical modality priority
+	// (`video → audio → image → text`) — matches the BenchmarkCard tint
+	// on /benchmarks so a card and its detail page read as the same surface.
+	let accentModality = $derived(sortModalities(benchmark?.modalities)[0] ?? 'text');
 
 	type TabId = 'summary' | 'perf_size' | 'perf_time' | 'perf_task' | 'perf_language' | 'task_info';
 	// `perf_language` is filtered out below when the benchmark has no
@@ -248,7 +252,7 @@
 				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else}
-			<section class="hero card">
+			<section class="hero card" data-modality={accentModality}>
 				<div class="hero-left">
 					<div class="title-block">
 						{#if benchmark.icon}
@@ -424,6 +428,44 @@
 		gap: 28px;
 		padding: 22px 26px;
 		margin-bottom: 16px;
+		position: relative;
+		overflow: hidden;
+	}
+	/* Per-modality tint treatment mirrored from BenchmarkCard: a 3px accent
+	   stripe along the top edge + a soft tint gradient behind the title row.
+	   Modality → tint pairs are the canonical mapping (see app.css notes:
+	   text → teal, image → blue, audio → amber, video → purple). */
+	.hero[data-modality]::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: var(--card-accent, var(--border));
+	}
+	.hero[data-modality] {
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--card-tint, var(--border)) 55%, var(--surface)) 0%,
+			var(--surface) 96px
+		);
+	}
+	.hero[data-modality='text'] {
+		--card-tint: var(--tint-teal);
+		--card-accent: var(--tint-teal-fg);
+	}
+	.hero[data-modality='image'] {
+		--card-tint: var(--tint-blue);
+		--card-accent: var(--tint-blue-fg);
+	}
+	.hero[data-modality='audio'] {
+		--card-tint: var(--tint-amber);
+		--card-accent: var(--tint-amber-fg);
+	}
+	.hero[data-modality='video'] {
+		--card-tint: var(--tint-purple);
+		--card-accent: var(--tint-purple-fg);
 	}
 	@media (max-width: 1000px) {
 		.hero {

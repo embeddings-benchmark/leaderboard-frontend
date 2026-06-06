@@ -350,7 +350,7 @@
 					</div>
 					<div class="pills">
 						{#each MODALITIES as m (m)}
-							<label class="pill modality-fill">
+							<label class="pill modality-fill" data-modality={m}>
 								<input
 									type="checkbox"
 									checked={modalityFilter.has(m)}
