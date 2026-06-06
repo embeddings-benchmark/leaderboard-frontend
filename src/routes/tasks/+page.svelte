@@ -10,7 +10,6 @@
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
-	import { humanizeType } from '$lib/format';
 
 	interface TaskEntry {
 		name: string;
@@ -35,7 +34,6 @@
 
 	let ALL_TASKS = $state<TaskEntry[]>([]);
 	let SIMPLIFIED_PRESENT = $state<string[]>([]);
-	let FULL_TYPES_PRESENT = $state<string[]>([]);
 	let MODALITIES = $state<string[]>([]);
 	let DOMAINS = $state<string[]>([]);
 	let LANGUAGES = $state<string[]>([]);
@@ -84,11 +82,9 @@
 				];
 
 				MODALITIES = Array.from(new Set(entries.flatMap((t) => t.modalities))).sort();
-				FULL_TYPES_PRESENT = Array.from(new Set(entries.map((t) => t.type).filter(Boolean))).sort();
 				DOMAINS = Array.from(new Set(entries.flatMap((t) => t.domains))).sort();
 				LANGUAGES = Array.from(new Set(entries.flatMap((t) => t.languages))).sort();
 				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
-				for (const v of FULL_TYPES_PRESENT) fullTypeFilter.add(v);
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
 				for (const v of LANGUAGES) languageFilter.add(v);
@@ -119,7 +115,6 @@
 
 	let query = $state('');
 	const typeFilter = new SvelteSet<string>();
-	const fullTypeFilter = new SvelteSet<string>();
 	const modalityFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 	const languageFilter = new SvelteSet<string>();
@@ -143,10 +138,6 @@
 		if (typeFilter.has(t)) typeFilter.delete(t);
 		else typeFilter.add(t);
 	}
-	function toggleFullType(t: string) {
-		if (fullTypeFilter.has(t)) fullTypeFilter.delete(t);
-		else fullTypeFilter.add(t);
-	}
 	function toggleModality(m: string) {
 		if (modalityFilter.has(m)) modalityFilter.delete(m);
 		else modalityFilter.add(m);
@@ -163,10 +154,6 @@
 		if (typeFilter.size === SIMPLIFIED_PRESENT.length) typeFilter.clear();
 		else for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
 	}
-	function toggleAllFullTypes() {
-		if (fullTypeFilter.size === FULL_TYPES_PRESENT.length) fullTypeFilter.clear();
-		else for (const v of FULL_TYPES_PRESENT) fullTypeFilter.add(v);
-	}
 	function toggleAllDomains() {
 		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
 		else for (const v of DOMAINS) domainFilter.add(v);
@@ -180,7 +167,6 @@
 		else for (const v of LANGUAGES) languageFilter.add(v);
 	}
 	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
-	let allFullTypes = $derived(fullTypeFilter.size === FULL_TYPES_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
@@ -211,17 +197,6 @@
 			: filteredLanguages.slice(0, LANGUAGE_CAP)
 	);
 
-	let fullTypeQuery = $state('');
-	let visibleFullTypes = $derived.by(() => {
-		const q = fullTypeQuery.trim().toLowerCase();
-		if (!q) return FULL_TYPES_PRESENT;
-		// Match the raw CamelCase id and the humanised form so "BitextMining"
-		// and "bitext" both hit.
-		return FULL_TYPES_PRESENT.filter(
-			(t) => t.toLowerCase().includes(q) || humanizeType(t).toLowerCase().includes(q)
-		);
-	});
-
 	const SIMPLIFIED_RANK: Record<string, number> = Object.fromEntries(
 		SIMPLIFIED_TYPES.map((t, i) => [t, i])
 	);
@@ -239,14 +214,12 @@
 		// check. Empty = the user cleared the category deliberately, so
 		// nothing matches.
 		const typeOff = typeFilter.size === SIMPLIFIED_PRESENT.length;
-		const fullTypeOff = fullTypeFilter.size === FULL_TYPES_PRESENT.length;
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
 		const languageOff = languageFilter.size === LANGUAGES.length;
 		return ALL_TASKS.filter((t) => {
 			if (q && !t.name.toLowerCase().includes(q)) return false;
 			if (!typeOff && !typeFilter.has(t.simplifiedType)) return false;
-			if (!fullTypeOff && !fullTypeFilter.has(t.type)) return false;
 			if (!modalityOff && !(t.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
 			if (!domainOff && !(t.domains ?? []).some((d) => domainFilter.has(d))) return false;
 			if (!languageOff && !(t.languages ?? []).some((l) => languageFilter.has(l))) return false;
@@ -461,36 +434,6 @@
 								<span>{m}</span>
 							</label>
 						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Task type</span>
-						<button type="button" class="link-btn" onclick={toggleAllFullTypes}>
-							{allFullTypes ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="type-search"
-						placeholder="Search task types…"
-						bind:value={fullTypeQuery}
-					/>
-					<div class="pills scroll scroll-thin">
-						{#each visibleFullTypes as t (t)}
-							<label class="pill type-fill" data-type={t}>
-								<input
-									type="checkbox"
-									checked={fullTypeFilter.has(t)}
-									onchange={() => toggleFullType(t)}
-								/>
-								<span>{humanizeType(t)}</span>
-							</label>
-						{/each}
-						{#if visibleFullTypes.length === 0}
-							<p class="muted no-match">No task types match.</p>
-						{/if}
 					</div>
 				</div>
 

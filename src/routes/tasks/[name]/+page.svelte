@@ -244,10 +244,16 @@
 			<a class="back" href={resolve('/tasks')}>← All tasks</a>
 		</section>
 	{:else}
-		<section class="hero card" data-type={task.meta.type}>
+		<section class="hero card" data-stype={task.meta.simplifiedType}>
 			<div class="hero-left">
 				<div class="kicker">
-					<span class="type-badge" data-type={task.meta.type}>{task.meta.type}</span>
+					<!-- Hero badge mirrors the task-group chip on the index card:
+					     simplified type name (e.g. "retrieval") with the matching
+					     per-group tint. The raw `type` value lives in the
+					     spec-list row below. -->
+					<span class="type-badge" data-stype={task.meta.simplifiedType}>
+						{task.meta.simplifiedType || task.meta.type}
+					</span>
 					{#each sortModalities(task.meta.modalities) as m (m)}
 						<span class="badge modality-tint" data-modality={m} title={m}>
 							<ModalityIcon modality={m} size={12} />
@@ -282,6 +288,12 @@
 					{/each}
 				</div>
 				<dl class="spec-list">
+					{#if task.meta.type}
+						<div class="row">
+							<dt>Task type</dt>
+							<dd>{task.meta.type}</dd>
+						</div>
+					{/if}
 					{#if task.meta.mainScore}
 						<div class="row">
 							<dt>Main metric</dt>
@@ -505,45 +517,46 @@
 		background: var(--accent, var(--border));
 	}
 	/* Hero gradient pulls its tint from the shared --tint-* palette so the
-	   dark-mode variants drop in automatically — no more white→dark wash. */
-	.hero[data-type='Classification'] {
+	   dark-mode variants drop in automatically — no more white→dark wash.
+	   Keyed off `data-stype` (the simplified task group) to match the
+	   group-chip / type-badge mapping. */
+	.hero[data-stype='classification'] {
 		--accent: var(--tint-blue-fg);
 		--hero-tint: var(--tint-blue);
 	}
-	.hero[data-type='Clustering'] {
+	.hero[data-stype='clustering'] {
 		--accent: var(--tint-orange-fg);
 		--hero-tint: var(--tint-orange);
 	}
-	.hero[data-type='PairClassification'],
-	.hero[data-type='MultilabelClassification'] {
+	.hero[data-stype='pair-classification'] {
 		--accent: var(--tint-green-fg);
 		--hero-tint: var(--tint-green);
 	}
-	.hero[data-type='Reranking'] {
+	.hero[data-stype='reranking'] {
 		--accent: var(--tint-amber-fg);
 		--hero-tint: var(--tint-amber);
 	}
-	.hero[data-type='Retrieval'] {
+	.hero[data-stype='retrieval'] {
 		--accent: var(--tint-purple-fg);
 		--hero-tint: var(--tint-purple);
 	}
-	.hero[data-type='STS'] {
+	.hero[data-stype='semantic-similarity'] {
 		--accent: var(--tint-pink-fg);
 		--hero-tint: var(--tint-pink);
 	}
-	.hero[data-type='BitextMining'] {
+	.hero[data-stype='bitext-mining'] {
 		--accent: var(--tint-azure-fg);
 		--hero-tint: var(--tint-azure);
 	}
-	.hero[data-type='InstructionReranking'] {
+	.hero[data-stype='instruction-reranking'] {
 		--accent: var(--tint-orange-fg);
 		--hero-tint: var(--tint-orange);
 	}
-	.hero[data-type='Summarization'] {
+	.hero[data-stype='summarization'] {
 		--accent: var(--tint-teal-fg);
 		--hero-tint: var(--tint-teal);
 	}
-	.hero[data-type] {
+	.hero[data-stype] {
 		background: linear-gradient(
 			180deg,
 			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
@@ -596,41 +609,45 @@
 		font-weight: 700;
 		padding: 4px 10px;
 		border-radius: 999px;
+		/* `currentColor` is the per-stype foreground tint set below, so
+		   one rule covers every variant — no need to repeat per-stype. */
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
 	}
-	.type-badge[data-type='Classification'] {
+	/* Per-task-group tints, matching the TaskCard `.group-chip` mapping
+	   and the parent card's `data-stype` accent. */
+	.type-badge[data-stype='classification'] {
 		background: var(--tint-blue);
 		color: var(--tint-blue-fg);
 	}
-	.type-badge[data-type='Clustering'] {
+	.type-badge[data-stype='clustering'] {
 		background: var(--tint-orange);
 		color: var(--tint-orange-fg);
 	}
-	.type-badge[data-type='PairClassification'],
-	.type-badge[data-type='MultilabelClassification'] {
+	.type-badge[data-stype='pair-classification'] {
 		background: var(--tint-green);
 		color: var(--tint-green-fg);
 	}
-	.type-badge[data-type='Reranking'] {
+	.type-badge[data-stype='reranking'] {
 		background: var(--tint-amber);
 		color: var(--tint-amber-fg);
 	}
-	.type-badge[data-type='Retrieval'] {
+	.type-badge[data-stype='retrieval'] {
 		background: var(--tint-purple);
 		color: var(--tint-purple-fg);
 	}
-	.type-badge[data-type='STS'] {
+	.type-badge[data-stype='semantic-similarity'] {
 		background: var(--tint-pink);
 		color: var(--tint-pink-fg);
 	}
-	.type-badge[data-type='BitextMining'] {
+	.type-badge[data-stype='bitext-mining'] {
 		background: var(--tint-azure);
 		color: var(--tint-azure-fg);
 	}
-	.type-badge[data-type='InstructionReranking'] {
+	.type-badge[data-stype='instruction-reranking'] {
 		background: var(--tint-orange);
 		color: var(--tint-orange-fg);
 	}
-	.type-badge[data-type='Summarization'] {
+	.type-badge[data-stype='summarization'] {
 		background: var(--tint-teal);
 		color: var(--tint-teal-fg);
 	}
@@ -643,6 +660,9 @@
 		border-radius: 999px;
 		font-weight: 600;
 		letter-spacing: 0.02em;
+		/* Modality badges set their colour via `.modality-tint`, so the
+		   currentColor border picks up that same tint automatically. */
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
 	}
 	.hero h1 {
 		font-size: 26px;

@@ -545,6 +545,9 @@
 		font-weight: 700;
 		padding: 4px 10px;
 		border-radius: 999px;
+		/* `currentColor` is the per-model-type foreground tint set below,
+		   so one rule covers every variant — no per-type repetition. */
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
 	}
 	.type-badge[data-type='dense'] {
 		background: var(--tint-blue);
@@ -575,6 +578,10 @@
 		border-radius: 999px;
 		font-weight: 600;
 		letter-spacing: 0.02em;
+		/* Matches the modality / open-weight badge colour via currentColor
+		   so every variant — `.open`, `.soft`, `.modality-tint` — gets a
+		   matching subtle border without per-class repetition. */
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
 	}
 	.badge.open {
 		background: light-dark(var(--tint-green), #0d2a1c);

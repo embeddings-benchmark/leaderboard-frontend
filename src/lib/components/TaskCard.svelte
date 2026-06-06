@@ -64,7 +64,12 @@
 		</div>
 	{/if}
 	<div class="card-foot">
-		<span class="type-chip" data-type={type} title={type}>{type}</span>
+		<!-- Chip surfaces the task group (simplified type, e.g. "retrieval",
+		     "classification"), not the raw `type` (e.g. "BitextMining"). The
+		     full type still has a home on the task detail page's spec-list. -->
+		<span class="group-chip" data-stype={simplifiedType} title={simplifiedType || type}>
+			{simplifiedType || type}
+		</span>
 	</div>
 </a>
 
@@ -186,6 +191,7 @@
 		.desc {
 			display: -webkit-box;
 			-webkit-line-clamp: 2;
+			line-clamp: 2;
 			-webkit-box-orient: vertical;
 		}
 	}
@@ -244,7 +250,7 @@
 		padding-top: 8px;
 		border-top: 1px solid var(--border);
 	}
-	.type-chip {
+	.group-chip {
 		display: inline-block;
 		padding: 3px 9px;
 		font-size: 10px;
@@ -256,43 +262,46 @@
 		color: var(--text-muted);
 		border: 1px solid var(--border);
 	}
-	.type-chip[data-type='Classification'] {
+	/* Per-task-group tints, mirroring the parent card's `data-stype`
+	   accent. Mapping documented in CLAUDE.md (retrieval → purple,
+	   classification → blue, pair-classification → green,
+	   clustering → orange, semantic-similarity → pink, etc.). */
+	.group-chip[data-stype='classification'] {
 		background: var(--tint-blue);
 		color: var(--tint-blue-fg);
 		border-color: color-mix(in srgb, var(--tint-blue-fg) 35%, transparent);
 	}
-	.type-chip[data-type='Clustering'] {
+	.group-chip[data-stype='clustering'] {
 		background: var(--tint-orange);
 		color: var(--tint-orange-fg);
 		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
 	}
-	.type-chip[data-type='PairClassification'],
-	.type-chip[data-type='MultilabelClassification'] {
+	.group-chip[data-stype='pair-classification'] {
 		background: var(--tint-green);
 		color: var(--tint-green-fg);
 		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, transparent);
 	}
-	.type-chip[data-type='Reranking'] {
+	.group-chip[data-stype='reranking'] {
 		background: var(--tint-amber);
 		color: var(--tint-amber-fg);
 		border-color: color-mix(in srgb, var(--tint-amber-fg) 35%, transparent);
 	}
-	.type-chip[data-type='Retrieval'] {
+	.group-chip[data-stype='retrieval'] {
 		background: var(--tint-purple);
 		color: var(--tint-purple-fg);
 		border-color: color-mix(in srgb, var(--tint-purple-fg) 35%, transparent);
 	}
-	.type-chip[data-type='STS'] {
+	.group-chip[data-stype='semantic-similarity'] {
 		background: var(--tint-pink);
 		color: var(--tint-pink-fg);
 		border-color: color-mix(in srgb, var(--tint-pink-fg) 35%, transparent);
 	}
-	.type-chip[data-type='BitextMining'] {
+	.group-chip[data-stype='bitext-mining'] {
 		background: var(--tint-azure);
 		color: var(--tint-azure-fg);
 		border-color: color-mix(in srgb, var(--tint-azure-fg) 35%, transparent);
 	}
-	.type-chip[data-type='InstructionReranking'] {
+	.group-chip[data-stype='instruction-reranking'] {
 		background: var(--tint-orange);
 		color: var(--tint-orange-fg);
 		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);

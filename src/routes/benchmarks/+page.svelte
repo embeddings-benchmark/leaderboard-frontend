@@ -9,7 +9,6 @@
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
-	import { humanizeType } from '$lib/format';
 	import { getParam, updateUrl } from '$lib/url-state';
 
 	let allBenchmarks = $state<Benchmark[]>([]);
@@ -62,27 +61,20 @@
 	// "everything on"; `filteredAll` treats `size === ALL.length` as filter-off
 	// so rows with empty modality / type / domain lists stay visible.
 	let MODALITIES = $state<string[]>([]);
-	let TASK_TYPES = $state<string[]>([]);
 	let SIMPLIFIED_TYPES_PRESENT = $state<string[]>([]);
 	let DOMAINS = $state<string[]>([]);
 	let LANGUAGES = $state<string[]>([]);
 	const modalityFilter = new SvelteSet<string>();
-	const taskTypeFilter = new SvelteSet<string>();
 	const simplifiedTypeFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 	const languageFilter = new SvelteSet<string>();
 	let sidebarCollapsed = $state(
 		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 	);
-	let taskTypeQuery = $state('');
 	let domainQuery = $state('');
 	let languageQuery = $state('');
 	let languagesExpanded = $state(false);
 	const LANGUAGE_CAP = 40;
-	let visibleTaskTypes = $derived.by(() => {
-		const q = taskTypeQuery.trim().toLowerCase();
-		return q ? TASK_TYPES.filter((t) => t.toLowerCase().includes(q)) : TASK_TYPES;
-	});
 	let visibleDomains = $derived.by(() => {
 		const q = domainQuery.trim().toLowerCase();
 		return q ? DOMAINS.filter((d) => d.toLowerCase().includes(q)) : DOMAINS;
@@ -101,10 +93,6 @@
 		if (modalityFilter.has(m)) modalityFilter.delete(m);
 		else modalityFilter.add(m);
 	}
-	function toggleTaskType(t: string) {
-		if (taskTypeFilter.has(t)) taskTypeFilter.delete(t);
-		else taskTypeFilter.add(t);
-	}
 	function toggleDomain(d: string) {
 		if (domainFilter.has(d)) domainFilter.delete(d);
 		else domainFilter.add(d);
@@ -112,10 +100,6 @@
 	function toggleAllModalities() {
 		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
 		else for (const v of MODALITIES) modalityFilter.add(v);
-	}
-	function toggleAllTaskTypes() {
-		if (taskTypeFilter.size === TASK_TYPES.length) taskTypeFilter.clear();
-		else for (const v of TASK_TYPES) taskTypeFilter.add(v);
 	}
 	function toggleAllDomains() {
 		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
@@ -139,7 +123,6 @@
 		else for (const v of LANGUAGES) languageFilter.add(v);
 	}
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
-	let allTaskTypes = $derived(taskTypeFilter.size === TASK_TYPES.length);
 	let allSimplifiedTypes = $derived(
 		simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length
 	);
@@ -155,20 +138,17 @@
 				// here — used as a local accumulator, never read reactively.
 				/* eslint-disable svelte/prefer-svelte-reactivity */
 				const mods = new Set<string>();
-				const types = new Set<string>();
 				const simpTypes = new Set<string>();
 				const doms = new Set<string>();
 				const langs = new Set<string>();
 				/* eslint-enable svelte/prefer-svelte-reactivity */
 				for (const b of list) {
 					if (b.modalities) for (const m of b.modalities) mods.add(m);
-					if (b.taskTypes) for (const t of b.taskTypes) types.add(t);
 					if (b.simplifiedTaskTypes) for (const t of b.simplifiedTaskTypes) simpTypes.add(t);
 					if (b.domains) for (const d of b.domains) doms.add(d);
 					if (b.languages) for (const l of b.languages) langs.add(l);
 				}
 				MODALITIES = [...mods].sort();
-				TASK_TYPES = [...types].sort();
 				// Order the simplified buckets the same way /tasks does (curated
 				// canonical first, then any extras) so users see the familiar
 				// "retrieval / classification / …" sequence.
@@ -186,7 +166,6 @@
 				DOMAINS = [...doms].sort();
 				LANGUAGES = [...langs].sort();
 				for (const v of MODALITIES) modalityFilter.add(v);
-				for (const v of TASK_TYPES) taskTypeFilter.add(v);
 				for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
 				for (const v of LANGUAGES) languageFilter.add(v);
@@ -204,7 +183,6 @@
 		// "All on" = filter off; partial = intersection check; empty =
 		// the user deliberately cleared the category, so nothing matches.
 		const modalityOff = modalityFilter.size === MODALITIES.length;
-		const taskTypeOff = taskTypeFilter.size === TASK_TYPES.length;
 		const simplifiedOff = simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
 		const languageOff = languageFilter.size === LANGUAGES.length;
@@ -212,7 +190,6 @@
 			if (q && !b.name.toLowerCase().includes(q) && !b.displayName.toLowerCase().includes(q))
 				return false;
 			if (!modalityOff && !(b.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
-			if (!taskTypeOff && !(b.taskTypes ?? []).some((t) => taskTypeFilter.has(t))) return false;
 			if (
 				!simplifiedOff &&
 				!(b.simplifiedTaskTypes ?? []).some((t) => simplifiedTypeFilter.has(t))
@@ -390,36 +367,6 @@
 								<span>{m}</span>
 							</label>
 						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Task type</span>
-						<button type="button" class="link-btn" onclick={toggleAllTaskTypes}>
-							{allTaskTypes ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="type-search"
-						placeholder="Search task types…"
-						bind:value={taskTypeQuery}
-					/>
-					<div class="pills scroll scroll-thin">
-						{#each visibleTaskTypes as t (t)}
-							<label class="pill type-fill" data-type={t}>
-								<input
-									type="checkbox"
-									checked={taskTypeFilter.has(t)}
-									onchange={() => toggleTaskType(t)}
-								/>
-								<span>{humanizeType(t)}</span>
-							</label>
-						{/each}
-						{#if visibleTaskTypes.length === 0}
-							<p class="muted no-match">No task types match.</p>
-						{/if}
 					</div>
 				</div>
 
