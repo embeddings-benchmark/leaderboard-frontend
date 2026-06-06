@@ -51,7 +51,14 @@ const config = {
 			// client, so they're absent from the prerendered HTML. They WILL be
 			// present after hydration, so we downgrade the build error to a warning
 			// instead of failing prerender.
-			handleMissingId: 'warn'
+			handleMissingId: 'warn',
+			// Production origin baked into every prerendered URL. `page.url.origin`
+			// resolves to this during `vite build`, which is what ends up in
+			// `og:image` / `og:url` / canonical-link tags on the static HTML.
+			// Override per build with `PUBLIC_SITE_URL=…` (e.g. for staging
+			// or a fork). Without this, SvelteKit substitutes its placeholder
+			// `http://sveltekit-prerender`, which 404s in every crawler.
+			origin: process.env.PUBLIC_SITE_URL || 'https://mteb-leaderboardv3.hf.space'
 		},
 		version: {
 			// Embedded in the build. SvelteKit checks `_app/version.json` at the

@@ -1,3 +1,5 @@
-// Live page — fetched from /benchmarks at runtime. No build-time enumeration
-// (the source list changes whenever mteb adds a benchmark).
-export const prerender = false;
+// Prerender the catalog so ShareMeta's `<title>` + `<meta og:…>` land in
+// the static HTML. The page fetches its own live list on mount via
+// `$effect`; the prerendered snapshot is just the shell + meta, never
+// read for content.
+export const prerender = true;

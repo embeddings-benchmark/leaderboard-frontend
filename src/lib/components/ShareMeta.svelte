@@ -78,19 +78,18 @@
 					.join('/')}.png`
 			: null
 	);
-	// No fallback to a static default — pages without an entity hero (home,
-	// /compare, the catalog index pages) simply omit the image meta tags.
-	// Most readers fall back to a generic site card; the alternative
-	// (shipping a hand-built og-default.png in /static) would break
-	// prerender every time the file went missing and adds another asset
-	// the team has to keep in sync with the brand.
-	let absImage = $derived<string | null>(
+	// Pages without an entity hero (home, /compare, the catalog index
+	// pages) fall back to the shipped `static/og-default.png` so social
+	// previewers still render a card. The PNG has to exist at build time
+	// for SvelteKit's prerender link-check to pass — committed under
+	// `static/`, served as `${base}/og-default.png`.
+	let absImage = $derived<string>(
 		entityImage ??
 			(image
 				? image.startsWith('http')
 					? image
 					: `${origin}${image.startsWith('/') ? image : `/${image}`}`
-				: null)
+				: `${origin}${base}/og-default.png`)
 	);
 </script>
 
@@ -112,15 +111,13 @@
 	<meta property="og:title" content={fullTitle} />
 	<meta property="og:description" content={desc} />
 	<meta property="og:url" content={canonicalUrl} />
-	{#if absImage}
-		<!-- Image dimensions + MIME help crawlers (LinkedIn especially)
-		     lay the card out without having to download + inspect the PNG.
-		     Every hero we ship is the standard 1200 × 630 OG box. -->
-		<meta property="og:image" content={absImage} />
-		<meta property="og:image:type" content="image/png" />
-		<meta property="og:image:width" content="1200" />
-		<meta property="og:image:height" content="630" />
-	{/if}
+	<!-- Image dimensions + MIME help crawlers (LinkedIn especially) lay
+	     the card out without having to download + inspect the PNG. Every
+	     hero we ship is the standard 1200 × 630 OG box. -->
+	<meta property="og:image" content={absImage} />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
 
 	<!-- Twitter Card: Twitter (X) reads its own namespace alongside OG. We
 	     mirror the same image + text; `summary_large_image` shows a wide
@@ -128,10 +125,8 @@
 	<meta name="twitter:card" content={twitterCard} />
 	<meta name="twitter:title" content={fullTitle} />
 	<meta name="twitter:description" content={desc} />
-	{#if absImage}
-		<meta name="twitter:image" content={absImage} />
-		<meta name="twitter:image:type" content="image/png" />
-		<meta name="twitter:image:width" content="1200" />
-		<meta name="twitter:image:height" content="630" />
-	{/if}
+	<meta name="twitter:image" content={absImage} />
+	<meta name="twitter:image:type" content="image/png" />
+	<meta name="twitter:image:width" content="1200" />
+	<meta name="twitter:image:height" content="630" />
 </svelte:head>

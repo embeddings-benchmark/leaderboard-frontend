@@ -15,8 +15,10 @@
 FROM node:24-alpine AS build
 
 ARG PUBLIC_API_URL=https://mteb-leaderboard-backend.hf.space
+ARG PUBLIC_SITE_URL=https://mteb-leaderboardv3.hf.space
 ARG BASE_PATH=
 ENV PUBLIC_API_URL=${PUBLIC_API_URL} \
+    PUBLIC_SITE_URL=${PUBLIC_SITE_URL} \
     BASE_PATH=${BASE_PATH} \
     CI=1
 
@@ -48,16 +50,29 @@ server {
         try_files $uri =404;
     }
 
+    # Don't leak the internal listen port into 301 Location headers
+    # when nginx auto-redirects (e.g. trailing-slash on a directory).
+    # Without this, hitting /models behind the HF Spaces reverse proxy
+    # would 301 to `http://…:7860/models/`, which crawlers can't reach.
+    port_in_redirect off;
+    absolute_redirect off;
+
     location / {
         # adapter-static emits prerendered routes as `<route>.html` files
         # (e.g. /benchmark/BEIR/+page.svelte → build/benchmark/BEIR.html).
         # Without the `.html` lookup nginx never finds them — every deep
         # link falls through to /404.html (the SPA fallback), which has
         # no per-route meta tags so share-card crawlers see a blank
-        # shell. Try in order: exact file, exact dir (uses its
-        # index.html), file with `.html` appended, then the SPA
-        # fallback for routes that were intentionally not prerendered.
-        try_files $uri $uri/ $uri.html /404.html =404;
+        # shell.
+        #
+        # Order matters: `$uri.html` MUST come before `$uri/`. Index
+        # routes like `/models` have BOTH a `models.html` (the index
+        # page) and a `models/` directory (containing nested
+        # `/models/<org>/<name>.html` for detail pages). Checking the
+        # directory first triggers nginx's auto-trailing-slash 301 to
+        # `/models/`, and then there's no `index.html` inside so the
+        # page never resolves.
+        try_files $uri $uri.html $uri/ /404.html =404;
     }
 }
 NGINX

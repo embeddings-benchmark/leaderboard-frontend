@@ -1,7 +1,10 @@
 import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
 
-// Client-only route — the page component populates its own reactive state.
-export const ssr = false;
+// Prerender so ShareMeta's `<title>` + `<meta og:…>` end up in the static
+// HTML for crawlers. SSR stays on (default) so the page component
+// renders during build to emit the head tags; the client still
+// re-hydrates with live data via the page's `$effect`.
+export const prerender = true;
 
 // Pre-warms the shared `cachedHttp` cache so the page's `$effect` resolves
 // synchronously on first activation. With `data-sveltekit-preload-data="hover"`
