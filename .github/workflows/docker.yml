@@ -62,4 +62,5 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             PUBLIC_API_URL=https://mteb-leaderboard-backend.hf.space
+            PUBLIC_SITE_URL=https://mteb-leaderboardv3.hf.space
             BASE_PATH=
