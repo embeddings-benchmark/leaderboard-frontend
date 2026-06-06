@@ -172,6 +172,12 @@ export interface SummaryRow {
 	// datasets — used by PerTaskTab to surface a ⚠️ next to scores that
 	// the model isn't zero-shot on.
 	trainedOnTasks?: string[];
+	// Experiment kwargs that produced this row — present only for variant
+	// rows (e.g. `{ colbert: true, use_image_modality: false }`). `null` for
+	// the canonical base-model row. Multiple rows can share the same
+	// `model.name`, distinguished only by `experiments`. Frontend may badge
+	// or filter these as ablations without affecting the rest of the schema.
+	experiments?: Record<string, unknown> | null;
 }
 
 export interface BenchmarkSummary {
