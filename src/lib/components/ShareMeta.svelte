@@ -70,13 +70,19 @@
 			? `${apiBase}/og/${entity.kind}/${encodeURIComponent(entity.name)}.png`
 			: null
 	);
-	let absImage = $derived(
+	// No fallback to a static default — pages without an entity hero (home,
+	// /compare, the catalog index pages) simply omit the image meta tags.
+	// Most readers fall back to a generic site card; the alternative
+	// (shipping a hand-built og-default.png in /static) would break
+	// prerender every time the file went missing and adds another asset
+	// the team has to keep in sync with the brand.
+	let absImage = $derived<string | null>(
 		entityImage ??
 			(image
 				? image.startsWith('http')
 					? image
 					: `${origin}${image.startsWith('/') ? image : `/${image}`}`
-				: `${origin}${base}/og-default.png`)
+				: null)
 	);
 </script>
 
@@ -98,13 +104,15 @@
 	<meta property="og:title" content={fullTitle} />
 	<meta property="og:description" content={desc} />
 	<meta property="og:url" content={canonicalUrl} />
-	<meta property="og:image" content={absImage} />
-	<!-- Image dimensions + MIME help crawlers (LinkedIn especially) lay the
-	     card out without having to download and inspect the PNG. Every hero
-	     we ship is the standard 1200 × 630 OG box. -->
-	<meta property="og:image:type" content="image/png" />
-	<meta property="og:image:width" content="1200" />
-	<meta property="og:image:height" content="630" />
+	{#if absImage}
+		<!-- Image dimensions + MIME help crawlers (LinkedIn especially)
+		     lay the card out without having to download + inspect the PNG.
+		     Every hero we ship is the standard 1200 × 630 OG box. -->
+		<meta property="og:image" content={absImage} />
+		<meta property="og:image:type" content="image/png" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+	{/if}
 
 	<!-- Twitter Card: Twitter (X) reads its own namespace alongside OG. We
 	     mirror the same image + text; `summary_large_image` shows a wide
@@ -112,8 +120,10 @@
 	<meta name="twitter:card" content={twitterCard} />
 	<meta name="twitter:title" content={fullTitle} />
 	<meta name="twitter:description" content={desc} />
-	<meta name="twitter:image" content={absImage} />
-	<meta name="twitter:image:type" content="image/png" />
-	<meta name="twitter:image:width" content="1200" />
-	<meta name="twitter:image:height" content="630" />
+	{#if absImage}
+		<meta name="twitter:image" content={absImage} />
+		<meta name="twitter:image:type" content="image/png" />
+		<meta name="twitter:image:width" content="1200" />
+		<meta name="twitter:image:height" content="630" />
+	{/if}
 </svelte:head>
