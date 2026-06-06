@@ -10,13 +10,14 @@
 
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	// `$env/dynamic/public` (not `static/public`) so the typecheck doesn't
-	// hard-require PUBLIC_API_URL to be set at sync time — `static/public`
-	// types only include vars present in the .env files visible during
-	// `svelte-kit sync`, and CI runners without a `.env` get "no exported
-	// member PUBLIC_API_URL". Dynamic is `Record<string, string | undefined>`
-	// — we already guard for the unset case below.
-	import { env } from '$env/dynamic/public';
+	// MUST be `$env/static/public` — `$env/dynamic/public` reads from
+	// `globalThis.__sveltekit_<id>.env`, which SvelteKit only populates
+	// when its server runtime is in the request path. adapter-static
+	// behind nginx serves prerendered HTML directly, so the dynamic
+	// object stays undefined and every import here throws → blank
+	// "Loading…" on every page. CI's typecheck reads PUBLIC_API_URL from
+	// the workflow env so `svelte-kit sync` emits the type.
+	import { PUBLIC_API_URL } from '$env/static/public';
 
 	interface Props {
 		// Card title. Will be suffixed with " · MTEB Leaderboard" so the brand
@@ -62,7 +63,7 @@
 	// /data/og volume (see `mteb/api/og/generate.mjs`). When PUBLIC_API_URL
 	// isn't set (offline mock build), `entityImage` resolves to null and
 	// the fallback chain below kicks in.
-	let apiBase = $derived(env.PUBLIC_API_URL?.trim().replace(/\/$/, '') || '');
+	let apiBase = $derived(PUBLIC_API_URL?.trim().replace(/\/$/, '') || '');
 	// Encode each path segment individually so model names like
 	// `microsoft/harrier-oss-v1-27b` stay nested in the URL — Starlette's
 	// StaticFiles decodes `%2F` to `/` before file lookup, so a single

@@ -1,4 +1,4 @@
-import { env } from '$env/dynamic/public';
+import { PUBLIC_API_URL } from '$env/static/public';
 import type {
 	Benchmark,
 	BenchmarkLeaders,
@@ -14,8 +14,9 @@ import type {
 } from '$lib/types';
 import { DEFAULT_BENCHMARK_NAME } from './defaults';
 
-// Mock-data modules are dynamic-imported below so prod bundles (which run with
-// `PUBLIC_API_URL` set + `USE_MOCK=0`) never ship the ~800-line fixture set.
+// Mock-data modules are dynamic-imported below so prod bundles never ship the
+// ~800-line fixture set. Flip `USE_MOCK = true` locally if you need to develop
+// against the offline fixtures under `./mock*` without a backend.
 type MockModule = typeof import('./mockBenchmarks');
 type MockSummaryModule = typeof import('./mockSummary');
 let _mockMod: Promise<MockModule> | null = null;
@@ -23,21 +24,22 @@ let _mockSumMod: Promise<MockSummaryModule> | null = null;
 const loadMockBenchmarks = () => (_mockMod ??= import('./mockBenchmarks'));
 const loadMockSummaryMod = () => (_mockSumMod ??= import('./mockSummary'));
 
-// `$env/dynamic/public` is read at request time so the build doesn't fail when
-// either env var is unset.
-const API = env.PUBLIC_API_URL?.trim() ?? '';
+// MUST use `$env/static/public` — `$env/dynamic/public` reads from a
+// SvelteKit runtime object that adapter-static + nginx never populate,
+// so any import that touches it throws → every page stays stuck on
+// "Loading…". Static values are inlined at `vite build` time from the
+// build env (Docker build-args / .env.local in dev).
+const API = PUBLIC_API_URL?.trim() ?? '';
 
-// Mock data is opt-in: set ``PUBLIC_USE_MOCK=1`` to fall through to the
-// deterministic mocks under ``$lib/data/mock*`` when there's no live API.
-// Without this flag, every loader either talks to ``PUBLIC_API_URL`` or
-// throws — preventing the production site from silently shipping mock data
-// when an env var is missed.
-const USE_MOCK = (env.PUBLIC_USE_MOCK ?? '').trim() === '1';
+// Code-level toggle for the deterministic mock fallback. Off by default so a
+// missed `PUBLIC_API_URL` env throws loudly instead of silently shipping mock
+// data. Flip locally when iterating on UI without the FastAPI backend up.
+const USE_MOCK = false;
 
 function noApiError(scope: string): Error {
 	return new Error(
-		`${scope}: PUBLIC_API_URL is not set. Configure a backend URL, or set ` +
-			`PUBLIC_USE_MOCK=1 to use the offline mock data.`
+		`${scope}: PUBLIC_API_URL is not set. Configure a backend URL ` +
+			`(or flip USE_MOCK = true in src/lib/data/service.ts for offline dev).`
 	);
 }
 

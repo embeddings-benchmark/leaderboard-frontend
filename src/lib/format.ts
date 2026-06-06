@@ -1,4 +1,4 @@
-import { env } from '$env/dynamic/public';
+import { PUBLIC_API_URL } from '$env/static/public';
 
 /**
  * Insert a space before each new capitalized word so CamelCase task type
@@ -47,7 +47,7 @@ export function sortModalities<T extends string>(mods: readonly T[] | undefined)
 export function apiUrl(path: string | null | undefined): string | undefined {
 	if (!path) return undefined;
 	if (/^https?:\/\//i.test(path)) return path;
-	const base = env.PUBLIC_API_URL?.trim().replace(/\/$/, '') ?? '';
+	const base = PUBLIC_API_URL?.trim().replace(/\/$/, '') ?? '';
 	if (!base) return path; // offline build — return as-is, will 404 but harmlessly
 	return `${base}${path.startsWith('/') ? path : '/' + path}`;
 }
