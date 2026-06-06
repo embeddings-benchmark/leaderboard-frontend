@@ -65,9 +65,17 @@
 	// isn't set (offline mock build), `entityImage` resolves to null and
 	// the fallback chain below kicks in.
 	let apiBase = $derived(PUBLIC_API_URL?.trim().replace(/\/$/, '') || '');
+	// Encode each path segment individually so model names like
+	// `microsoft/harrier-oss-v1-27b` stay nested in the URL — Starlette's
+	// StaticFiles decodes `%2F` to `/` before file lookup, so a single
+	// encoded slug always 404s. Per-segment encoding mirrors the
+	// frontend route layout (`/models/[...name]`).
 	let entityImage = $derived(
 		entity && apiBase
-			? `${apiBase}/og/${entity.kind}/${encodeURIComponent(entity.name)}.png`
+			? `${apiBase}/og/${entity.kind}/${entity.name
+					.split('/')
+					.map(encodeURIComponent)
+					.join('/')}.png`
 			: null
 	);
 	// No fallback to a static default — pages without an entity hero (home,
