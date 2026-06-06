@@ -1,6 +1,15 @@
 # SvelteKit leaderboard for HF Spaces / GHCR. Builds the static
 # bundle and serves it on :7860 via nginx-unprivileged (no root).
 # Override the backend URL with `--build-arg PUBLIC_API_URL=…`.
+#
+# `PUBLIC_API_URL` is load-bearing at *build* time, not just runtime:
+# the per-entity detail routes (benchmark/[name], tasks/[name],
+# models/[...name]) have `prerender = true` with an `entries()` that
+# fetches the catalogue from `${PUBLIC_API_URL}/v1/...`. The build
+# emits one HTML file per benchmark / task / model so the share-card
+# meta tags from ShareMeta land in the static HTML (otherwise the
+# SPA fallback at 404.html serves a blank shell to crawlers). The
+# backend Space must be awake and reachable when this stage runs.
 
 # ---------- Stage 1: build the static bundle ----------
 FROM node:24-alpine AS build
