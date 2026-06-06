@@ -1,11 +1,15 @@
-<script lang="ts">
-	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
-	import { pinnedModels } from '$lib/stores/pinned.svelte';
-
+<script lang="ts" module>
+	// Tooltip copy is invariant across instances and benchmarks. Promoted
+	// to a module-scope const so each SummaryTable mount doesn't re-build
+	// the same object literal.
 	const INFO = {
 		rank: {
 			title: 'Rank (Borda)',
 			text: 'Rank is computed via the Borda count: each task votes for models by their relative performance. The model with the most votes across tasks gets the highest rank. Borda tends to reward consistent breadth over single peaks.'
+		},
+		model: {
+			title: 'Model',
+			text: 'Missing results — the model may not have been run on the tasks in the benchmark. We only display models that have been run on at least one task. To submit results, see the [submitting results guide](https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/).'
 		},
 		zeroShot: {
 			title: 'Zero-shot %',
@@ -13,7 +17,7 @@
 		},
 		totalParams: {
 			title: 'Total parameters',
-			text: 'Total parameter count including embedding weights, in billions. Higher means more CPU/GPU memory required.'
+			text: 'Total parameter count including embedding weights. Higher means more CPU/GPU memory required.'
 		},
 		embedding: {
 			title: 'Embedding dimension',
@@ -25,13 +29,69 @@
 		},
 		meanTask: {
 			title: 'Mean (Task)',
-			text: 'Naïve average of the model\'s scores across every task in the benchmark. Continuous, simple to read, but tasks with higher score variance pull the mean around.'
+			text: "Naïve average of the model's scores across every task in the benchmark. Continuous, simple to read, but tasks with higher score variance pull the mean around."
 		},
 		meanTaskType: {
 			title: 'Mean (TaskType)',
 			text: 'Weighted average computed by first averaging per task category (Classification, Retrieval, …) and then averaging across categories. Rewards models that perform well in every category.'
+		},
+		meanPublic: {
+			title: 'Mean (Public)',
+			text: "Average score across the benchmark's public (openly-released) task subset. Recomputed live when you narrow the visible task set with filters."
+		},
+		meanPrivate: {
+			title: 'Mean (Private)',
+			text: "Average score across the benchmark's private (held-out) task subset — datasets the benchmark keeps closed to discourage training-set contamination. Recomputed live with filters."
 		}
 	} as const;
+
+	// Short explanations for the per-task-type columns. Surfaced on
+	// column-header hover so users skimming the table know what each
+	// score is measuring without leaving the page.
+	const TASK_TYPE_INFO: Record<string, string> = {
+		Classification: 'Classify text into pre-defined labels (sentiment, topic, intent, …).',
+		Clustering:
+			'Group similar texts together without supervision; scored by cluster quality vs gold labels.',
+		PairClassification:
+			'Predict a relation between two texts — e.g. paraphrase yes/no, entailment.',
+		MultilabelClassification: 'Assign one or more labels per text from a fixed vocabulary.',
+		Reranking: 'Re-order a candidate list relative to a query; measures top-K ordering quality.',
+		InstructionReranking:
+			'Rerank candidates according to a free-form natural-language instruction supplied with the query.',
+		Retrieval: 'Find the most relevant documents for a query out of a large corpus.',
+		STS: 'Rate the semantic similarity between two texts on a continuous scale.',
+		BitextMining:
+			'Pair sentences across two languages that carry the same meaning (translation alignment).',
+		Summarization:
+			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.'
+	};
+</script>
+
+<script lang="ts">
+	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
+	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import {
+		bestWorstPerColumn,
+		fmtParamsUnit,
+		fmtParamsValue,
+		fmtPct,
+		fmtZeroShot,
+		heat,
+		humanizeType,
+		maxOf,
+		minOf
+	} from '$lib/format';
+	import { stickyHead } from '$lib/actions/sticky-head';
+	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
+	import { createSortState } from '$lib/stores/sort.svelte';
+	import { safeIdle } from '$lib/idle';
+	import { isBoundaryCross } from '$lib/cell-hover';
+	import ModelCellName from './ModelCellName.svelte';
+	import PinButton from './PinButton.svelte';
+	import ModelHoverPortal from './ModelHoverPortal.svelte';
+	import HoverPortal from './HoverPortal.svelte';
+	import InfoDot from './InfoDot.svelte';
+	import MarkdownText from './MarkdownText.svelte';
 
 	interface Props {
 		summary: BenchmarkSummary;
@@ -42,32 +102,22 @@
 		| 'rank'
 		| 'model'
 		| 'totalParams'
+		| 'zeroShot'
 		| 'meanTask'
 		| 'meanTaskType'
+		| 'meanPublic'
+		| 'meanPrivate'
 		| `tt:${string}`;
-	type Dir = 'asc' | 'desc';
 
-	let sortKey = $state<SortKey | null>(null);
-	let sortDir = $state<Dir>('desc');
-
-	// Score-like columns default to descending (best first); rank and name default to ascending.
-	function defaultDir(key: SortKey): Dir {
-		return key === 'rank' || key === 'model' ? 'asc' : 'desc';
-	}
-
-	function clickSort(key: SortKey) {
-		if (sortKey !== key) {
-			sortKey = key;
-			sortDir = defaultDir(key);
-			return;
-		}
-		// Same column: toggle once, then clear on the third click.
-		if (sortDir === defaultDir(key)) {
-			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		} else {
-			sortKey = null;
-		}
-	}
+	// Per-summary-tab sort. URL prefix `s.summary` / `d.summary` keeps
+	// the per-task and per-language tabs independent (each has its own
+	// namespace). `↕` is the resting indicator when no column is the
+	// active sort.
+	const sort = createSortState<SortKey>({
+		urlKeys: ['s.summary', 'd.summary'],
+		ascKeys: ['rank', 'model'],
+		defaultIcon: '↕'
+	});
 
 	function getValue(row: SummaryRow, key: SortKey): { v: number | string; missing: boolean } {
 		switch (key) {
@@ -77,10 +127,22 @@
 				return { v: row.model.displayName.toLowerCase(), missing: false };
 			case 'totalParams':
 				return { v: row.totalParamsB, missing: row.totalParamsB === 0 };
+			case 'zeroShot':
+				// -1 is the "unknown" sentinel; treat as missing so it sorts
+				// to the bottom regardless of direction.
+				return { v: row.zeroShotPct, missing: row.zeroShotPct === -1 };
 			case 'meanTask':
-				return { v: row.meanTask, missing: false };
+				return { v: row.meanTask ?? 0, missing: row.meanTask == null };
 			case 'meanTaskType':
-				return { v: row.meanTaskType, missing: false };
+				return { v: row.meanTaskType ?? 0, missing: row.meanTaskType == null };
+			case 'meanPublic': {
+				const v = publicMeansByRow.get(row) ?? null;
+				return { v: v ?? 0, missing: v == null };
+			}
+			case 'meanPrivate': {
+				const v = privateMeansByRow.get(row) ?? null;
+				return { v: v ?? 0, missing: v == null };
+			}
 		}
 		if (key.startsWith('tt:')) {
 			const tt = key.slice(3);
@@ -92,12 +154,19 @@
 
 	let sortedRows = $derived.by(() => {
 		let rows = summary.rows;
-		if (sortKey) {
-			const dir = sortDir === 'asc' ? 1 : -1;
-			const key = sortKey;
+		if (sort.key) {
+			const dir = sort.dir === 'asc' ? 1 : -1;
+			const key = sort.key;
+			// Precompute the comparison value once per row (was once per comparison —
+			// O(N log N) calls to `getValue` collapsed to O(N)). Matters most for
+			// meanPublic/meanPrivate where `getValue` would otherwise re-walk the
+			// publicTaskNames Set inside each comparison.
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity
+			const byRow = new Map<SummaryRow, { v: number | string; missing: boolean }>();
+			for (const r of rows) byRow.set(r, getValue(r, key));
 			rows = [...rows].sort((a, b) => {
-				const va = getValue(a, key);
-				const vb = getValue(b, key);
+				const va = byRow.get(a)!;
+				const vb = byRow.get(b)!;
 				// Always push "missing" values to the bottom regardless of direction.
 				if (va.missing && !vb.missing) return 1;
 				if (!va.missing && vb.missing) return -1;
@@ -106,75 +175,180 @@
 				return ((va.v as number) - (vb.v as number)) * dir;
 			});
 		}
-		// Float pinned rows to the top while preserving their order in the sorted set.
+		// Float pinned rows to the top in a single partition pass.
 		if (pinnedModels.size === 0) return rows;
-		const isPinned = (r: SummaryRow) => pinnedModels.has(r.model.name);
-		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
+		const pinned: SummaryRow[] = [];
+		const unpinned: SummaryRow[] = [];
+		for (const r of rows) {
+			if (pinnedModels.has(r.model.name)) pinned.push(r);
+			else unpinned.push(r);
+		}
+		return [...pinned, ...unpinned];
 	});
 
-	function fmtPct(score: number): string {
-		return (score * 100).toFixed(2);
-	}
-	/* Heatmap shade for score cells: stretches the meaningful 0.45–0.75 range
-	   across a 0–55% orange wash so weak scores look pale and strong scores pop. */
-	function heat(score: number | undefined): string {
-		if (score === undefined) return '';
-		const v = Math.max(0, Math.min(1, (score - 0.45) / 0.3));
-		const pct = Math.round(v * 55);
-		if (pct === 0) return '';
-		return `background-color: color-mix(in srgb, var(--primary) ${pct}%, transparent);`;
-	}
-	function fmtZeroShot(pct: number): string {
-		if (pct === -1) return '⚠️ NA';
-		return `${pct.toFixed(0)}%`;
-	}
-	function fmtParamsValue(b: number): string {
-		if (b === 0) return '—';
-		// Models under 1B are shown in millions so the magnitude is obvious at a glance.
-		if (b >= 1) return b.toFixed(1);
-		return (b * 1000).toFixed(0);
-	}
-	function fmtParamsUnit(b: number): string {
-		if (b === 0) return '';
-		return b >= 1 ? 'B' : 'M';
-	}
-	function fmtInt(n: number): string {
-		if (!n) return '—';
-		return n.toLocaleString();
-	}
-	function hasValue(s: string): boolean {
-		return s !== '—' && s !== '⚠️ NA';
-	}
-
-	function bestPerTaskType(): Record<string, number> {
-		const best: Record<string, number> = {};
-		for (const tt of summary.taskTypes) {
-			let max = -Infinity;
-			for (const r of summary.rows) {
-				const v = r.scoresByTaskType[tt];
-				if (v !== undefined && v > max) max = v;
-			}
-			best[tt] = max;
+	// Progressive row render — Firefox benefits a lot (cold first-paint
+	// drops ~50%) because its layout engine streams large tbodies
+	// incrementally and our 80-row first chunk paints before the rest of
+	// the layer's columns get reflowed. Chromium / WebKit also see a
+	// modest win. `lastRowSignature` lets the $effect bail on its own
+	// writes to `visibleRows` (Svelte 5 re-fires the effect on every
+	// state change inside it).
+	const INITIAL_ROW_CHUNK = 80;
+	const ROW_CHUNK_STEP = 200;
+	let visibleRows = $state(INITIAL_ROW_CHUNK);
+	let growVersion = 0;
+	let lastRowSignature = '';
+	let rowKickoffTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		// Anchor the progressive render to the underlying `summary.rows`
+		// array identity, NOT to `sortedRows`. Pinning a model produces a
+		// new `sortedRows` (partition pass floats pins to the top), but
+		// the row set itself is unchanged — using `sortedRows` as the
+		// dependency forced a full 80→200→… progressive re-render on every
+		// pin click, freezing the UI for 600-row tables (MTEB(Multilingual)).
+		// Sort changes are caught the same way: `sort.key/dir` change ⇒
+		// new `sortedRows` array but `summary.rows` is the same array, so
+		// we'd skip the reset — that's fine, the existing `visibleRows`
+		// already covers everything for any ordering of the same set.
+		const baseRows = summary.rows;
+		const total = baseRows.length;
+		const signature = `${total}|${baseRows[0]?.model.name ?? ''}|${baseRows[total - 1]?.model.name ?? ''}`;
+		if (signature === lastRowSignature) return;
+		lastRowSignature = signature;
+		const myVersion = ++growVersion;
+		// Small tables fit in the first chunk — render everything immediately
+		// and skip the 60ms debounce + idle scheduling overhead.
+		if (total <= INITIAL_ROW_CHUNK) {
+			visibleRows = total;
+			return;
 		}
-		return best;
-	}
-	let best = $derived(bestPerTaskType());
-	let bestMeanTask = $derived(Math.max(...summary.rows.map((r) => r.meanTask)));
-	let bestMeanTaskType = $derived(Math.max(...summary.rows.map((r) => r.meanTaskType)));
+		visibleRows = INITIAL_ROW_CHUNK;
+		if (rowKickoffTimer) clearTimeout(rowKickoffTimer);
+		rowKickoffTimer = setTimeout(() => {
+			rowKickoffTimer = null;
+			if (myVersion !== growVersion) return;
+			const grow = () => {
+				if (myVersion !== growVersion) return;
+				visibleRows = Math.min(visibleRows + ROW_CHUNK_STEP, total);
+				if (visibleRows < total) safeIdle(grow);
+			};
+			safeIdle(grow);
+		}, 60);
+	});
+	let renderedRows = $derived(sortedRows.slice(0, visibleRows));
 
-	function isBestScore(row: SummaryRow, taskType: string): boolean {
-		return row.scoresByTaskType[taskType] === best[taskType];
+	// Display the per-task-type columns A→Z. The API preserves
+	// benchmark-specific order, but readers scan a wide table faster
+	// when columns are alphabetised (and the mean columns to the left
+	// stay anchored). `localeCompare` keeps "STS" before "Summarization"
+	// regardless of locale, etc.
+	// `summary.taskTypes` is pre-sorted at the service boundary.
+	let sortedTaskTypes = $derived(summary.taskTypes);
+	let typeBests = $derived(
+		bestWorstPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
+	);
+	let best = $derived(typeBests.best);
+	let worst = $derived(typeBests.worst);
+	// Walk rows once and produce all the per-column bests/worsts at once.
+	let meanStats = $derived.by(() => {
+		let bTask = -Infinity,
+			wTask = Infinity,
+			bType = -Infinity,
+			wType = Infinity;
+		let sawTask = false,
+			sawType = false;
+		for (const r of summary.rows) {
+			if (typeof r.meanTask === 'number') {
+				if (r.meanTask > bTask) bTask = r.meanTask;
+				if (r.meanTask < wTask) wTask = r.meanTask;
+				sawTask = true;
+			}
+			if (typeof r.meanTaskType === 'number') {
+				if (r.meanTaskType > bType) bType = r.meanTaskType;
+				if (r.meanTaskType < wType) wType = r.meanTaskType;
+				sawType = true;
+			}
+		}
+		return {
+			bestMeanTask: sawTask ? bTask : 0,
+			worstMeanTask: sawTask ? wTask : 0,
+			bestMeanTaskType: sawType ? bType : 0,
+			worstMeanTaskType: sawType ? wType : 0
+		};
+	});
+	let bestMeanTask = $derived(meanStats.bestMeanTask);
+	let worstMeanTask = $derived(meanStats.worstMeanTask);
+	let bestMeanTaskType = $derived(meanStats.bestMeanTaskType);
+	let worstMeanTaskType = $derived(meanStats.worstMeanTaskType);
+	// Column visibility is declarative — `summary.aggregations` lists exactly
+	// which mean columns belong on this benchmark's leaderboard. Avoids
+	// inferring from the score data (which led to ViDoRe showing an empty
+	// Mean (TaskType) column it doesn't actually compute).
+	let showMeanTask = $derived(summary.aggregations?.includes('mean_task') ?? false);
+	let showMeanTaskType = $derived(summary.aggregations?.includes('mean_task_type') ?? false);
+	let showTaskTypes = $derived(summary.aggregations?.includes('task_types') ?? false);
+	let showPublicPrivate = $derived(summary.aggregations?.includes('public_private') ?? false);
+	// Recompute Mean (Public) / Mean (Private) from the model's per-task scores
+	// using the benchmark's `tasksMeta[].isPublic` flag. This way the means
+	// update live when the user filters the task set, instead of staying frozen
+	// at the original benchmark-level values.
+	let publicTaskNames = $derived(
+		new Set(summary.tasksMeta.filter((t) => t.isPublic !== false).map((t) => t.name))
+	);
+	let privateTaskNames = $derived(
+		new Set(summary.tasksMeta.filter((t) => t.isPublic === false).map((t) => t.name))
+	);
+	function meanOver(row: SummaryRow, names: Set<string>): number | null {
+		if (names.size === 0) return null;
+		let sum = 0;
+		let n = 0;
+		for (const name of names) {
+			const v = row.scoresByTask[name];
+			if (typeof v === 'number') {
+				sum += v;
+				n += 1;
+			}
+		}
+		// Strict: missing any visible task drops the mean to null, matching the
+		// policy applied to Mean (Task) / Mean (TaskType).
+		return n === names.size ? sum / n : null;
 	}
-
-	function sortIcon(key: SortKey): string {
-		if (sortKey !== key) return '';
-		return sortDir === 'asc' ? '↑' : '↓';
+	// No fallback to the backend's row.meanPublic / row.meanPrivate: the user
+	// might have deliberately filtered every public (or private) task out, in
+	// which case the mean is undefined — falling back would surface the
+	// pre-filter number and look stale. ``meanOver`` is null on empty input,
+	// which is exactly the right answer.
+	function liveMeanPublic(row: SummaryRow): number | null {
+		if (!showPublicPrivate) return null;
+		return meanOver(row, publicTaskNames);
 	}
-
-	function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
-		if (sortKey !== key) return 'none';
-		return sortDir === 'asc' ? 'ascending' : 'descending';
+	function liveMeanPrivate(row: SummaryRow): number | null {
+		if (!showPublicPrivate) return null;
+		return meanOver(row, privateTaskNames);
 	}
+	// Compute the column arrays once and reuse for both bounds —
+	// `meanOver` is the expensive part (per-row Set iteration).
+	let publicMeans = $derived(summary.rows.map(liveMeanPublic));
+	let privateMeans = $derived(summary.rows.map(liveMeanPrivate));
+	// Per-row index of the same means so the sort comparator and cell
+	// template can look up by row identity instead of re-calling
+	// `meanOver` once per comparison / once per render.
+	let publicMeansByRow = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<SummaryRow, number | null>();
+		summary.rows.forEach((r, i) => m.set(r, publicMeans[i]));
+		return m;
+	});
+	let privateMeansByRow = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<SummaryRow, number | null>();
+		summary.rows.forEach((r, i) => m.set(r, privateMeans[i]));
+		return m;
+	});
+	let bestMeanPublic = $derived(maxOf(publicMeans));
+	let worstMeanPublic = $derived(minOf(publicMeans));
+	let bestMeanPrivate = $derived(maxOf(privateMeans));
+	let worstMeanPrivate = $derived(minOf(privateMeans));
 
 	// Tooltip portal: we render a single tooltip element at the SummaryTable's
 	// root (outside the <table> + .scroll wrapper) and update its position/content
@@ -182,28 +356,52 @@
 	// stacking context — even though it's position:fixed, the neighboring sticky
 	// Model column has a higher z-index in their shared parent and would paint
 	// over the left edge of any tip that crossed under it.
-	type TipKind = 'col' | 'model';
-	type TipRow = { k: string; v: string };
+	//
+	// The MODEL-cell hover now delegates to the shared `ModelHoverPortal`
+	// (also used by PerTaskTab + PerLanguageTab) so all three tables show
+	// byte-identical tooltips. This file's local `tipState` only handles
+	// the column-header tooltips, which have a different shape (markdown
+	// body, no dl rows).
 	type TipState = {
 		visible: boolean;
-		kind: TipKind;
 		title: string;
 		text: string;
-		rows: TipRow[];
 		x: number;
 		y: number;
 	};
 	let tipState = $state<TipState>({
 		visible: false,
-		kind: 'col',
 		title: '',
 		text: '',
-		rows: [],
 		x: 0,
 		y: 0
 	});
+	type ModelTip = {
+		showFor: (t: HTMLElement, row: SummaryRow) => void;
+		hide: () => void;
+	};
+	let modelTipPortal = $state<ModelTip | undefined>(undefined);
+
+	// Tooltip is `position: fixed; transform: translate(-50%, …)` so x is
+	// the desired *centre*. Clamp it to the viewport with a half-width
+	// margin so the bubble can't spill off either edge — Rank/leftmost
+	// columns previously got the left half cut off; the same logic helps
+	// rightmost task-type columns on narrow screens.
+	const TIP_MAX_WIDTH = 340;
+	const TIP_EDGE = 8;
+	function clampTipX(rawX: number): number {
+		if (typeof window === 'undefined') return rawX;
+		const half = TIP_MAX_WIDTH / 2;
+		const min = TIP_EDGE + half;
+		const max = window.innerWidth - TIP_EDGE - half;
+		// On very narrow viewports (< TIP_MAX_WIDTH) min > max; centre on the
+		// viewport in that case rather than letting min clobber max.
+		if (min > max) return window.innerWidth / 2;
+		return Math.min(max, Math.max(min, rawX));
+	}
 
 	function showTip(e: PointerEvent | FocusEvent) {
+		cancelHide();
 		const cell = e.currentTarget as HTMLElement;
 		const title = cell.dataset.tipTitle ?? '';
 		const text = cell.dataset.tip ?? '';
@@ -211,407 +409,348 @@
 		const r = cell.getBoundingClientRect();
 		tipState = {
 			visible: true,
-			kind: 'col',
 			title,
 			text,
-			rows: [],
-			x: r.left + r.width / 2,
+			x: clampTipX(r.left + r.width / 2),
 			y: r.bottom
 		};
 	}
 
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
-		const cell = e.currentTarget as HTMLElement;
-		const r = cell.getBoundingClientRect();
-		const activeParamsLabel = row.activeParamsB
-			? `${fmtParamsValue(row.activeParamsB)}${fmtParamsUnit(row.activeParamsB)}`
-			: '—';
-		const rows: TipRow[] = [
-			{ k: 'Type', v: row.model.modelType },
-			{ k: 'Active params', v: activeParamsLabel },
-			{ k: 'Zero-shot', v: fmtZeroShot(row.zeroShotPct) },
-			{
-				k: 'Embedding dim',
-				v: row.embeddingDim ? `${row.embeddingDim.toLocaleString()} d` : '—'
-			},
-			{
-				k: 'Max tokens',
-				v: row.maxTokens ? `${row.maxTokens.toLocaleString()} tok` : '—'
-			},
-			{ k: 'Released', v: row.model.releaseDate ?? '—' }
-		];
-		tipState = {
-			visible: true,
-			kind: 'model',
-			title: row.model.displayName,
-			text: '',
-			rows,
-			x: r.left + r.width / 2,
-			y: r.bottom
-		};
+		if (!isBoundaryCross(e)) return;
+		modelTipPortal?.showFor(e.currentTarget as HTMLElement, row);
+	}
+	function hideModelTip(e?: PointerEvent | FocusEvent) {
+		if (e && !isBoundaryCross(e)) return;
+		modelTipPortal?.hide();
 	}
 
-	function hideTip() {
-		tipState = { ...tipState, visible: false };
+	// Hiding is debounced so the user can cross the 6 px gap between the
+	// cell and the portal without the tip vanishing mid-traverse. The
+	// portal's own pointerenter cancels the pending timer; pointerleave
+	// re-arms it.
+	let hideTimer: ReturnType<typeof setTimeout> | null = null;
+	const HIDE_DELAY_MS = 200;
+	function cancelHide() {
+		if (hideTimer !== null) {
+			clearTimeout(hideTimer);
+			hideTimer = null;
+		}
+	}
+	function hideTip(e?: PointerEvent | FocusEvent) {
+		// `pointerout` fires on every internal traversal; only schedule
+		// the hide when the cursor leaves the cell itself.
+		if (e && !isBoundaryCross(e)) return;
+		cancelHide();
+		hideTimer = setTimeout(() => {
+			tipState = { ...tipState, visible: false };
+			hideTimer = null;
+		}, HIDE_DELAY_MS);
+	}
+	function keepTip() {
+		cancelHide();
 	}
 </script>
 
 <div class="summary">
-<div class="scroll">
-	<table>
-		<thead>
-			<tr>
-				<th
-					class="sticky-left rank-head"
-					data-tip-title={INFO.rank.title}
-					data-tip={INFO.rank.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('rank')}
-				>
-					<button class="sort-btn num" onclick={() => clickSort('rank')}>
-						<span>Rank</span>
-						<span class="ind" class:on={sortKey === 'rank'}>{sortIcon('rank') || '↕'}</span>
-					</button>
-				</th>
-				<th class="sticky-model" aria-sort={ariaSort('model')}>
-					<button class="sort-btn" onclick={() => clickSort('model')}>
-						<span>Model</span>
-						<span class="ind" class:on={sortKey === 'model'}>{sortIcon('model') || '↕'}</span>
-					</button>
-				</th>
-				<th
-					class="num"
-					data-tip-title={INFO.totalParams.title}
-					data-tip={INFO.totalParams.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('totalParams')}
-				>
-					<button class="sort-btn num" onclick={() => clickSort('totalParams')}>
-						<span>Total Params</span>
-						<span class="ind" class:on={sortKey === 'totalParams'}
-							>{sortIcon('totalParams') || '↕'}</span
-						>
-					</button>
-				</th>
-				<th
-					class="num"
-					data-tip-title={INFO.meanTask.title}
-					data-tip={INFO.meanTask.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('meanTask')}
-				>
-					<button class="sort-btn num" onclick={() => clickSort('meanTask')}>
-						<span>Mean (Task)</span>
-						<span class="ind" class:on={sortKey === 'meanTask'}
-							>{sortIcon('meanTask') || '↕'}</span
-						>
-					</button>
-				</th>
-				<th
-					class="num"
-					data-tip-title={INFO.meanTaskType.title}
-					data-tip={INFO.meanTaskType.text}
-					onpointerenter={showTip}
-					onpointerleave={hideTip}
-					onfocusin={showTip}
-					onfocusout={hideTip}
-					aria-sort={ariaSort('meanTaskType')}
-				>
-					<button class="sort-btn num" onclick={() => clickSort('meanTaskType')}>
-						<span>Mean (TaskType)</span>
-						<span class="ind" class:on={sortKey === 'meanTaskType'}
-							>{sortIcon('meanTaskType') || '↕'}</span
-						>
-					</button>
-				</th>
-				{#each summary.taskTypes as tt (tt)}
-					{@const k = `tt:${tt}` as SortKey}
-					<th class="num" aria-sort={ariaSort(k)}>
-						<button class="sort-btn num" onclick={() => clickSort(k)}>
-							<span>{tt}</span>
-							<span class="ind" class:on={sortKey === k}>{sortIcon(k) || '↕'}</span>
+	<div class="tbl-scroll" use:stickyHScroll>
+		<table class="tbl summary-table" use:stickyHead>
+			<thead>
+				<tr>
+					<th
+						class="sticky-left rank-head"
+						data-tip-title={INFO.rank.title}
+						data-tip={INFO.rank.text}
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						aria-sort={sort.aria('rank')}
+					>
+						<button class="sort-btn tbl-num" onclick={() => sort.click('rank')}>
+							<span>Rank</span>
+							<InfoDot ariaLabel="What is {INFO.rank.title}?" />
+							<span class="ind" class:on={sort.key === 'rank'}>{sort.icon('rank')}</span>
 						</button>
 					</th>
-				{/each}
-			</tr>
-		</thead>
-		<tbody>
-			{#each sortedRows as row (row.model.name)}
-				<tr class:pinned={pinnedModels.has(row.model.name)}>
-					<td class="sticky-left">
-						<div class="rank-cell">
-							<button
-								type="button"
-								class="pin-btn"
-								class:on={pinnedModels.has(row.model.name)}
-								onclick={() => pinnedModels.toggle(row.model.name)}
-								aria-label={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-								title={pinnedModels.has(row.model.name) ? 'Unpin row' : 'Pin row'}
-							>
-								<svg
-									viewBox="0 0 24 24"
-									width="12"
-									height="12"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2.4"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M12 17v5" />
-									<path d="M9 10.76V6h6v4.76l3 2.59V17H6v-3.65l3-2.59z" />
-								</svg>
-							</button>
-							<span class="rank-num">{row.rank}</span>
-						</div>
-					</td>
-					<td
-						class="sticky-model has-tip"
-						data-model-type={row.model.modelType}
-						onpointerenter={(e) => showModelTip(e, row)}
+					<th
+						class="sticky-model"
+						aria-sort={sort.aria('model')}
+						data-tip-title={INFO.model.title}
+						data-tip={INFO.model.text}
+						onpointerenter={showTip}
 						onpointerleave={hideTip}
-						onfocusin={(e) => showModelTip(e, row)}
+						onfocusin={showTip}
 						onfocusout={hideTip}
 					>
-						{#if row.model.url}
-							<a href={row.model.url} target="_blank" rel="noreferrer" class="model-link">
-								<span class="model-org">{row.model.org}</span><span class="model-sep">/</span><span
-									class="model-name">{row.model.displayName}</span
-								>
-							</a>
-						{:else}
-							<span class="model-link">
-								<span class="model-org">{row.model.org}</span><span class="model-sep">/</span><span
-									class="model-name">{row.model.displayName}</span
-								>
-							</span>
-						{/if}
-					</td>
-					<td class="num param-cell" data-model-type={row.model.modelType}>
-						{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
-								class="unit">{fmtParamsUnit(row.totalParamsB)}</span
-							>{/if}
-					</td>
-					<td class="num" class:best={row.meanTask === bestMeanTask} style={heat(row.meanTask)}>
-						{fmtPct(row.meanTask)}
-					</td>
-					<td
-						class="num"
-						class:best={row.meanTaskType === bestMeanTaskType}
-						style={heat(row.meanTaskType)}
+						<button class="sort-btn" onclick={() => sort.click('model')}>
+							<span>Model</span>
+							<InfoDot ariaLabel="What is {INFO.model.title}?" />
+							<span class="ind" class:on={sort.key === 'model'}>{sort.icon('model')}</span>
+						</button>
+					</th>
+					<th
+						class="tbl-num"
+						data-tip-title={INFO.totalParams.title}
+						data-tip={INFO.totalParams.text}
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						aria-sort={sort.aria('totalParams')}
 					>
-						{fmtPct(row.meanTaskType)}
-					</td>
-					{#each summary.taskTypes as tt (tt)}
-						<td
-							class="num"
-							class:best={isBestScore(row, tt)}
-							style={heat(row.scoresByTaskType[tt])}
+						<button class="sort-btn tbl-num" onclick={() => sort.click('totalParams')}>
+							<span>Total Params</span>
+							<InfoDot ariaLabel="What is {INFO.totalParams.title}?" />
+							<span class="ind" class:on={sort.key === 'totalParams'}
+								>{sort.icon('totalParams')}</span
+							>
+						</button>
+					</th>
+					<th
+						class="tbl-num"
+						data-tip-title={INFO.zeroShot.title}
+						data-tip={INFO.zeroShot.text}
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						aria-sort={sort.aria('zeroShot')}
+					>
+						<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
+							<span>Zero-shot</span>
+							<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
+							<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
+						</button>
+					</th>
+					{#if showMeanTask}
+						<th
+							class="tbl-num"
+							data-tip-title={INFO.meanTask.title}
+							data-tip={INFO.meanTask.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('meanTask')}
 						>
-							{row.scoresByTaskType[tt] !== undefined ? fmtPct(row.scoresByTaskType[tt]) : ''}
-						</td>
-					{/each}
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTask')}>
+								<span>Mean (Task)</span>
+								<InfoDot ariaLabel="What is {INFO.meanTask.title}?" />
+								<span class="ind" class:on={sort.key === 'meanTask'}>{sort.icon('meanTask')}</span>
+							</button>
+						</th>
+					{/if}
+					{#if showMeanTaskType}
+						<th
+							class="tbl-num"
+							data-tip-title={INFO.meanTaskType.title}
+							data-tip={INFO.meanTaskType.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('meanTaskType')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTaskType')}>
+								<span>Mean (TaskType)</span>
+								<InfoDot ariaLabel="What is {INFO.meanTaskType.title}?" />
+								<span class="ind" class:on={sort.key === 'meanTaskType'}
+									>{sort.icon('meanTaskType')}</span
+								>
+							</button>
+						</th>
+					{/if}
+					{#if showPublicPrivate}
+						<th
+							class="tbl-num"
+							data-tip-title={INFO.meanPublic.title}
+							data-tip={INFO.meanPublic.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('meanPublic')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPublic')}>
+								<span>Mean (Public)</span>
+								<InfoDot ariaLabel="What is {INFO.meanPublic.title}?" />
+								<span class="ind" class:on={sort.key === 'meanPublic'}
+									>{sort.icon('meanPublic')}</span
+								>
+							</button>
+						</th>
+						<th
+							class="tbl-num"
+							data-tip-title={INFO.meanPrivate.title}
+							data-tip={INFO.meanPrivate.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('meanPrivate')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanPrivate')}>
+								<span>Mean (Private)</span>
+								<InfoDot ariaLabel="What is {INFO.meanPrivate.title}?" />
+								<span class="ind" class:on={sort.key === 'meanPrivate'}
+									>{sort.icon('meanPrivate')}</span
+								>
+							</button>
+						</th>
+					{/if}
+					{#if showTaskTypes}
+						{#each sortedTaskTypes as tt (tt)}
+							{@const k = `tt:${tt}` as SortKey}
+							{@const desc = TASK_TYPE_INFO[tt]}
+							<th
+								class="tbl-num"
+								aria-sort={sort.aria(k)}
+								data-tip-title={desc ? humanizeType(tt) : ''}
+								data-tip={desc ?? ''}
+								onpointerenter={desc ? showTip : undefined}
+								onpointerleave={desc ? hideTip : undefined}
+								onfocusin={desc ? showTip : undefined}
+								onfocusout={desc ? hideTip : undefined}
+							>
+								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
+									<span>{humanizeType(tt)}</span>
+									{#if desc}<InfoDot ariaLabel="What is {humanizeType(tt)}?" />{/if}
+									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
+								</button>
+							</th>
+						{/each}
+					{/if}
 				</tr>
-			{/each}
-		</tbody>
-	</table>
-</div>
-
-{#if tipState.visible}
-	<div
-		class="tip-portal"
-		role="tooltip"
-		style:left="{tipState.x}px"
-		style:top="{tipState.y}px"
-	>
-		{#if tipState.title}<strong class="tip-portal-title">{tipState.title}</strong>{/if}
-		{#if tipState.kind === 'col'}
-			<span class="tip-portal-body">{tipState.text}</span>
-		{:else}
-			<dl class="tip-portal-dl">
-				{#each tipState.rows as r (r.k)}
-					<div>
-						<dt>{r.k}</dt>
-						<dd>{r.v}</dd>
-					</div>
+			</thead>
+			<tbody>
+				{#each renderedRows as row (row.model.name)}
+					<tr class:pinned={pinnedModels.has(row.model.name)}>
+						<td class="sticky-left">
+							<div class="rank-cell">
+								<PinButton name={row.model.name} />
+								<span class="rank-pill">#{row.rank}</span>
+							</div>
+						</td>
+						<td
+							class="sticky-model has-tip"
+							data-model-type={row.model.modelType}
+							onpointerover={(e) => showModelTip(e, row)}
+							onpointerout={hideModelTip}
+							onfocusin={(e) => showModelTip(e, row)}
+							onfocusout={hideModelTip}
+						>
+							<ModelCellName model={row.model} />
+						</td>
+						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
+							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
+									class="unit">{fmtParamsUnit(row.totalParamsB)}</span
+								>{/if}
+						</td>
+						<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
+							{fmtZeroShot(row.zeroShotPct)}
+						</td>
+						{#if showMeanTask}
+							<td
+								class="tbl-num {heat(row.meanTask, worstMeanTask, bestMeanTask)}"
+								class:tbl-best={row.meanTask === bestMeanTask}
+							>
+								{fmtPct(row.meanTask)}
+							</td>
+						{/if}
+						{#if showMeanTaskType}
+							<td
+								class="tbl-num {heat(row.meanTaskType, worstMeanTaskType, bestMeanTaskType)}"
+								class:tbl-best={row.meanTaskType === bestMeanTaskType}
+							>
+								{fmtPct(row.meanTaskType)}
+							</td>
+						{/if}
+						{#if showPublicPrivate}
+							{@const mp = publicMeansByRow.get(row) ?? null}
+							{@const mpr = privateMeansByRow.get(row) ?? null}
+							<td
+								class="tbl-num {heat(mp, worstMeanPublic, bestMeanPublic)}"
+								class:tbl-best={mp != null && mp === bestMeanPublic}
+							>
+								{fmtPct(mp)}
+							</td>
+							<td
+								class="tbl-num {heat(mpr, worstMeanPrivate, bestMeanPrivate)}"
+								class:tbl-best={mpr != null && mpr === bestMeanPrivate}
+							>
+								{fmtPct(mpr)}
+							</td>
+						{/if}
+						{#if showTaskTypes}
+							{#each sortedTaskTypes as tt (tt)}
+								{@const v = row.scoresByTaskType[tt]}
+								<td
+									class="tbl-num {heat(v, worst[tt], best[tt])}"
+									class:tbl-best={v !== undefined && v === best[tt]}
+								>
+									{v !== undefined ? fmtPct(v) : ''}
+								</td>
+							{/each}
+						{/if}
+					</tr>
 				{/each}
-			</dl>
-		{/if}
+			</tbody>
+		</table>
 	</div>
-{/if}
+
+	<!-- Column-header tooltip — `interactive` so the user can click any
+	     [link](url) we slip into the body. The cell's pointerleave
+	     still fires on exit because the bubble's `pointerenter` /
+	     `pointerleave` chain back into `keepTip` / `hideTip`. -->
+	<HoverPortal
+		visible={tipState.visible}
+		title={tipState.title}
+		x={tipState.x}
+		y={tipState.y}
+		interactive
+		onPointerEnter={keepTip}
+		onPointerLeave={hideTip}
+	>
+		<span class="tip-portal-body"><MarkdownText text={tipState.text} /></span>
+	</HoverPortal>
+
+	<!-- Model-cell tooltip is the shared `ModelHoverPortal` so all three
+	     leaderboard tables (Summary / PerTask / PerLanguage) render
+	     byte-identical bubbles. -->
+	<ModelHoverPortal bind:this={modelTipPortal} />
 </div>
 
 <style>
-	.scroll {
-		overflow-x: auto;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface);
-		box-shadow: var(--shadow-sm);
-	}
-	table {
+	/* Stretch this table to the full main-column width — shared `.tbl` deliberately
+	   doesn't set a width because per-task/language tables let columns size to
+	   content. */
+	.summary-table {
 		width: 100%;
-		border-collapse: separate;
-		border-spacing: 0;
-		font-size: 13px;
 	}
-	thead th {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		font-weight: 600;
-		text-align: left;
-		padding: 0;
-		border-bottom: 1px solid var(--border);
-		white-space: nowrap;
-		position: sticky;
-		top: 0;
-		z-index: 1;
-	}
-	/* Tooltip portal — rendered as a sibling of .scroll so it isn't trapped in
-	   any sticky <th>'s stacking context. position:fixed with JS coordinates. */
-	.tip-portal {
-		position: fixed;
-		transform: translate(-50%, 6px);
-		min-width: 220px;
-		max-width: 340px;
-		padding: 10px 12px;
-		background: #1f2329;
-		color: #f1f3f5;
-		border-radius: 8px;
-		font-size: 12px;
-		font-weight: 400;
-		font-family: var(--font-sans);
-		text-transform: none;
-		letter-spacing: 0;
-		line-height: 1.5;
-		text-align: left;
-		z-index: 1000;
-		box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
-		white-space: normal;
-		pointer-events: none;
-	}
-	.tip-portal::before {
-		content: '';
-		position: absolute;
-		top: -4px;
-		left: 50%;
-		transform: translateX(-50%) rotate(45deg);
-		width: 8px;
-		height: 8px;
-		background: #1f2329;
-	}
-	.tip-portal-title {
-		display: block;
-		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: #ff9b6f;
-		margin-bottom: 4px;
-	}
+	/* Tooltip shell + title styles live in HoverPortal.svelte. We only
+	   own the column-tip body wrapper so MarkdownText output (links,
+	   spans, etc.) sits as a block under the title. */
 	.tip-portal-body {
 		display: block;
 	}
-	.tip-portal-dl {
-		display: grid;
-		grid-template-columns: max-content 1fr;
-		gap: 4px 14px;
-		margin: 0;
-	}
-	.tip-portal-dl > div {
-		display: contents;
-	}
-	.tip-portal-dl dt {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: #9aa3ad;
-		font-weight: 600;
-		align-self: center;
-	}
-	.tip-portal-dl dd {
-		margin: 0;
-		font-variant-numeric: tabular-nums;
-		font-weight: 500;
-		color: #f1f3f5;
-	}
 
-	/* Soft per-model-type tint on the Model + Params columns. The chosen
-	   color-mix targets are opaque (mixed with white) so they cover the sticky
-	   Model cell's white background while still feeling subtle.   */
-	.sticky-model[data-model-type='dense'],
-	.param-cell[data-model-type='dense'] {
-		background-color: color-mix(in srgb, #e8edff 55%, white);
-	}
-	.sticky-model[data-model-type='cross-encoder'],
-	.param-cell[data-model-type='cross-encoder'] {
-		background-color: color-mix(in srgb, #ffe6dc 55%, white);
-	}
-	.sticky-model[data-model-type='late-interaction'],
-	.param-cell[data-model-type='late-interaction'] {
-		background-color: color-mix(in srgb, #def7e9 55%, white);
-	}
-	.sticky-model[data-model-type='sparse'],
-	.param-cell[data-model-type='sparse'] {
-		background-color: color-mix(in srgb, #fff1d4 55%, white);
-	}
-	.sticky-model[data-model-type='router'],
-	.param-cell[data-model-type='router'] {
-		background-color: color-mix(in srgb, #f2e7ff 55%, white);
-	}
-	/* On hover, deepen the tint slightly so the row still has feedback. */
-	tbody tr:hover td.sticky-model[data-model-type],
-	tbody tr:hover td.param-cell[data-model-type] {
-		filter: brightness(0.96);
-	}
-	/* Subtle dotted underline on the model link cues that hovering shows more. */
-	.has-tip a {
+	/* `.type-icon` + per-model-type tints, plus shared row hover, live in
+	   src/lib/styles/leaderboard-table.css. The link inside the model
+	   cell now comes from ModelCellName.svelte; `:global(...)` reaches
+	   it across the component boundary so the dotted-underline hint
+	   (only on SummaryTable's tip-bearing cells) still applies. */
+	.has-tip :global(.tbl-model-link) {
 		text-decoration: underline dotted color-mix(in srgb, var(--link) 50%, transparent);
 		text-underline-offset: 3px;
 		text-decoration-thickness: 1px;
 	}
-	.has-tip a:hover {
+	.has-tip :global(.tbl-model-link:hover) {
 		text-decoration-color: var(--link);
-	}
-	/* Model name = org/name (HF-style). Org and slash are muted so the model
-	   identity reads clearly without losing the organization at a glance. */
-	.model-org {
-		color: var(--text-subtle);
-		font-weight: 400;
-	}
-	.model-sep {
-		color: var(--border-strong);
-		margin: 0 1px;
-	}
-	.model-name {
-		font-weight: 600;
-	}
-	.model-link {
-		display: inline-block;
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	th.num,
-	td.num {
-		text-align: right;
-		font-variant-numeric: tabular-nums;
 	}
 	.sort-btn {
 		all: unset;
-		/* all: unset resets box-sizing to content-box; force border-box so that
-		   width: 100% + horizontal padding stays inside the <th>. Otherwise the
-		   right-aligned sort indicator gets painted outside the column. */
+		/* `all: unset` flips box-sizing back to content-box; force border-box. */
 		box-sizing: border-box;
 		display: inline-flex;
 		align-items: center;
@@ -621,12 +760,17 @@
 		cursor: pointer;
 		color: var(--text-muted);
 		font-weight: 600;
-		transition:
-			background 0.12s,
-			color 0.12s;
+		transition: color 0.12s;
 	}
-	.sort-btn.num {
+	.sort-btn.tbl-num {
 		justify-content: flex-end;
+	}
+	.zs-cell {
+		font-variant-numeric: tabular-nums;
+	}
+	.zs-cell.partial {
+		color: var(--text-subtle);
+		font-weight: 500;
 	}
 	.sort-btn:hover {
 		color: var(--text);
@@ -653,20 +797,6 @@
 		color: var(--primary-strong);
 		opacity: 1;
 	}
-	tbody td {
-		padding: 8px 12px;
-		border-bottom: 1px solid var(--border);
-		white-space: nowrap;
-	}
-	tbody tr:nth-child(even) td {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td {
-		background: var(--row-hover);
-	}
-	.best {
-		font-weight: 700;
-	}
 	.unit {
 		margin-left: 2px;
 		font-size: 0.78em;
@@ -674,57 +804,13 @@
 		color: var(--text-subtle);
 		letter-spacing: 0.02em;
 	}
-	/* Rank-cell layout: pin button + rank number share the leftmost column. */
+	/* Pin button + rank pill share the leftmost column. */
 	.rank-cell {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		padding: 4px 8px;
 	}
-	.rank-num {
-		font-variant-numeric: tabular-nums;
-		font-weight: 600;
-		min-width: 16px;
-		text-align: right;
-	}
-	.pin-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		background: none;
-		border: 1px solid transparent;
-		border-radius: 6px;
-		color: var(--border-strong);
-		cursor: pointer;
-		padding: 0;
-		transition:
-			color 0.12s,
-			background 0.12s,
-			transform 0.06s;
-	}
-	.pin-btn:hover {
-		color: var(--text-muted);
-		background: var(--surface-muted);
-	}
-	.pin-btn.on {
-		color: var(--primary);
-		background: var(--primary-soft);
-		border-color: color-mix(in srgb, var(--primary) 35%, transparent);
-		transform: rotate(35deg);
-	}
-	.pin-btn:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 1px;
-	}
-	tbody tr.pinned td {
-		background: color-mix(in srgb, var(--primary-soft) 65%, transparent);
-	}
-	tbody tr.pinned + tr:not(.pinned) td {
-		border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
-	}
-
 	/* Combined pin + rank column. */
 	.sticky-left {
 		position: sticky;
@@ -756,7 +842,15 @@
 		left: 72px;
 		background: var(--surface);
 		z-index: 2;
-		min-width: 220px;
+		/* Hold the column to a fixed width window. Long model names wrap
+		   inside the cell (row grows in height) instead of either truncating
+		   or stretching the column. */
+		width: 260px;
+		min-width: 260px;
+		max-width: 260px;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		vertical-align: top;
 	}
 	thead th.sticky-model {
 		background: var(--surface-muted);
@@ -767,5 +861,28 @@
 	}
 	tbody tr:hover td.sticky-model {
 		background: var(--row-hover);
+	}
+
+	/* Mobile: 72 px (rank) + 260 px (model) of sticky pane eats almost
+	   the whole 375 px viewport, leaving the score columns unreachable.
+	   Drop the stickyness and let everything flow inside the horizontal
+	   scroll container — rank and model just become the first two
+	   columns the user scrolls past. */
+	@media (max-width: 640px) {
+		.sticky-left,
+		thead th.sticky-left,
+		tbody td.sticky-left {
+			position: static;
+			width: auto;
+			min-width: 0;
+		}
+		.sticky-model,
+		thead th.sticky-model {
+			position: static;
+			left: auto;
+			width: auto;
+			min-width: 160px;
+			max-width: 200px;
+		}
 	}
 </style>

@@ -2,19 +2,30 @@
 	import { untrack } from 'svelte';
 	import {
 		filters,
+		MODEL_MODALITIES,
 		MODEL_TYPES,
 		SIZE_LOG_MIN,
 		SIZE_LOG_MAX,
-		SIZE_MIN_M,
-		SIZE_MAX_M,
 		type ZeroShotMode,
 		type Availability,
 		type InstructionMode
 	} from '$lib/stores/filters.svelte';
 	import RangeSlider from './RangeSlider.svelte';
+	import { humanizeType } from '$lib/format';
+	import ModalityIcon from './ModalityIcon.svelte';
 
+	// Size slider works in log10(M-of-params). Bounds are derived per benchmark
+	// from filters.availableMin/MaxModelSizeM and clamp into the global
+	// [SIZE_LOG_MIN, SIZE_LOG_MAX] window so the math stays well-defined when
+	// no benchmark is loaded yet.
+	let sizeLogMin = $derived(
+		Math.max(SIZE_LOG_MIN, Math.log10(Math.max(filters.availableMinModelSizeM, 1)))
+	);
+	let sizeLogMax = $derived(
+		Math.min(SIZE_LOG_MAX, Math.log10(Math.max(filters.availableMaxModelSizeM, 1)))
+	);
 	function paramsToLog(m: number): number {
-		return Math.max(SIZE_LOG_MIN, Math.min(SIZE_LOG_MAX, Math.log10(Math.max(m, 1))));
+		return Math.max(sizeLogMin, Math.min(sizeLogMax, Math.log10(Math.max(m, 1))));
 	}
 	function logToParams(v: number): number {
 		return Math.pow(10, v);
@@ -33,10 +44,48 @@
 		}
 		return `${(mm * 1000).toFixed(0)}K`;
 	}
-	const SIZE_TICKS = [0, 2, 4, 6];
 	function formatLog(v: number): string {
 		return formatParams(logToParams(v));
 	}
+	// Inverse of `formatParams` — accepts "500K", "5M", "1.2 B", "3T",
+	// or a bare number (treated as millions, matching the underlying
+	// `minModelSizeM` store unit). Returns log-space units so it slots
+	// directly into the slider's value space. Returns null for
+	// unparseable input so the slider snaps back to the previous value.
+	function parseLog(s: string): number | null {
+		const m = s.trim().match(/^([0-9]*\.?[0-9]+)\s*([KMBT]?)$/i);
+		if (!m) return null;
+		const n = parseFloat(m[1]);
+		if (Number.isNaN(n)) return null;
+		const unit = m[2].toUpperCase();
+		const inMillions =
+			unit === 'K' ? n / 1000 : unit === 'B' ? n * 1000 : unit === 'T' ? n * 1_000_000 : n; // bare or 'M' → already in millions
+		return paramsToLog(inMillions);
+	}
+
+	// Distribute ~4 tick marks across the benchmark's log-size window. Both
+	// endpoints are pinned so the rightmost tick aligns with the slider's
+	// edge — otherwise spans that don't divide evenly into ``stepDecades``
+	// leave a visible gap (e.g. 2.3 → 3.8 with step 0.5 stops at 6.3B even
+	// though the slider's right edge is 10B).
+	let sizeTicks = $derived.by(() => {
+		const lo = sizeLogMin;
+		const hi = sizeLogMax;
+		if (hi <= lo) return [lo];
+		const span = hi - lo;
+		const stepDecades = span >= 3 ? 1 : span >= 1.5 ? 0.5 : span / 3;
+		const ticks: number[] = [lo];
+		// Half of a step is the threshold below which a tick visually collides
+		// with the endpoint — skip intermediates that come too close to lo/hi.
+		const minGap = stepDecades * 0.5;
+		let v = Math.ceil((lo + 1e-6) / stepDecades) * stepDecades;
+		while (v < hi - 1e-3) {
+			if (v - lo >= minGap && hi - v >= minGap) ticks.push(v);
+			v += stepDecades;
+		}
+		ticks.push(hi);
+		return ticks.map((t) => Math.round(t * 100) / 100);
+	});
 
 	interface Props {
 		defaultModelOpen?: boolean;
@@ -44,12 +93,50 @@
 		// On pages without a benchmark context (e.g. the Models directory) the
 		// Customize / Benchmark scope section is irrelevant — hide it entirely.
 		hideScope?: boolean;
+		// On pages where the sidebar only ever shows model filters (Models
+		// directory), drop the collapsible "Model filters" card chrome so the
+		// controls read as the section itself instead of a card-in-a-sidebar.
+		flatModel?: boolean;
+		// Optional inline "Language" facet shown inside the model-filters
+		// block. Wired up only by /models, which holds the picked/available
+		// state locally (it's the only page that filters models by language
+		// — benchmark detail pages have their own language picker in the
+		// benchmark scope section). When `languageOptions` is undefined or
+		// empty the block is omitted entirely.
+		languageOptions?: string[];
+		languagesPicked?: Set<string>;
+		onToggleLanguage?: (l: string) => void;
+		onToggleAllLanguages?: () => void;
 	}
 	let {
 		defaultModelOpen = true,
 		defaultScopeOpen = false,
-		hideScope = false
+		hideScope = false,
+		flatModel = false,
+		languageOptions,
+		languagesPicked,
+		onToggleLanguage,
+		onToggleAllLanguages
 	}: Props = $props();
+
+	// Same cap-then-expand pattern the inline rail used: hide the long
+	// tail behind a "Show all N" until the user opts in.
+	let modelLangQuery = $state('');
+	let modelLangsExpanded = $state(false);
+	const MODEL_LANGUAGE_CAP = 40;
+	let filteredModelLangs = $derived.by(() => {
+		const all = languageOptions ?? [];
+		const q = modelLangQuery.trim().toLowerCase();
+		return q ? all.filter((l) => l.toLowerCase().includes(q)) : all;
+	});
+	let visibleModelLangs = $derived(
+		modelLangsExpanded || filteredModelLangs.length <= MODEL_LANGUAGE_CAP
+			? filteredModelLangs
+			: filteredModelLangs.slice(0, MODEL_LANGUAGE_CAP)
+	);
+	let allModelLangsOn = $derived(
+		!!languagesPicked && !!languageOptions && languagesPicked.size === languageOptions.length
+	);
 
 	let modelOpen = $state(untrack(() => defaultModelOpen));
 	let scopeOpen = $state(untrack(() => defaultScopeOpen));
@@ -78,7 +165,10 @@
 		label: string;
 		clear: () => void;
 	}
-	let chips = $derived.by(() => {
+	// Split into per-section derived so toggling a model filter doesn't
+	// invalidate the customize chips (and vice versa) — each section only
+	// re-runs when its own inputs change.
+	let modelChips = $derived.by(() => {
 		const list: Chip[] = [];
 		if (filters.nameQuery.trim()) {
 			list.push({
@@ -97,10 +187,7 @@
 		if (filters.zeroShot !== 'allow_all') {
 			list.push({
 				key: 'zs',
-				label:
-					filters.zeroShot === 'only_zero_shot'
-						? 'Only zero-shot'
-						: 'Hide unknown zero-shot',
+				label: filters.zeroShot === 'only_zero_shot' ? 'Only zero-shot' : 'Hide unknown zero-shot',
 				clear: () => (filters.zeroShot = 'allow_all')
 			});
 		}
@@ -108,9 +195,7 @@
 			list.push({
 				key: 'inst',
 				label:
-					filters.instructions === 'only_instruction'
-						? 'Instruction-tuned'
-						: 'Non-instruction',
+					filters.instructions === 'only_instruction' ? 'Instruction-tuned' : 'Non-instruction',
 				clear: () => (filters.instructions = 'both')
 			});
 		}
@@ -121,13 +206,16 @@
 				clear: () => (filters.sentenceTransformersOnly = false)
 			});
 		}
-		if (filters.minModelSizeM > SIZE_MIN_M || filters.maxModelSizeM < SIZE_MAX_M) {
+		if (
+			filters.minModelSizeM > filters.availableMinModelSizeM ||
+			filters.maxModelSizeM < filters.availableMaxModelSizeM
+		) {
 			list.push({
 				key: 'size',
 				label: `Size ${formatParams(filters.minModelSizeM)}–${formatParams(filters.maxModelSizeM)}`,
 				clear: () => {
-					filters.minModelSizeM = SIZE_MIN_M;
-					filters.maxModelSizeM = SIZE_MAX_M;
+					filters.minModelSizeM = filters.availableMinModelSizeM;
+					filters.maxModelSizeM = filters.availableMaxModelSizeM;
 				}
 			});
 		}
@@ -138,6 +226,17 @@
 				clear: () => filters.setAll('modelTypes', MODEL_TYPES, true)
 			});
 		}
+		if (filters.modelModalities.size !== MODEL_MODALITIES.length) {
+			list.push({
+				key: 'mmod',
+				label: `Modality · ${filters.modelModalities.size}/${MODEL_MODALITIES.length}`,
+				clear: () => filters.setAll('modelModalities', MODEL_MODALITIES, true)
+			});
+		}
+		return list;
+	});
+	let customizeChips = $derived.by(() => {
+		const list: Chip[] = [];
 		const hasTT = filters.availableTaskTypes.length > 0;
 		if (hasTT && filters.taskTypes.size !== filters.availableTaskTypes.length) {
 			list.push({
@@ -185,6 +284,7 @@
 		}
 		return list;
 	});
+	let chips = $derived([...modelChips, ...customizeChips]);
 
 	let activeModelCount = $derived.by(() => {
 		let n = 0;
@@ -192,8 +292,13 @@
 		if (filters.zeroShot !== 'allow_all') n++;
 		if (filters.instructions !== 'both') n++;
 		if (filters.sentenceTransformersOnly) n++;
-		if (filters.minModelSizeM > SIZE_MIN_M || filters.maxModelSizeM < SIZE_MAX_M) n++;
+		if (
+			filters.minModelSizeM > filters.availableMinModelSizeM ||
+			filters.maxModelSizeM < filters.availableMaxModelSizeM
+		)
+			n++;
 		if (filters.modelTypes.size !== MODEL_TYPES.length) n++;
+		if (filters.modelModalities.size !== MODEL_MODALITIES.length) n++;
 		return n;
 	});
 	let activeScopeCount = $derived.by(() => {
@@ -218,28 +323,28 @@
 			filters.languages.size !== filters.availableLanguages.length
 		)
 			n++;
-		if (
-			filters.availableTasks.length > 0 &&
-			filters.tasks.size !== filters.availableTasks.length
-		)
+		if (filters.availableTasks.length > 0 && filters.tasks.size !== filters.availableTasks.length)
 			n++;
 		return n;
 	});
 
-	let filteredLanguages = $derived(
-		langQuery.trim()
-			? filters.availableLanguages.filter((l) =>
-					l.toLowerCase().includes(langQuery.toLowerCase().trim())
-				)
-			: filters.availableLanguages
+	let filteredLanguages = $derived.by(() => {
+		// Lowercase + trim the query ONCE; `.filter` callback then only
+		// lowercases each candidate (was redoing both per language).
+		const q = langQuery.trim().toLowerCase();
+		if (!q) return filters.availableLanguages;
+		return filters.availableLanguages.filter((l) => l.toLowerCase().includes(q));
+	});
+	// Pre-sorted full list — sort is invariant under the search query, so
+	// running it inside the per-keystroke derived was pure waste.
+	let allTaskNamesSorted = $derived(
+		filters.availableTasks.map((t) => t.name).sort((a, b) => a.localeCompare(b))
 	);
-	let filteredTasks = $derived(
-		taskQuery.trim()
-			? filters.availableTasks
-					.map((t) => t.name)
-					.filter((n) => n.toLowerCase().includes(taskQuery.toLowerCase().trim()))
-			: filters.availableTasks.map((t) => t.name)
-	);
+	let filteredTasks = $derived.by(() => {
+		const q = taskQuery.trim().toLowerCase();
+		if (!q) return allTaskNamesSorted;
+		return allTaskNamesSorted.filter((n) => n.toLowerCase().includes(q));
+	});
 
 	function resetAll() {
 		filters.resetCustomize();
@@ -263,240 +368,254 @@
 		</div>
 	{/if}
 
-	<section class="block">
-		<button
-			type="button"
-			class="block-head"
-			onclick={() => (modelOpen = !modelOpen)}
-			aria-expanded={modelOpen}
-		>
-			<span class="block-title">Model filters</span>
-			{#if activeModelCount > 0}
-				<span class="count-pill">{activeModelCount}</span>
-			{/if}
-			<span class="chev" class:open={modelOpen}>›</span>
-		</button>
+	{#snippet modelGroups()}
+		<div class="group">
+			<div class="group-label">Availability</div>
+			<div class="segmented" role="radiogroup" aria-label="Availability">
+				{#each AVAILABILITY_OPTS as opt (opt.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={filters.availability === opt.value}
+						class="seg"
+						class:on={filters.availability === opt.value}
+						onclick={() => (filters.availability = opt.value)}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		</div>
 
-		{#if modelOpen}
-			<div class="block-body">
-				<div class="group">
-					<div class="group-label">Availability</div>
-					<div class="segmented" role="radiogroup" aria-label="Availability">
-						{#each AVAILABILITY_OPTS as opt (opt.value)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={filters.availability === opt.value}
-								class="seg"
-								class:on={filters.availability === opt.value}
-								onclick={() => (filters.availability = opt.value)}
-							>
-								{opt.label}
-							</button>
-						{/each}
-					</div>
+		<div class="group">
+			<div class="group-label">Zero-shot</div>
+			<div class="segmented" role="radiogroup" aria-label="Zero-shot">
+				{#each ZERO_SHOT_OPTS as opt (opt.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={filters.zeroShot === opt.value}
+						class="seg"
+						class:on={filters.zeroShot === opt.value}
+						onclick={() => (filters.zeroShot = opt.value)}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="group">
+			<div class="group-label">
+				Model size
+				<span class="muted-inline">
+					{formatParams(filters.minModelSizeM)} – {formatParams(filters.maxModelSizeM)}
+				</span>
+			</div>
+			<RangeSlider
+				min={sizeLogMin}
+				max={sizeLogMax}
+				step={0.05}
+				valueMin={paramsToLog(filters.minModelSizeM)}
+				valueMax={paramsToLog(filters.maxModelSizeM)}
+				onMinChange={(v) => (filters.minModelSizeM = logToParams(v))}
+				onMaxChange={(v) => (filters.maxModelSizeM = logToParams(v))}
+				format={formatLog}
+				parse={parseLog}
+				ticks={sizeTicks}
+			/>
+		</div>
+
+		<div class="group">
+			<div class="group-label">Instructions</div>
+			<div class="segmented" role="radiogroup" aria-label="Instructions">
+				{#each INSTRUCTION_OPTS as opt (opt.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={filters.instructions === opt.value}
+						class="seg"
+						class:on={filters.instructions === opt.value}
+						onclick={() => (filters.instructions = opt.value)}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="group">
+			<label class="switch">
+				<input
+					type="checkbox"
+					checked={filters.sentenceTransformersOnly}
+					onchange={(e) =>
+						(filters.sentenceTransformersOnly = (e.currentTarget as HTMLInputElement).checked)}
+				/>
+				<span class="switch-track"><span class="switch-knob"></span></span>
+				<span class="switch-label">Sentence-Transformers compatible only</span>
+			</label>
+		</div>
+
+		<div class="group">
+			<div class="group-header">
+				<span class="group-label">Model type</span>
+				<button
+					type="button"
+					class="link-btn"
+					onclick={() =>
+						filters.setAll(
+							'modelTypes',
+							MODEL_TYPES,
+							filters.modelTypes.size !== MODEL_TYPES.length
+						)}
+				>
+					{filters.modelTypes.size === MODEL_TYPES.length ? 'Clear' : 'All'}
+				</button>
+			</div>
+			<div class="pills">
+				{#each MODEL_TYPES as t (t)}
+					<button
+						type="button"
+						class="pill model-type-pill"
+						data-type={t}
+						class:on={filters.modelTypes.has(t)}
+						onclick={() => filters.toggleInSet('modelTypes', t)}
+						aria-pressed={filters.modelTypes.has(t)}
+					>
+						<span>{t}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="group">
+			<div class="group-header">
+				<span class="group-label">Modality</span>
+				<button
+					type="button"
+					class="link-btn"
+					onclick={() =>
+						filters.setAll(
+							'modelModalities',
+							MODEL_MODALITIES,
+							filters.modelModalities.size !== MODEL_MODALITIES.length
+						)}
+				>
+					{filters.modelModalities.size === MODEL_MODALITIES.length ? 'Clear' : 'All'}
+				</button>
+			</div>
+			<div class="pills">
+				{#each MODEL_MODALITIES as m (m)}
+					<button
+						type="button"
+						class="pill"
+						class:on={filters.modelModalities.has(m)}
+						onclick={() => filters.toggleInSet('modelModalities', m)}
+						aria-pressed={filters.modelModalities.has(m)}
+					>
+						<ModalityIcon modality={m} size={12} />
+						<span>{m}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		{#if languageOptions && languageOptions.length > 0 && languagesPicked}
+			<!-- Language facet, only rendered when the host page wires up
+			     `languageOptions` (currently /models). State lives in the
+			     parent so the sidebar stays generic. -->
+			<div class="group">
+				<div class="group-header">
+					<span class="group-label">Language</span>
+					<button type="button" class="link-btn" onclick={() => onToggleAllLanguages?.()}>
+						{allModelLangsOn ? 'Clear' : 'All'}
+					</button>
 				</div>
-
-				<div class="group">
-					<div class="group-label">Zero-shot</div>
-					<div class="segmented" role="radiogroup" aria-label="Zero-shot">
-						{#each ZERO_SHOT_OPTS as opt (opt.value)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={filters.zeroShot === opt.value}
-								class="seg"
-								class:on={filters.zeroShot === opt.value}
-								onclick={() => (filters.zeroShot = opt.value)}
-							>
-								{opt.label}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-label">
-						Model size
-						<span class="muted-inline">
-							{formatParams(filters.minModelSizeM)} – {formatParams(filters.maxModelSizeM)}
-						</span>
-					</div>
-					<RangeSlider
-						min={SIZE_LOG_MIN}
-						max={SIZE_LOG_MAX}
-						step={0.05}
-						valueMin={paramsToLog(filters.minModelSizeM)}
-						valueMax={paramsToLog(filters.maxModelSizeM)}
-						onMinChange={(v) => (filters.minModelSizeM = logToParams(v))}
-						onMaxChange={(v) => (filters.maxModelSizeM = logToParams(v))}
-						format={formatLog}
-						ticks={SIZE_TICKS}
-					/>
-				</div>
-
-				<div class="group">
-					<div class="group-label">Instructions</div>
-					<div class="segmented" role="radiogroup" aria-label="Instructions">
-						{#each INSTRUCTION_OPTS as opt (opt.value)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={filters.instructions === opt.value}
-								class="seg"
-								class:on={filters.instructions === opt.value}
-								onclick={() => (filters.instructions = opt.value)}
-							>
-								{opt.label}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<label class="switch">
-						<input
-							type="checkbox"
-							checked={filters.sentenceTransformersOnly}
-							onchange={(e) =>
-								(filters.sentenceTransformersOnly = (e.currentTarget as HTMLInputElement).checked)}
-						/>
-						<span class="switch-track"><span class="switch-knob"></span></span>
-						<span class="switch-label">Sentence-Transformers compatible only</span>
-					</label>
-				</div>
-
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label">Model type</span>
+				<input
+					type="search"
+					class="lang-search"
+					placeholder="Search languages…"
+					bind:value={modelLangQuery}
+				/>
+				<div class="pills">
+					{#each visibleModelLangs as l (l)}
 						<button
 							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'modelTypes',
-									MODEL_TYPES,
-									filters.modelTypes.size !== MODEL_TYPES.length
-								)}
+							class="pill"
+							class:on={languagesPicked.has(l)}
+							onclick={() => onToggleLanguage?.(l)}
+							aria-pressed={languagesPicked.has(l)}
 						>
-							{filters.modelTypes.size === MODEL_TYPES.length ? 'Clear' : 'All'}
+							<span>{l}</span>
 						</button>
-					</div>
-					<div class="pills">
-						{#each MODEL_TYPES as t (t)}
-							<button
-								type="button"
-								class="pill model-type-pill"
-								data-type={t}
-								class:on={filters.modelTypes.has(t)}
-								onclick={() => filters.toggleInSet('modelTypes', t)}
-								aria-pressed={filters.modelTypes.has(t)}
-							>
-								{t}
-							</button>
-						{/each}
-					</div>
+					{/each}
 				</div>
+				{#if filteredModelLangs.length > MODEL_LANGUAGE_CAP}
+					<button
+						type="button"
+						class="link-btn show-more-btn"
+						onclick={() => (modelLangsExpanded = !modelLangsExpanded)}
+					>
+						{modelLangsExpanded ? 'Show fewer' : `Show all ${filteredModelLangs.length}`}
+					</button>
+				{/if}
 			</div>
 		{/if}
-	</section>
+	{/snippet}
+
+	{#if flatModel}
+		<!-- Flat layout: model filters render inline. Used on /models
+		     where the sidebar only ever shows these controls — no need to nest
+		     them in a collapsible "Model filters" card-in-a-sidebar. -->
+		<div class="flat-groups">
+			{@render modelGroups()}
+		</div>
+	{:else}
+		<section class="block">
+			<button
+				type="button"
+				class="block-head"
+				onclick={() => (modelOpen = !modelOpen)}
+				aria-expanded={modelOpen}
+			>
+				<span class="block-title">Model filters</span>
+				{#if activeModelCount > 0}
+					<span class="count-pill">{activeModelCount}</span>
+				{/if}
+				<span class="chev" class:open={modelOpen}>›</span>
+			</button>
+			{#if modelOpen}
+				<div class="block-body">
+					{@render modelGroups()}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	{#if !hideScope}
-	<section class="block">
-		<button
-			type="button"
-			class="block-head"
-			onclick={() => (scopeOpen = !scopeOpen)}
-			aria-expanded={scopeOpen}
-		>
-			<span class="block-title">Benchmark scope</span>
-			{#if activeScopeCount > 0}
-				<span class="count-pill">{activeScopeCount}</span>
-			{/if}
-			<span class="chev" class:open={scopeOpen}>›</span>
-		</button>
+		<section class="block">
+			<button
+				type="button"
+				class="block-head"
+				onclick={() => (scopeOpen = !scopeOpen)}
+				aria-expanded={scopeOpen}
+			>
+				<span class="block-title">Benchmark scope</span>
+				{#if activeScopeCount > 0}
+					<span class="count-pill">{activeScopeCount}</span>
+				{/if}
+				<span class="chev" class:open={scopeOpen}>›</span>
+			</button>
 
-		{#if scopeOpen}
-			<div class="block-body">
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Task type
-							<span class="muted-inline"
-								>{filters.taskTypes.size}/{filters.availableTaskTypes.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'taskTypes',
-									filters.availableTaskTypes,
-									filters.taskTypes.size !== filters.availableTaskTypes.length
-								)}
-						>
-							{filters.taskTypes.size === filters.availableTaskTypes.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each filters.availableTaskTypes as tt (tt)}
-							<button
-								type="button"
-								class="pill"
-								class:on={filters.taskTypes.has(tt)}
-								onclick={() => filters.toggleInSet('taskTypes', tt)}
-								aria-pressed={filters.taskTypes.has(tt)}
-							>
-								{tt}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Domain
-							<span class="muted-inline"
-								>{filters.domains.size}/{filters.availableDomains.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'domains',
-									filters.availableDomains,
-									filters.domains.size !== filters.availableDomains.length
-								)}
-						>
-							{filters.domains.size === filters.availableDomains.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each filters.availableDomains as d (d)}
-							<button
-								type="button"
-								class="pill"
-								class:on={filters.domains.has(d)}
-								onclick={() => filters.toggleInSet('domains', d)}
-								aria-pressed={filters.domains.has(d)}
-							>
-								{d}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				{#if filters.availableModalities.length > 0}
+			{#if scopeOpen}
+				<div class="block-body">
 					<div class="group">
 						<div class="group-header">
 							<span class="group-label"
-								>Modality
+								>Task type
 								<span class="muted-inline"
-									>{filters.modalities.size}/{filters.availableModalities.length}</span
+									>{filters.taskTypes.size}/{filters.availableTaskTypes.length}</span
 								></span
 							>
 							<button
@@ -504,122 +623,196 @@
 								class="link-btn"
 								onclick={() =>
 									filters.setAll(
-										'modalities',
-										filters.availableModalities,
-										filters.modalities.size !== filters.availableModalities.length
+										'taskTypes',
+										filters.availableTaskTypes,
+										filters.taskTypes.size !== filters.availableTaskTypes.length
 									)}
 							>
-								{filters.modalities.size === filters.availableModalities.length ? 'Clear' : 'All'}
+								{filters.taskTypes.size === filters.availableTaskTypes.length ? 'Clear' : 'All'}
 							</button>
 						</div>
 						<div class="pills">
-							{#each filters.availableModalities as m (m)}
+							{#each filters.availableTaskTypes as tt (tt)}
 								<button
 									type="button"
 									class="pill"
-									class:on={filters.modalities.has(m)}
-									onclick={() => filters.toggleInSet('modalities', m)}
-									aria-pressed={filters.modalities.has(m)}
+									class:on={filters.taskTypes.has(tt)}
+									onclick={() => filters.toggleInSet('taskTypes', tt)}
+									aria-pressed={filters.taskTypes.has(tt)}
 								>
-									{m}
+									{humanizeType(tt)}
 								</button>
 							{/each}
 						</div>
 					</div>
-				{/if}
 
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Languages
-							<span class="muted-inline"
-								>{filters.languages.size}/{filters.availableLanguages.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'languages',
-									filters.availableLanguages,
-									filters.languages.size !== filters.availableLanguages.length
-								)}
-						>
-							{filters.languages.size === filters.availableLanguages.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="search"
-						placeholder="Search languages…"
-						bind:value={langQuery}
-					/>
-					<div class="pills scroll-y">
-						{#each filteredLanguages as l (l)}
+					<div class="group">
+						<div class="group-header">
+							<span class="group-label"
+								>Domain
+								<span class="muted-inline"
+									>{filters.domains.size}/{filters.availableDomains.length}</span
+								></span
+							>
 							<button
 								type="button"
-								class="pill"
-								class:on={filters.languages.has(l)}
-								onclick={() => filters.toggleInSet('languages', l)}
-								aria-pressed={filters.languages.has(l)}
+								class="link-btn"
+								onclick={() =>
+									filters.setAll(
+										'domains',
+										filters.availableDomains,
+										filters.domains.size !== filters.availableDomains.length
+									)}
 							>
-								{l}
+								{filters.domains.size === filters.availableDomains.length ? 'Clear' : 'All'}
 							</button>
-						{/each}
-						{#if filteredLanguages.length === 0}
-							<p class="muted">No matches.</p>
-						{/if}
+						</div>
+						<div class="pills">
+							{#each filters.availableDomains as d (d)}
+								<button
+									type="button"
+									class="pill"
+									class:on={filters.domains.has(d)}
+									onclick={() => filters.toggleInSet('domains', d)}
+									aria-pressed={filters.domains.has(d)}
+								>
+									{d}
+								</button>
+							{/each}
+						</div>
 					</div>
-				</div>
 
-				<div class="group">
-					<div class="group-header">
-						<span class="group-label"
-							>Tasks
-							<span class="muted-inline"
-								>{filters.tasks.size}/{filters.availableTasks.length}</span
-							></span
-						>
-						<button
-							type="button"
-							class="link-btn"
-							onclick={() =>
-								filters.setAll(
-									'tasks',
-									filters.availableTasks.map((t) => t.name),
-									filters.tasks.size !== filters.availableTasks.length
-								)}
-						>
-							{filters.tasks.size === filters.availableTasks.length ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="search"
-						placeholder="Search tasks…"
-						bind:value={taskQuery}
-					/>
-					<div class="pills scroll-y">
-						{#each filteredTasks as name (name)}
+					{#if filters.availableModalities.length > 0}
+						<div class="group">
+							<div class="group-header">
+								<span class="group-label"
+									>Modality
+									<span class="muted-inline"
+										>{filters.modalities.size}/{filters.availableModalities.length}</span
+									></span
+								>
+								<button
+									type="button"
+									class="link-btn"
+									onclick={() =>
+										filters.setAll(
+											'modalities',
+											filters.availableModalities,
+											filters.modalities.size !== filters.availableModalities.length
+										)}
+								>
+									{filters.modalities.size === filters.availableModalities.length ? 'Clear' : 'All'}
+								</button>
+							</div>
+							<div class="pills">
+								{#each filters.availableModalities as m (m)}
+									<button
+										type="button"
+										class="pill"
+										class:on={filters.modalities.has(m)}
+										onclick={() => filters.toggleInSet('modalities', m)}
+										aria-pressed={filters.modalities.has(m)}
+									>
+										<ModalityIcon modality={m} size={12} />
+										<span>{m}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<div class="group">
+						<div class="group-header">
+							<span class="group-label"
+								>Languages
+								<span class="muted-inline"
+									>{filters.languages.size}/{filters.availableLanguages.length}</span
+								></span
+							>
 							<button
 								type="button"
-								class="pill"
-								class:on={filters.tasks.has(name)}
-								onclick={() => filters.toggleInSet('tasks', name)}
-								aria-pressed={filters.tasks.has(name)}
+								class="link-btn"
+								onclick={() =>
+									filters.setAll(
+										'languages',
+										filters.availableLanguages,
+										filters.languages.size !== filters.availableLanguages.length
+									)}
 							>
-								<span class="ellipsis" title={name}>{name}</span>
+								{filters.languages.size === filters.availableLanguages.length ? 'Clear' : 'All'}
 							</button>
-						{/each}
-						{#if filteredTasks.length === 0}
-							<p class="muted">No matches.</p>
-						{/if}
+						</div>
+						<input
+							type="search"
+							class="search"
+							placeholder="Search languages…"
+							bind:value={langQuery}
+						/>
+						<div class="pills scroll-y scroll-thin">
+							{#each filteredLanguages as l (l)}
+								<button
+									type="button"
+									class="pill"
+									class:on={filters.languages.has(l)}
+									onclick={() => filters.toggleInSet('languages', l)}
+									aria-pressed={filters.languages.has(l)}
+								>
+									{l}
+								</button>
+							{/each}
+							{#if filteredLanguages.length === 0}
+								<p class="muted">No matches.</p>
+							{/if}
+						</div>
+					</div>
+
+					<div class="group">
+						<div class="group-header">
+							<span class="group-label"
+								>Tasks
+								<span class="muted-inline"
+									>{filters.tasks.size}/{filters.availableTasks.length}</span
+								></span
+							>
+							<button
+								type="button"
+								class="link-btn"
+								onclick={() =>
+									filters.setAll(
+										'tasks',
+										filters.availableTasks.map((t) => t.name),
+										filters.tasks.size !== filters.availableTasks.length
+									)}
+							>
+								{filters.tasks.size === filters.availableTasks.length ? 'Clear' : 'All'}
+							</button>
+						</div>
+						<input
+							type="search"
+							class="search"
+							placeholder="Search tasks…"
+							bind:value={taskQuery}
+						/>
+						<div class="pills scroll-y scroll-thin">
+							{#each filteredTasks as name (name)}
+								<button
+									type="button"
+									class="pill"
+									class:on={filters.tasks.has(name)}
+									onclick={() => filters.toggleInSet('tasks', name)}
+									aria-pressed={filters.tasks.has(name)}
+								>
+									<span class="ellipsis" title={name}>{name}</span>
+								</button>
+							{/each}
+							{#if filteredTasks.length === 0}
+								<p class="muted">No matches.</p>
+							{/if}
+						</div>
 					</div>
 				</div>
-			</div>
-		{/if}
-	</section>
+			{/if}
+		</section>
 	{/if}
 </div>
 
@@ -649,12 +842,16 @@
 		flex: 1;
 		min-width: 0;
 	}
+	/* Selected-filter chip — sits on the page surface, so use the soft
+	   primary fill (theme-aware via app.css) instead of pure white,
+	   which read as a glaring patch in dark mode. Hover still flips to
+	   the full primary tint as a "clear this filter" affordance. */
 	.active-chip {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
 		padding: 3px 8px 3px 10px;
-		background: #fff;
+		background: var(--primary-soft);
 		border: 1px solid var(--primary);
 		border-radius: 999px;
 		font-size: 11px;
@@ -668,7 +865,7 @@
 	}
 	.active-chip:hover {
 		background: var(--primary);
-		color: #fff;
+		color: var(--surface);
 	}
 	.active-chip .x {
 		font-size: 14px;
@@ -749,6 +946,13 @@
 		gap: 16px;
 		border-top: 1px solid var(--border);
 	}
+	/* Sibling of `.block` used in flat mode — no card chrome, just the groups. */
+	.flat-groups {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 0 2px;
+	}
 
 	/* Groups ------------------------------------------------------------------ */
 	.group {
@@ -777,6 +981,23 @@
 		color: var(--text-subtle);
 		font-variant-numeric: tabular-nums;
 	}
+	/* Search input inside the Language facet — mirrors the
+	   `.type-search` style on /tasks so the controls feel uniform
+	   across sidebars. */
+	.lang-search {
+		width: 100%;
+		padding: 5px 10px;
+		font-size: 12px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		color: var(--text);
+	}
+	.lang-search:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 1px;
+		border-color: var(--primary);
+	}
 	.link-btn {
 		background: none;
 		border: none;
@@ -802,9 +1023,14 @@
 		border-radius: 8px;
 	}
 	.seg {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 0; /* let the grid track shrink the button below content-box width */
 		padding: 6px 8px;
 		font-size: 12px;
 		font-weight: 600;
+		line-height: 1.25;
 		background: transparent;
 		border: none;
 		border-radius: 6px;
@@ -814,9 +1040,11 @@
 			background 0.12s,
 			color 0.12s,
 			box-shadow 0.12s;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		/* Allow long labels ("Instruction-tuned", "Only zero-shot", "Proprietary")
+		   to wrap within their column instead of truncating with an ellipsis. */
+		text-align: center;
+		text-wrap: balance;
+		overflow-wrap: anywhere;
 	}
 	.seg:hover {
 		color: var(--text);
@@ -824,7 +1052,7 @@
 	.seg.on {
 		background: var(--surface);
 		color: var(--text);
-		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.08);
 	}
 
 	/* Multi-select pills ------------------------------------------------------ */
@@ -870,33 +1098,40 @@
 		font-weight: 600;
 	}
 	.pill.on:hover {
-		background: color-mix(in srgb, var(--primary) 18%, white);
+		/* Lift the soft tint slightly toward the primary without bleaching
+		   it. Mixing against `var(--surface)` keeps the result theme-aware:
+		   on light it nudges brighter, on dark it stays dim and readable
+		   instead of blowing out to near-white. */
+		background: color-mix(in srgb, var(--primary) 22%, var(--surface));
+		border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
 	}
-	/* Model-type pills carry the type's signature color when active. */
+	/* Model-type pills carry the type's signature color when active. Pulled
+	   from the shared --tint-* palette so they match SummaryTable's column
+	   tints exactly in both themes. */
 	.model-type-pill.on[data-type='dense'] {
-		background: #e8edff;
-		border-color: #c4cef9;
-		color: #2740b8;
+		background: var(--tint-blue);
+		border-color: color-mix(in srgb, var(--tint-blue-fg) 35%, transparent);
+		color: var(--tint-blue-fg);
 	}
 	.model-type-pill.on[data-type='cross-encoder'] {
-		background: #ffe6dc;
-		border-color: #f7c4b2;
-		color: #c0432e;
+		background: var(--tint-orange);
+		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
+		color: var(--tint-orange-fg);
 	}
 	.model-type-pill.on[data-type='late-interaction'] {
-		background: #def7e9;
-		border-color: #aedeb9;
-		color: #1c7a4c;
+		background: var(--tint-green);
+		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, transparent);
+		color: var(--tint-green-fg);
 	}
 	.model-type-pill.on[data-type='sparse'] {
-		background: #fff1d4;
-		border-color: #f4d595;
-		color: #a36100;
+		background: var(--tint-amber);
+		border-color: color-mix(in srgb, var(--tint-amber-fg) 35%, transparent);
+		color: var(--tint-amber-fg);
 	}
 	.model-type-pill.on[data-type='router'] {
-		background: #f2e7ff;
-		border-color: #d5bff0;
-		color: #6a32b1;
+		background: var(--tint-purple);
+		border-color: color-mix(in srgb, var(--tint-purple-fg) 35%, transparent);
+		color: var(--tint-purple-fg);
 	}
 	.model-type-pill.on:hover {
 		filter: brightness(0.97);
@@ -942,7 +1177,7 @@
 		height: 16px;
 		background: #fff;
 		border-radius: 50%;
-		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.2);
+		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.2);
 		transition: transform 0.16s;
 	}
 	.switch input:checked + .switch-track {

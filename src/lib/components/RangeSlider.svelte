@@ -10,6 +10,11 @@
 		onMinChange: (v: number) => void;
 		onMaxChange: (v: number) => void;
 		format: (v: number) => string;
+		// Optional inverse of `format`. When provided, the min/max labels
+		// become editable text inputs — Enter or blur commits, Escape
+		// reverts. Returns `null` for unparseable input. Values are clamped
+		// to [min, max] by the slider before being applied.
+		parse?: (s: string) => number | null;
 		ticks?: number[];
 	}
 	let {
@@ -21,6 +26,7 @@
 		onMinChange,
 		onMaxChange,
 		format,
+		parse,
 		ticks = []
 	}: Props = $props();
 
@@ -52,6 +58,72 @@
 	function onMaxInput() {
 		if (localMax < localMin) localMax = localMin;
 		onMaxChange(localMax);
+	}
+
+	// Editable labels (only rendered when `parse` is provided). Each side
+	// holds its own draft text so the user can type freely without the
+	// drag-driven `format(localMin/Max)` re-flowing under them mid-edit.
+	// Drafts re-sync from the live formatted value whenever the field
+	// loses focus.
+	let editingMin = $state(false);
+	let editingMax = $state(false);
+	// `untrack` mirrors the existing pattern for `localMin / localMax` —
+	// the draft is seeded from the initial prop snapshot and then
+	// resynced via the focus-gated effects below.
+	let minDraft = $state(untrack(() => format(valueMin)));
+	let maxDraft = $state(untrack(() => format(valueMax)));
+	$effect(() => {
+		if (!editingMin) minDraft = format(localMin);
+	});
+	$effect(() => {
+		if (!editingMax) maxDraft = format(localMax);
+	});
+
+	function commitMin() {
+		editingMin = false;
+		if (!parse) return;
+		const v = parse(minDraft);
+		if (v == null || Number.isNaN(v)) {
+			minDraft = format(localMin);
+			return;
+		}
+		const clamped = Math.max(min, Math.min(localMax, v));
+		if (clamped !== localMin) {
+			localMin = clamped;
+			onMinChange(clamped);
+		}
+		minDraft = format(localMin);
+	}
+	function commitMax() {
+		editingMax = false;
+		if (!parse) return;
+		const v = parse(maxDraft);
+		if (v == null || Number.isNaN(v)) {
+			maxDraft = format(localMax);
+			return;
+		}
+		const clamped = Math.min(max, Math.max(localMin, v));
+		if (clamped !== localMax) {
+			localMax = clamped;
+			onMaxChange(clamped);
+		}
+		maxDraft = format(localMax);
+	}
+	function onLabelKey(e: KeyboardEvent, side: 'min' | 'max') {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			(e.currentTarget as HTMLInputElement).blur();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			if (side === 'min') {
+				minDraft = format(localMin);
+				editingMin = false;
+			} else {
+				maxDraft = format(localMax);
+				editingMax = false;
+			}
+			(e.currentTarget as HTMLInputElement).blur();
+		}
 	}
 
 	// Click-and-drag on the track itself: move whichever thumb is closer to the
@@ -123,14 +195,38 @@
 
 <div class="rs">
 	<div class="labels">
-		<span class="val">{format(localMin)}</span>
-		<span class="val">{format(localMax)}</span>
+		{#if parse}
+			{@const HINT = 'Accepts e.g. 500K, 5M, 1.2B, 3T — Enter to apply, Esc to cancel'}
+			<input
+				type="text"
+				class="val val-edit"
+				bind:value={minDraft}
+				onfocus={() => (editingMin = true)}
+				onblur={commitMin}
+				onkeydown={(e) => onLabelKey(e, 'min')}
+				aria-label="Minimum value"
+				title={HINT}
+				inputmode="text"
+				spellcheck="false"
+			/>
+			<input
+				type="text"
+				class="val val-edit"
+				bind:value={maxDraft}
+				onfocus={() => (editingMax = true)}
+				onblur={commitMax}
+				onkeydown={(e) => onLabelKey(e, 'max')}
+				aria-label="Maximum value"
+				title={HINT}
+				inputmode="text"
+				spellcheck="false"
+			/>
+		{:else}
+			<span class="val">{format(localMin)}</span>
+			<span class="val">{format(localMax)}</span>
+		{/if}
 	</div>
-	<div
-		class="track-wrap"
-		role="presentation"
-		onpointerdown={trackPointerDown}
-	>
+	<div class="track-wrap" role="presentation" onpointerdown={trackPointerDown}>
 		<div class="track"></div>
 		<div class="fill" style:left="{leftPct}%" style:right="{100 - rightPct}%"></div>
 		<input
@@ -162,6 +258,9 @@
 			{/each}
 		</div>
 	{/if}
+	{#if parse && (editingMin || editingMax)}
+		<div class="hint">Type a value (e.g. 500K, 5M, 1.2B, 3T)</div>
+	{/if}
 </div>
 
 <style>
@@ -180,6 +279,45 @@
 	}
 	.val {
 		font-weight: 600;
+	}
+	/* Editable label — looks like plain text by default, gains a subtle
+	   input chrome on hover/focus so the affordance is discoverable
+	   without crowding the resting state. `size` is set inline from the
+	   draft length so the field width tracks the value. */
+	.val-edit {
+		font: inherit;
+		font-weight: 600;
+		color: inherit;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 4px;
+		padding: 1px 4px;
+		margin: -1px -4px;
+		min-width: 3ch;
+		text-align: left;
+		font-variant-numeric: tabular-nums;
+		cursor: text;
+		transition:
+			background 0.1s,
+			border-color 0.1s;
+		/* Auto-size to content where supported (Baseline 2024-10).
+		   Avoids a reactive `size` attribute that would swap the
+		   input element and blur it mid-keystroke. Falls back to
+		   the `width` below for older browsers. */
+		field-sizing: content;
+		width: 7ch;
+	}
+	.val-edit:hover {
+		background: var(--surface-muted);
+		border-color: var(--border);
+	}
+	.val-edit:focus {
+		outline: none;
+		background: var(--surface);
+		border-color: var(--primary);
+	}
+	.labels > .val-edit:last-child {
+		text-align: right;
 	}
 	.track-wrap {
 		position: relative;
@@ -277,5 +415,11 @@
 		position: absolute;
 		transform: translateX(-50%);
 		white-space: nowrap;
+	}
+	.hint {
+		font-size: 11px;
+		color: var(--text-subtle);
+		text-align: center;
+		margin-top: 2px;
 	}
 </style>

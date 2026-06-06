@@ -3,16 +3,35 @@
 
 	interface Props {
 		hideScope?: boolean;
+		flatModel?: boolean;
+		// Optional inline Language facet — forwarded to FilterContent.
+		// Only /models passes these; on every other page the block is
+		// omitted because there's no language data to bind to.
+		languageOptions?: string[];
+		languagesPicked?: Set<string>;
+		onToggleLanguage?: (l: string) => void;
+		onToggleAllLanguages?: () => void;
 	}
-	let { hideScope = false }: Props = $props();
+	let {
+		hideScope = false,
+		flatModel = false,
+		languageOptions,
+		languagesPicked,
+		onToggleLanguage,
+		onToggleAllLanguages
+	}: Props = $props();
 
-	let collapsed = $state(false);
+	// Collapsed on narrow viewports so the drawer doesn't overlap content;
+	// SSR has no `window` so it stays expanded until hydration.
+	let collapsed = $state(
+		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
+	);
 </script>
 
 <aside class="sidebar" class:collapsed aria-label="Filters">
 	<button
 		type="button"
-		class="toggle"
+		class="sidebar-toggle"
 		onclick={() => (collapsed = !collapsed)}
 		aria-expanded={!collapsed}
 		title={collapsed ? 'Expand filters' : 'Collapse filters'}
@@ -24,69 +43,15 @@
 	</button>
 
 	{#if !collapsed}
-		<FilterContent {hideScope} />
+		<FilterContent
+			{hideScope}
+			{flatModel}
+			{languageOptions}
+			{languagesPicked}
+			{onToggleLanguage}
+			{onToggleAllLanguages}
+		/>
 	{/if}
 </aside>
 
-<style>
-	.sidebar {
-		flex: 0 0 300px;
-		min-width: 280px;
-		max-width: 340px;
-		border-left: 1px solid var(--border);
-		background: var(--surface);
-		height: 100vh;
-		position: sticky;
-		top: 0;
-		overflow-y: auto;
-		transition:
-			flex-basis 0.18s ease,
-			min-width 0.18s ease,
-			max-width 0.18s ease;
-	}
-	.sidebar.collapsed {
-		flex: 0 0 44px;
-		min-width: 44px;
-		max-width: 44px;
-		overflow: hidden;
-	}
-	.toggle {
-		position: sticky;
-		top: 0;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		width: 100%;
-		padding: 10px 12px;
-		background: var(--surface);
-		border: none;
-		border-bottom: 1px solid var(--border);
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-muted);
-		cursor: pointer;
-		z-index: 2;
-	}
-	.sidebar.collapsed .toggle {
-		justify-content: center;
-		padding: 10px 0;
-	}
-	.toggle:hover {
-		color: var(--text);
-		background: var(--surface-muted);
-	}
-	.chev {
-		display: inline-block;
-		font-size: 18px;
-		line-height: 1;
-		transition: transform 0.18s ease;
-		color: var(--text-subtle);
-	}
-	.chev.open {
-		transform: rotate(180deg);
-	}
-	.toggle-label {
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-</style>
+<!-- Shell + toggle styles live in $lib/styles/sidebar.css. -->

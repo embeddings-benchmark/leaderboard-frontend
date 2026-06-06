@@ -86,6 +86,11 @@ function makeBenchmark(partial: Partial<Benchmark> & { name: string }): Benchmar
 		tasks: partial.tasks ?? [],
 		domains: partial.domains ?? ['Web', 'News', 'Academic'],
 		modalities: partial.modalities ?? ['text'],
+		aggregations: partial.aggregations ?? ['mean_task', 'mean_task_type', 'task_types'],
+		// Deterministic placeholder: a seedless mock won't have real counts,
+		// but a non-zero value lets the catalogue card render the "X models"
+		// stat in offline / Playwright runs.
+		numModels: partial.numModels ?? 24,
 		...partial
 	};
 }
@@ -97,6 +102,9 @@ const MTEB_MULTILINGUAL_V2 = makeBenchmark({
 		'A large-scale multilingual expansion of MTEB known as MMTEB, driven mainly by highly-curated community contributions covering 250+ languages.',
 	reference: 'https://arxiv.org/abs/2502.13595',
 	languages: MMTEB_LANGUAGES,
+	// Mirrors upstream `Benchmark.language_view` so e2e can deep-link
+	// into ?tab=perf_language without a live backend.
+	languageView: ['English', 'Chinese', 'Hindi', 'Spanish', 'French', 'Arabic', 'Russian', 'German'],
 	tasks: Array.from({ length: 132 }, (_, i) => `Task_${i + 1}`),
 	domains: COMMON_DOMAINS,
 	modalities: ['text'],
@@ -248,14 +256,7 @@ export const BENCHMARK_MENU: MenuEntry[] = [
 			},
 			{
 				name: 'Language-specific',
-				children: [
-					MTEB_EUROPE,
-					MTEB_INDIC,
-					MTEB_SCAND,
-					MTEB_CMN,
-					MTEB_DEU,
-					MTEB_FRA
-				]
+				children: [MTEB_EUROPE, MTEB_INDIC, MTEB_SCAND, MTEB_CMN, MTEB_DEU, MTEB_FRA]
 			},
 			{
 				name: 'Miscellaneous',
@@ -272,24 +273,11 @@ export const BENCHMARK_MENU: MenuEntry[] = [
 			{
 				name: 'Image',
 				open: true,
-				children: [
-					VIDORE_V3,
-					JINA_VDR,
-					{ name: 'Other', children: [VIDORE_V1V2] }
-				]
+				children: [VIDORE_V3, JINA_VDR, { name: 'Other', children: [VIDORE_V1V2] }]
 			},
 			{
 				name: 'Domain-Specific',
-				children: [
-					RTEB_FIN,
-					RTEB_LAW,
-					RTEB_CODE,
-					COIR,
-					RTEB_HEALTH,
-					FOLLOW_IR,
-					LONG_EMBED,
-					BRIGHT
-				]
+				children: [RTEB_FIN, RTEB_LAW, RTEB_CODE, COIR, RTEB_HEALTH, FOLLOW_IR, LONG_EMBED, BRIGHT]
 			},
 			{
 				name: 'Language-specific',

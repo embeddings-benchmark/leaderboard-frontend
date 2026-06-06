@@ -16,6 +16,8 @@
 		<li><strong>Number of domains</strong>: {benchmark.domains.length}</li>
 	</ul>
 	{#if benchmark.reference}
+		<!-- External paper URL -->
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 		<a class="more" href={benchmark.reference} target="_blank" rel="noreferrer">
 			Click for More Info
 		</a>

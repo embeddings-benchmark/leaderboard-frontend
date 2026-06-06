@@ -10,14 +10,23 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"lint": "prettier --check . && eslint .",
+		"lint": "run-s -c lint:format lint:js lint:style",
+		"lint:format": "prettier --check .",
+		"lint:js": "eslint \"**/*.{js,ts,svelte,css,html}\"",
+		"lint:style": "stylelint \"**/*.{css,svelte}\"",
+		"lint:style:fix": "stylelint --fix \"**/*.{css,svelte}\"",
 		"format": "prettier --write .",
+		"test:unit": "vitest run",
+		"test:unit:watch": "vitest",
 		"test:e2e": "playwright install && playwright test",
-		"test": "npm run test:e2e"
+		"test": "npm run test:unit && npm run test:e2e"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
+		"@eslint/css": "^1.3.0",
 		"@eslint/js": "^10.0.1",
+		"@html-eslint/eslint-plugin": "^0.61.0",
+		"@html-eslint/parser": "^0.61.0",
 		"@playwright/test": "^1.59.1",
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-static": "^3.0.10",
@@ -25,20 +34,33 @@
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@types/node": "^24",
 		"@types/plotly.js": "^3.0.10",
-		"@types/plotly.js-dist-min": "^2.3.4",
+		"@vitest/coverage-v8": "^4.1.8",
 		"eslint": "^10.2.0",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.17.0",
 		"globals": "^17.4.0",
+		"npm-run-all2": "^8.0.4",
+		"postcss-html": "^1.8.1",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.5.1",
+		"stylelint": "^17.12.0",
+		"stylelint-config-html": "^1.1.0",
+		"stylelint-config-standard": "^40.0.0",
+		"stylelint-plugin-use-baseline": "^1.4.2",
 		"svelte": "^5.55.2",
 		"svelte-check": "^4.4.6",
 		"typescript": "^6.0.2",
 		"typescript-eslint": "^8.58.1",
-		"vite": "^8.0.7"
+		"vite": "^8.0.7",
+		"vitest": "^4.1.8"
 	},
 	"dependencies": {
-		"plotly.js-dist-min": "^3.5.1"
-	}
+		"plotly.js": "^3.6.0"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"browserslist": [
+		"baseline widely available, safari 15"
+	]
 }

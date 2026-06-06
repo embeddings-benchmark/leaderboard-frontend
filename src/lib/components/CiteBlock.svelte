@@ -1,67 +1,45 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import type { Benchmark } from '$lib/types';
-
 	interface Props {
-		benchmark: Benchmark;
+		// What we're citing — used in the summary line ("Cite this {kind}")
+		// and the empty-state message ("No citation available for this {kind} yet.").
+		kind: 'benchmark' | 'task' | 'model';
+		// The BibTeX entry, when known. null/empty hides the entire block —
+		// the page URL itself is the shareable artifact, so we no longer need
+		// a separate "Shareable link" UI here.
+		citation?: string | null;
 	}
-	let { benchmark }: Props = $props();
+	let { kind, citation }: Props = $props();
 
 	let open = $state(false);
-	let copiedCitation = $state(false);
-	let copiedLink = $state(false);
+	let copied = $state(false);
 
-	let shareUrl = $derived.by(() => {
-		if (typeof window === 'undefined') return '';
-		const url = new URL(page.url.toString(), window.location.origin);
-		url.searchParams.set('benchmark_name', benchmark.name);
-		return url.toString();
-	});
-
-	async function copy(text: string, which: 'citation' | 'link') {
+	async function copy(text: string) {
 		try {
 			await navigator.clipboard.writeText(text);
-			if (which === 'citation') {
-				copiedCitation = true;
-				setTimeout(() => (copiedCitation = false), 1500);
-			} else {
-				copiedLink = true;
-				setTimeout(() => (copiedLink = false), 1500);
-			}
+			copied = true;
+			setTimeout(() => (copied = false), 1500);
 		} catch {
 			/* clipboard unavailable */
 		}
 	}
 </script>
 
-<details class="cite" bind:open>
-	<summary>Cite and share this benchmark</summary>
-	<div class="body">
-		{#if benchmark.citation}
+{#if citation}
+	<details class="cite" bind:open>
+		<summary>Cite this {kind}</summary>
+		<div class="body">
 			<div class="block">
 				<div class="block-head">
 					<span class="label">Citation (BibTeX)</span>
-					<button type="button" class="copy" onclick={() => copy(benchmark.citation!, 'citation')}>
-						{copiedCitation ? 'Copied' : 'Copy'}
+					<button type="button" class="copy" onclick={() => copy(citation!)}>
+						{copied ? 'Copied' : 'Copy'}
 					</button>
 				</div>
-				<pre><code>{benchmark.citation}</code></pre>
+				<pre><code>{citation}</code></pre>
 			</div>
-		{:else}
-			<p class="muted">No citation available for this benchmark yet.</p>
-		{/if}
-
-		<div class="block">
-			<div class="block-head">
-				<span class="label">Shareable link</span>
-				<button type="button" class="copy" onclick={() => copy(shareUrl, 'link')}>
-					{copiedLink ? 'Copied' : 'Copy'}
-				</button>
-			</div>
-			<pre><code>{shareUrl || `?benchmark_name=${benchmark.name}`}</code></pre>
 		</div>
-	</div>
-</details>
+	</details>
+{/if}
 
 <style>
 	.cite {
@@ -143,10 +121,5 @@
 		background: none;
 		padding: 0;
 		white-space: pre;
-	}
-	.muted {
-		color: var(--text-muted);
-		font-size: 13px;
-		margin: 0;
 	}
 </style>

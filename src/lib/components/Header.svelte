@@ -8,9 +8,9 @@
 <header class="header">
 	<h1 class="intro">Embedding Leaderboard</h1>
 	<p class="blurb">
-		This leaderboard compares 100+ text and image embedding models across 1000+ languages. We
-		refer to the publication of each selectable benchmark for details on metrics, languages,
-		tasks, and task types. Anyone is welcome
+		This leaderboard compares 100+ text and image embedding models across 1000+ languages. We refer
+		to the publication of each selectable benchmark for details on metrics, languages, tasks, and
+		task types. Anyone is welcome
 		<a
 			href="https://embeddings-benchmark.github.io/mteb/contributing/adding_a_model/"
 			target="_blank"

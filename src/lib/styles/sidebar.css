@@ -1,0 +1,270 @@
+/* Filter sidebar shell + pills shared by /benchmarks and /tasks (and the
+   FilterSidebar component used by /benchmark/[name] + /models). One source
+   of truth so the three filter surfaces stay in lock-step. */
+
+/* In-flow flex column so the main content reflows when the drawer
+   toggles. Content shrinks/grows instead of being covered, which
+   keeps wide tables from being clipped under the panel. */
+.sidebar {
+	--header-offset: 64px;
+
+	flex: 0 0 340px;
+	min-width: 320px;
+	max-width: 380px;
+	margin-left: auto;
+	border-left: 1px solid var(--border);
+	background: var(--surface);
+	height: calc(100vh - var(--header-offset));
+	position: sticky;
+	top: var(--header-offset);
+	overflow-y: auto;
+	z-index: 5;
+	transition:
+		flex-basis 0.18s ease,
+		min-width 0.18s ease,
+		max-width 0.18s ease;
+}
+.sidebar.collapsed {
+	flex: 0 0 0;
+	min-width: 0;
+	max-width: none;
+	width: 0;
+	border-left: none;
+	background: none;
+	overflow: visible;
+}
+
+.sidebar-toggle {
+	position: sticky;
+	top: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px 12px;
+	background: var(--surface);
+	border: none;
+	border-bottom: 1px solid var(--border);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted);
+	cursor: pointer;
+	z-index: 2;
+}
+.sidebar.collapsed .sidebar-toggle {
+	position: relative;
+	transform: translateX(-100%);
+	margin-top: 56px;
+	margin-right: 8px;
+	padding: 6px 10px;
+	width: auto;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+	box-shadow: var(--shadow-sm);
+	z-index: 11;
+}
+.sidebar-toggle:hover {
+	color: var(--text);
+	background: var(--surface-muted);
+}
+
+.chev {
+	display: inline-block;
+	font-size: 18px;
+	line-height: 1;
+	transition: transform 0.18s ease;
+	color: var(--text-subtle);
+}
+.chev.open {
+	transform: rotate(180deg);
+}
+.toggle-label {
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.filters {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding: 14px 16px 24px;
+}
+.group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+	flex: 1;
+}
+.group-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.group-label {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--text-subtle);
+}
+
+.type-search {
+	width: 100%;
+	max-width: 320px;
+	padding: 5px 9px;
+	font-size: 12px;
+	font-family: inherit;
+	background: var(--surface);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+.type-search:focus {
+	outline: none;
+	border-color: var(--primary);
+	box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.no-match {
+	margin: 0;
+	font-size: 12px;
+	color: var(--text-subtle);
+}
+.link-btn {
+	background: none;
+	border: none;
+	color: var(--link);
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	padding: 0 2px;
+}
+.link-btn:hover {
+	text-decoration: underline;
+}
+/* Expand button under a capped pill list (e.g. /tasks Language group's
+   "Show all 1037" affordance). Inline-block so it sits in flow under
+   the scrollport instead of stretching the sidebar to its width. */
+.show-more-btn {
+	display: inline-block;
+	margin-top: 6px;
+	padding: 2px 0;
+}
+
+.pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+/* Long task-type / domain lists scroll internally — leave the rest of the
+   sidebar room. */
+/* Add `.scroll-thin` (from app.css) alongside `.scroll` to get the styled
+   scrollbar; this rule just sizes the scrollport itself. */
+/* `contain: layout` isolates the inner flex-wrap layout from the ancestor
+   `<aside>`'s scroll calculation. Without it Chromium leaks each
+   inner-overflowed row into the sidebar's `scrollHeight`, leaving the
+   user with a phantom ~350 px tall empty band below the last facet. */
+.pills.scroll {
+	max-height: 320px;
+	overflow-y: auto;
+	padding-right: 4px;
+	contain: layout;
+}
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 11px;
+	font-size: 12px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	cursor: pointer;
+	user-select: none;
+	transition:
+		background 0.12s,
+		border-color 0.12s,
+		color 0.12s;
+}
+/* Unchecked hover: subtle border + text lift, no fill change. Matches
+   the FilterContent.svelte .pill:hover treatment used on the benchmark
+   detail page so the affordance reads the same in every sidebar. */
+.pill:hover {
+	border-color: var(--border-strong);
+	color: var(--text);
+}
+/* Checked-pill hover: nudge toward primary but mix with --surface so
+   dark theme stays muted instead of bleaching to near-white. */
+.pill:has(input:checked):hover {
+	background: color-mix(in srgb, var(--primary) 22%, var(--surface));
+	border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+}
+/* Visually-hide the checkbox; the pill's `:has(input:checked)` rule
+   carries the visual state. */
+.pill input {
+	position: absolute;
+	clip-path: inset(50%);
+}
+.pill:has(input:checked) {
+	font-weight: 600;
+}
+.pill:has(input:focus-visible) {
+	outline: 2px solid var(--primary);
+	outline-offset: 2px;
+}
+
+/* Default checked treatment for task-type / modality / domain pills —
+   primary accent across all filter sidebars. Per-stype tints (retrieval
+   purple, classification blue, …) on /tasks override this. */
+.type-fill,
+.modality-fill {
+	color: var(--text-muted);
+}
+.type-fill {
+	/* Long names ("Interlingua (International Auxiliary Language Association)",
+	   etc.) used to overflow the 307 px sidebar column with `white-space: nowrap`
+	   and push the sidebar into horizontal scroll. Cap the pill at the
+	   container width and let oversized labels wrap onto a second line. */
+	max-width: 100%;
+	overflow-wrap: anywhere;
+}
+.type-fill:has(input:checked),
+.modality-fill:has(input:checked) {
+	background: var(--primary-soft);
+	border-color: var(--primary);
+	color: var(--primary-strong);
+}
+
+@media (max-width: 640px) {
+	/* Mobile: in-flow at 340 px would leave the main column ~50 px wide;
+	   fall back to a fixed-position drawer so the user can briefly inspect
+	   filters without losing the cards. */
+	.sidebar {
+		position: fixed;
+		top: var(--header-offset);
+		right: 0;
+		flex: 0 0 auto;
+		width: min(340px, 100vw);
+		min-width: 0;
+		max-width: none;
+		margin-left: 0;
+		z-index: 30;
+		box-shadow: -8px 0 24px rgb(var(--shadow-tint) / 0.18);
+	}
+	.sidebar.collapsed {
+		width: 0;
+		box-shadow: none;
+	}
+	.sidebar.collapsed .sidebar-toggle {
+		z-index: 31;
+	}
+	.pill {
+		padding: 8px 14px;
+		font-size: 13px;
+	}
+	.group {
+		flex: 0 0 auto;
+	}
+}

@@ -1,38 +1,46 @@
 <script lang="ts">
-	import type { Benchmark } from '$lib/types';
+	import type { Benchmark, TaskMeta } from '$lib/types';
+	import TaskCard from './TaskCard.svelte';
 
 	interface Props {
 		benchmark: Benchmark;
+		// Real per-task metadata (TaskMeta[]) from the loaded summary. When
+		// absent (cold visit, summary still loading) we fall back to bare
+		// task names from `benchmark.tasks`.
+		tasksMeta?: TaskMeta[];
 	}
-	let { benchmark }: Props = $props();
+	let { benchmark, tasksMeta = [] }: Props = $props();
 
 	let query = $state('');
 
-	interface TaskRow {
+	interface CardRow {
 		name: string;
 		type: string;
-		languages: string;
-		domains: string;
-		modality: string;
-		isPublic: string;
+		simplifiedType: string;
+		languages: string[];
+		domains: string[];
+		modalities: string[];
+		description: string;
+		mainScore: string;
 	}
 
-	function makeRows(): TaskRow[] {
-		const types = benchmark.taskTypes;
-		const domains = benchmark.domains;
-		const langs = benchmark.languages.slice(0, 3).join(', ');
-		const modalities = ['text', 'image', 'audio'];
-		return benchmark.tasks.map((name, i) => ({
-			name,
-			type: types[i % types.length] ?? '',
-			languages: langs || '—',
-			domains: domains.length ? domains[i % domains.length] : '—',
-			modality: modalities[i % modalities.length],
-			isPublic: i % 5 === 0 ? 'No' : 'Yes'
-		}));
-	}
+	let rows = $derived.by<CardRow[]>(() => {
+		const byName = new Map(tasksMeta.map((t) => [t.name, t]));
+		return benchmark.tasks.map((name) => {
+			const meta = byName.get(name);
+			return {
+				name,
+				type: meta?.type ?? '—',
+				simplifiedType: meta?.simplifiedType ?? '',
+				languages: meta?.languages ?? [],
+				domains: meta?.domains ?? [],
+				modalities: meta?.modalities ?? [],
+				description: meta?.description ?? '',
+				mainScore: meta?.mainScore ?? ''
+			};
+		});
+	});
 
-	let rows = $derived(makeRows());
 	let filtered = $derived(
 		query.trim()
 			? rows.filter((r) => r.name.toLowerCase().includes(query.toLowerCase().trim()))
@@ -41,40 +49,32 @@
 </script>
 
 <div class="wrap">
-	<p class="muted">
-		{benchmark.tasks.length} tasks in this benchmark. The metadata shown here is mock — the real
-		values will come from the backend once it's wired up.
-	</p>
+	<p class="muted">{benchmark.tasks.length} tasks in this benchmark.</p>
 	<div class="filter">
 		<input type="search" placeholder="Filter tasks…" bind:value={query} />
 		<span class="count">{filtered.length} / {rows.length}</span>
 	</div>
-	<div class="scroll">
-		<table>
-			<thead>
-				<tr>
-					<th>Task Name</th>
-					<th>Task Type</th>
-					<th>Languages</th>
-					<th>Domains</th>
-					<th>Modality</th>
-					<th>Public</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each filtered as row (row.name)}
-					<tr>
-						<td>{row.name}</td>
-						<td>{row.type}</td>
-						<td>{row.languages}</td>
-						<td>{row.domains}</td>
-						<td>{row.modality}</td>
-						<td>{row.isPublic}</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
+
+	{#if filtered.length === 0}
+		<p class="empty">No tasks match the current filter.</p>
+	{:else}
+		<div class="grid">
+			{#each filtered as row (row.name)}
+				<TaskCard
+					name={row.name}
+					type={row.type}
+					simplifiedType={row.simplifiedType}
+					description={row.description}
+					modalities={row.modalities}
+					stats={[
+						{ label: 'Languages', value: row.languages.length },
+						{ label: 'Domains', value: row.domains.length },
+						{ label: 'Main metric', value: row.mainScore || '—', variant: 'metric' }
+					]}
+				/>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -82,14 +82,13 @@
 		padding-top: 8px;
 	}
 	.muted {
-		color: var(--text-muted);
 		margin: 0 0 12px;
 	}
 	.filter {
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		margin-bottom: 10px;
+		margin-bottom: 14px;
 	}
 	.filter input {
 		flex: 1;
@@ -108,40 +107,18 @@
 		color: var(--text-muted);
 		font-size: 12px;
 	}
-	.scroll {
-		overflow-x: auto;
-		max-height: 600px;
-		overflow-y: auto;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface);
-		box-shadow: var(--shadow-sm);
-	}
-	table {
-		width: 100%;
-		border-collapse: separate;
-		border-spacing: 0;
-		font-size: 13px;
-	}
-	th,
-	td {
-		padding: 8px 12px;
-		border-bottom: 1px solid var(--border);
-		text-align: left;
-		white-space: nowrap;
-	}
-	thead th {
-		background: var(--surface-muted);
+	.empty {
+		padding: 24px;
+		text-align: center;
 		color: var(--text-muted);
-		font-weight: 600;
-		position: sticky;
-		top: 0;
-		z-index: 1;
+		background: var(--surface);
+		border: 1px dashed var(--border);
+		border-radius: 8px;
 	}
-	tbody tr:nth-child(even) td {
-		background: var(--row-alt);
-	}
-	tbody tr:hover td {
-		background: var(--row-hover);
+	/* Same grid as /tasks — TaskCard handles the chrome, we just lay them out. */
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 12px;
 	}
 </style>

@@ -1,0 +1,330 @@
+/* Shared chrome for leaderboard tables (SummaryTable, PerTaskTab, PerLanguageTab).
+   Component-specific rules — model-type tinted cells, ranked-pin combo cells,
+   per-language fake score colorings — stay in their own \3c style> blocks.
+
+   Usage: opt in via classes (no element-selector magic). A typical row looks like:
+     <div class="tbl-scroll">
+       <table class="tbl">
+         <thead>
+           <tr>
+             <th class="tbl-pin-col tbl-sticky-pin"></th>
+             <th class="tbl-sticky-col"><button class="tbl-sort tbl-sort-left">…</button></th>
+             <th class="tbl-num"><button class="tbl-sort">…</button></th>
+           </tr>
+         </thead>
+         <tbody>
+           <tr class:pinned={...}> … </tr>
+         </tbody>
+       </table>
+     </div>
+*/
+
+/* The sticky-thead overlay's inner scroll container mirrors the wrapper's
+   horizontal scroll, so its own scrollbar must be invisible. */
+.sticky-head-inner::-webkit-scrollbar {
+	display: none;
+}
+
+.tbl-scroll {
+	/* `overflow-x: auto` contains wide tables; browsers coerce overflow-y to
+	   auto too, so sticky thead anchors here rather than the page viewport.
+	   The `stickyHead` action clones the thead into a viewport-pinned overlay
+	   to work around that — see src/lib/actions/sticky-head.ts. */
+	overflow-x: auto;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface);
+	box-shadow: var(--shadow-sm);
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: contain;
+	/* `contain: layout style paint` isolates the table's layout/style/paint
+	   cost from the rest of the page — a hover or sort-indicator change
+	   inside the table no longer forces the page to recompute or repaint.
+	   `paint` also clips the row-hover `box-shadow: inset 0 0 0 100vmax …`
+	   to the wrapper so the viewport-sized shadow can't bleed beyond it. */
+	contain: layout style paint;
+}
+
+.tbl {
+	border-collapse: separate;
+	border-spacing: 0;
+	font-size: 13px;
+}
+.tbl th,
+.tbl td {
+	border-bottom: 1px solid var(--border);
+	white-space: nowrap;
+	text-align: left;
+}
+.tbl td {
+	padding: 8px 12px;
+}
+.tbl thead th {
+	background: var(--surface-muted);
+	color: var(--text-muted);
+	font-weight: 600;
+	padding: 0;
+	/* Sticky inside .tbl-scroll (browsers coerce overflow-y to auto when
+	   overflow-x is auto). The `stickyHead` action provides the viewport-
+	   pinned overlay; this base sticky stays as a fallback. */
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+
+/* Skip render/paint for off-screen rows on long tables (SummaryTable can
+   have 200+, PerTaskTab 200+ rows × 200+ columns). Browser materialises a
+   row only as it scrolls into view; `contain-intrinsic-size` gives a 36 px
+   placeholder so the scrollport height — and the sticky-head / floating
+   hscroll overlays measured against it — stay stable.
+
+   Note: this is on `<tr>`, which establishes its own table-row formatting
+   context. Sticky cells inside a row anchor to the `.tbl-scroll` wrapper
+   (the scroll container), not the row itself, so they keep working. */
+.tbl tbody tr {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 36px;
+}
+/* `:where()` zero-specificity wrap so per-cell `.heat-N` background classes
+   (single-class specificity) still win over the zebra stripe. Without it,
+   the chained selector beats `.heat-N` 0,0,2,3 vs 0,0,1,0 and every even
+   row paints `--row-alt` over its heat shade. Pinned rows below keep their
+   full specificity so they stay visually distinct over heat. */
+:where(.tbl tbody tr:nth-child(even)) td {
+	background: var(--row-alt);
+}
+.tbl tbody tr:hover td {
+	/* Layer a translucent dark over the cell instead of swapping
+	   the background. Heat-shaded score cells set their own
+	   `background-color: color-mix(...)`, which has higher
+	   specificity than a row-level `background` swap, so the old
+	   rule only registered on cells without per-cell colours. An
+	   inset shadow paints on top of whatever background sits
+	   underneath (heat tint, alt-row, type tint, …) so every cell
+	   visibly highlights. The 100vmax spread is the standard
+	   "fill the box" trick. */
+	box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 7%, transparent);
+}
+.tbl tbody tr.pinned td {
+	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+}
+.tbl tbody tr.pinned + tr:not(.pinned) td {
+	border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
+}
+
+/* Numeric (right-aligned, tabular figures). Selector needs to beat
+   `.tbl th, .tbl td` on specificity. */
+.tbl th.tbl-num,
+.tbl td.tbl-num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.tbl-best {
+	font-weight: 700;
+}
+
+/* Sort button used inside any <th>. */
+.tbl-sort {
+	all: unset;
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	width: 100%;
+	padding: 8px 12px;
+	cursor: pointer;
+	color: var(--text-muted);
+	font-weight: 600;
+	transition:
+		color 0.12s,
+		background 0.12s;
+	box-sizing: border-box;
+}
+.tbl-sort.tbl-sort-left {
+	justify-content: flex-start;
+}
+.tbl-sort:hover {
+	color: var(--text);
+	background: color-mix(in srgb, var(--primary-soft) 60%, transparent);
+}
+.tbl-sort:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: -2px;
+	border-radius: 4px;
+}
+.tbl-sort-ind {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--text-subtle);
+	opacity: 0.4;
+	transition:
+		opacity 0.12s,
+		color 0.12s;
+}
+.tbl-sort:hover .tbl-sort-ind {
+	opacity: 1;
+}
+.tbl-sort-ind.on {
+	color: var(--primary-strong);
+	opacity: 1;
+}
+
+/* Left-edge pin column (32px) + the pin button itself. */
+.tbl-pin-col {
+	width: 32px;
+	min-width: 32px;
+	padding: 0;
+	text-align: center;
+}
+.tbl-sticky-pin {
+	position: sticky;
+	left: 0;
+	background: var(--surface);
+	z-index: 2;
+}
+.tbl thead th.tbl-sticky-pin {
+	background: var(--surface-muted);
+	z-index: 3;
+}
+.tbl tbody tr:nth-child(even) td.tbl-sticky-pin {
+	background: var(--row-alt);
+}
+.tbl tbody tr:hover td.tbl-sticky-pin {
+	background: var(--row-hover);
+}
+.tbl tbody tr.pinned td.tbl-sticky-pin {
+	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+}
+
+.tbl-pin-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	background: none;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	color: var(--border-strong);
+	cursor: pointer;
+	padding: 0;
+	transition:
+		color 0.12s,
+		background 0.12s,
+		transform 0.06s;
+}
+.tbl-pin-btn:hover {
+	color: var(--text-muted);
+	background: var(--surface-muted);
+}
+.tbl-pin-btn.on {
+	color: var(--primary);
+	background: var(--primary-soft);
+	border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+	transform: rotate(35deg);
+}
+.tbl-pin-btn:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 1px;
+}
+
+/* Left-sticky Model column (PerTaskTab + PerLanguageTab use this directly;
+   SummaryTable overrides per-model-type tints in its own \3c style>). */
+.tbl-sticky-col {
+	position: sticky;
+	left: 32px;
+	background: var(--surface);
+	z-index: 2;
+	min-width: 220px;
+	max-width: 280px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tbl thead th.tbl-sticky-col {
+	background: var(--surface-muted);
+	z-index: 3;
+}
+.tbl tbody tr:nth-child(even) td.tbl-sticky-col {
+	background: var(--row-alt);
+}
+.tbl tbody tr:hover td.tbl-sticky-col {
+	background: var(--row-hover);
+}
+.tbl tbody tr.pinned td.tbl-sticky-col {
+	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+}
+
+/* Mobile: a 220 px sticky Model column behind a 32 px pin column
+   leaves only ~120 px for the actual score columns on a 375 px
+   phone — the data the user came for. Drop the sticky behaviour so
+   every column scrolls together inside the table's horizontal
+   overflow container. */
+@media (max-width: 640px) {
+	.tbl-sticky-pin,
+	.tbl thead th.tbl-sticky-pin {
+		position: static;
+	}
+	.tbl-sticky-col,
+	.tbl thead th.tbl-sticky-col {
+		position: static;
+		left: auto;
+		min-width: 140px;
+		max-width: 180px;
+	}
+}
+
+/* Model identity rendered as org/name (HF-style). Org and slash are muted so
+   the model name reads clearly without losing the organization. */
+.tbl-model-link {
+	display: inline;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.35;
+}
+.tbl-model-org {
+	color: var(--text-subtle);
+	font-weight: 400;
+}
+.tbl-model-sep {
+	color: var(--border-strong);
+	margin: 0 1px;
+}
+.tbl-model-name {
+	font-weight: 600;
+}
+
+/* Per-type tint as a single custom property on the host cell. The model
+   name in the row cell picks it up via the shared paint rule below, and
+   HoverPortal / ModelHoverPortal use the same property for their title
+   + Type-row value. */
+[data-model-type='dense'] {
+	--type-tint: var(--tint-blue-fg);
+}
+[data-model-type='cross-encoder'] {
+	--type-tint: var(--tint-orange-fg);
+}
+[data-model-type='late-interaction'] {
+	--type-tint: var(--tint-green-fg);
+}
+[data-model-type='sparse'] {
+	--type-tint: var(--tint-amber-fg);
+}
+[data-model-type='router'] {
+	--type-tint: var(--tint-purple-fg);
+}
+[data-model-type] .tbl-model-name {
+	color: var(--type-tint, inherit);
+}
+
+/* Rank pill — shared across SummaryTable and ModelScoreTable so the
+   leaderboard rank reads identically in both views. */
+.rank-pill {
+	display: inline-block;
+	padding: 2px 8px;
+	font-size: 11px;
+	font-weight: 700;
+	border-radius: 999px;
+	background: var(--surface-muted);
+	color: var(--ink-strong);
+	font-variant-numeric: tabular-nums;
+}

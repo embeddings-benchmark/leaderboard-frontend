@@ -1,0 +1,21 @@
+name: Type check
+
+on:
+  push:
+    branches: [main, integration]
+  pull_request:
+    branches: [main, integration]
+  workflow_dispatch:
+
+concurrency:
+  group: typecheck-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/common
+      - name: svelte-check
+        run: npm run check

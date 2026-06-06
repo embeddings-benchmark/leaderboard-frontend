@@ -34,7 +34,16 @@ const config = {
 			strict: true
 		}),
 		paths: {
-			base: dev ? '' : process.env.BASE_PATH || ''
+			base: dev ? '' : process.env.BASE_PATH || '',
+			// SvelteKit 2 defaults this to `true`, which emits *relative*
+			// asset URLs. On a deep route like `/benchmark/<name>/` that
+			// turns `_app/immutable/...` into
+			// `/benchmark/<name>/_app/immutable/...`, which doesn't exist
+			// on disk → nginx SPA fallback serves 404.html → browser
+			// refuses to load the resulting HTML as a JS module (MIME
+			// mismatch). Force absolute (`/_app/...`) so the asset URL
+			// is the same from every page.
+			relative: false
 		},
 		prerender: {
 			// The story page's TOC links to section anchors (#lede, #leader, …).
@@ -42,7 +51,14 @@ const config = {
 			// client, so they're absent from the prerendered HTML. They WILL be
 			// present after hydration, so we downgrade the build error to a warning
 			// instead of failing prerender.
-			handleMissingId: 'warn'
+			handleMissingId: 'warn',
+			// Production origin baked into every prerendered URL. `page.url.origin`
+			// resolves to this during `vite build`, which is what ends up in
+			// `og:image` / `og:url` / canonical-link tags on the static HTML.
+			// Override per build with `PUBLIC_SITE_URL=…` (e.g. for staging
+			// or a fork). Without this, SvelteKit substitutes its placeholder
+			// `http://sveltekit-prerender`, which 404s in every crawler.
+			origin: process.env.PUBLIC_SITE_URL || 'https://mteb-leaderboardv3.hf.space'
 		},
 		version: {
 			// Embedded in the build. SvelteKit checks `_app/version.json` at the

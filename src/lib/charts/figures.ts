@@ -1,4 +1,4 @@
-import type { Data, Font, Layout } from 'plotly.js';
+import type { Data, Layout } from 'plotly.js';
 import type { BenchmarkSummary } from '$lib/types';
 
 const RADAR_LINE_COLORS = ['#EE4266', '#00a6ed', '#ECA72C', '#B42318', '#3CBBB1'];
@@ -18,7 +18,10 @@ export function performanceSizePlot(
 	summary: BenchmarkSummary,
 	pinned: ReadonlySet<string> = new Set()
 ): PlotSpec {
-	const rows = summary.rows.filter((r) => r.activeParamsB > 0);
+	const rows = summary.rows.filter(
+		(r): r is BenchmarkSummary['rows'][number] & { meanTask: number } =>
+			r.activeParamsB > 0 && r.meanTask != null
+	);
 
 	const x = rows.map((r) => r.activeParamsB * 1e9);
 	const y = rows.map((r) => r.meanTask * 100);
@@ -40,15 +43,8 @@ export function performanceSizePlot(
 		x,
 		y,
 		text,
-		mode: 'text+markers',
+		mode: 'markers',
 		type: 'scatter',
-		textposition: 'top center',
-		// Plotly accepts per-point arrays for textfont.size / .color at
-		// runtime; @types/plotly.js only types the single-value form.
-		textfont: {
-			size: isPinned.map((p) => (p ? 13 : 11)),
-			color: isPinned.map((p) => (p ? PIN : '#1f2329'))
-		} as unknown as Partial<Font>,
 		hovertemplate:
 			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active params: %{customdata[2]}<br>' +
 			'Max tokens: %{customdata[0]}<br>Embedding dim: %{customdata[1]}<br>' +
@@ -65,10 +61,12 @@ export function performanceSizePlot(
 			cmax: 5,
 			showscale: true,
 			colorbar: {
-				title: { text: 'Max Tokens', font: { size: 11, color: '#5a6470' } },
+				// Font color is inherited from the layout `font.color` that
+				// PlotlyChart sets per-theme — no need to hardcode it here.
+				title: { text: 'Max Tokens', font: { size: 11 } },
 				tickvals: [2, 3, 4, 5],
 				ticktext: ['100', '1K', '10K', '100K'],
-				tickfont: { size: 11, color: '#5a6470' },
+				tickfont: { size: 11 },
 				outlinewidth: 0,
 				bordercolor: 'rgba(0,0,0,0)',
 				borderwidth: 0,
@@ -98,10 +96,12 @@ export function performanceOverTimePlot(
 	pinned: ReadonlySet<string> = new Set()
 ): PlotSpec {
 	const points = summary.rows
-		.filter((r) => r.model.releaseDate)
+		.filter(
+			(r): r is BenchmarkSummary['rows'][number] & { meanTask: number } =>
+				!!r.model.releaseDate && r.meanTask != null
+		)
 		.sort(
-			(a, b) =>
-				new Date(a.model.releaseDate!).getTime() - new Date(b.model.releaseDate!).getTime()
+			(a, b) => new Date(a.model.releaseDate!).getTime() - new Date(b.model.releaseDate!).getTime()
 		);
 
 	const dates = points.map((r) => r.model.releaseDate!);
@@ -184,17 +184,14 @@ export function radarPlot(summary: BenchmarkSummary): PlotSpec {
 
 	const layout: Partial<Layout> = {
 		polar: {
+			// gridcolor / linecolor are filled in by PlotlyChart from theme
+			// tokens — leaving them off here lets the wrapper own the palette.
 			radialaxis: {
 				visible: true,
 				showticklabels: false,
-				ticks: '',
-				gridcolor: '#cdd0d6',
-				linecolor: 'rgba(0,0,0,0)'
+				ticks: ''
 			},
-			angularaxis: {
-				gridcolor: '#cdd0d6',
-				linecolor: 'rgba(0,0,0,0)'
-			}
+			angularaxis: {}
 		},
 		showlegend: true,
 		legend: {
@@ -209,4 +206,3 @@ export function radarPlot(summary: BenchmarkSummary): PlotSpec {
 
 	return { data: traces, layout };
 }
-

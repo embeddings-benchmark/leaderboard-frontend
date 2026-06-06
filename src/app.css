@@ -1,23 +1,137 @@
 :root {
-	--font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+	--font-sans: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
 	--font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-	--bg: #f7f7f8;
-	--surface: #ffffff;
-	--surface-muted: #f1f3f5;
-	--border: #e2e4e8;
-	--border-strong: #cdd0d6;
-	--text: #1f2329;
-	--text-muted: #5b6470;
-	--text-subtle: #8a93a0;
-	--primary: #ff6f3c;
-	--primary-strong: #e85a2a;
-	--primary-soft: #fff1ec;
-	--link: #2563eb;
-	--row-alt: #fafbfc;
-	--row-hover: #eef0f4;
-	--shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+	/* Raw palettes — keep both per token so we can compose with light-dark()
+	   and so a hard-pinned theme (data-theme="light"/"dark") still has access
+	   to either side when needed. */
+	/* Light theme leans toward off-white / neutral grey now that the
+	   accent is a cool blue. The previous warm cream (#f6f5f1) clashed
+	   with blue. Surfaces stay pure white so cards still read against
+	   the page background. */
+	--bg-light: #fbfcfd;
+	--bg-dark: #14161b;
+	--surface-light: #fff;
+	--surface-dark: #1d1f26;
+	--surface-muted-light: #f1f3f6;
+	--surface-muted-dark: #23262e;
+	--border-light: #e3e6ec;
+	--border-dark: #2d313a;
+	--border-strong-light: #c6cbd4;
+	--border-strong-dark: #3f4452;
+	--text-light: #1b1f24;
+	--text-dark: #ecedf2;
+	--text-muted-light: #56606b;
+	--text-muted-dark: #b7bdc8;
+	--text-subtle-light: #87909c;
+	--text-subtle-dark: #8d96a4;
+	--ink-strong-light: #0e1116;
+	--ink-strong-dark: #f7f9fd;
+	/* Light theme uses the same blue family as dark, just one stop
+	   deeper so it reads with comparable contrast on a warm-paper
+	   surface. */
+	--primary-light: #2563eb;
+	--primary-dark: #5da9ff;
+	--primary-strong-light: #1d4ed8;
+	--primary-strong-dark: #88c2ff;
+	--primary-soft-light: #e6efff;
+	--primary-soft-dark: #1a2839;
+	/* Heat-shading source, kept separate from `--primary` so the light-mode
+	   accent stays cleaner than the table's tinted grid. */
+	--heat-light: #7da7e8;
+	--heat-dark: #5da9ff;
+	--link-light: #2563eb;
+	--link-dark: #88c2ff;
+	--row-alt-light: #f8f9fb;
+	--row-alt-dark: #1f2229;
+	--row-hover-light: #eaedf3;
+	--row-hover-dark: #2a2d36;
+	--shadow-sm-light: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
+	--shadow-sm-dark: 0 1px 2px rgb(0, 0, 0, 0.4);
+	/* Raw triplet for every navy-tinted shadow on the site — plug into
+	   `rgb(var(--shadow-tint) / X)` so depth/blur stay per-call but the
+	   underlying tint is one source of truth (was `rgb(15, 23, 42, X)`
+	   duplicated across 20+ files). */
+	--shadow-tint: 15 23 42;
+	/* Portal tooltip — themed so the bubble matches the surrounding
+	   surface (was forced dark in both themes; users felt it stood out
+	   too sharply against light tables). Light theme uses a near-white
+	   bubble with dark text; dark theme keeps the original dark values.
+	   Combined into the live `--tip-*` tokens further down. */
+	--tip-bg-light: #fbfcfd;
+	--tip-fg-light: #14181f;
+	--tip-label-light: #6b7280;
+	--tip-bg-dark: #1f2329;
+	--tip-fg-dark: #f1f3f5;
+	--tip-label-dark: #9aa3ad;
+	/* Top-bar background. Opaque now that there's no `backdrop-filter` blur —
+	   a translucent value here would let scrolled content show through and
+	   wash out the toolbar text. */
+	--bar-bg-light: #fff;
+	--bar-bg-dark: #1d1f26;
+
+	/* Live tokens — chosen by the browser based on the resolved color-scheme
+	   (system preference, or manually pinned via `data-theme`). */
+	--bg: light-dark(var(--bg-light), var(--bg-dark));
+	--surface: light-dark(var(--surface-light), var(--surface-dark));
+	--surface-muted: light-dark(var(--surface-muted-light), var(--surface-muted-dark));
+	--border: light-dark(var(--border-light), var(--border-dark));
+	--border-strong: light-dark(var(--border-strong-light), var(--border-strong-dark));
+	--text: light-dark(var(--text-light), var(--text-dark));
+	--text-muted: light-dark(var(--text-muted-light), var(--text-muted-dark));
+	--text-subtle: light-dark(var(--text-subtle-light), var(--text-subtle-dark));
+	--ink-strong: light-dark(var(--ink-strong-light), var(--ink-strong-dark));
+	--primary: light-dark(var(--primary-light), var(--primary-dark));
+	--primary-strong: light-dark(var(--primary-strong-light), var(--primary-strong-dark));
+	--primary-soft: light-dark(var(--primary-soft-light), var(--primary-soft-dark));
+	--heat: light-dark(var(--heat-light), var(--heat-dark));
+	--link: light-dark(var(--link-light), var(--link-dark));
+	--row-alt: light-dark(var(--row-alt-light), var(--row-alt-dark));
+	--row-hover: light-dark(var(--row-hover-light), var(--row-hover-dark));
+	--shadow-sm: light-dark(var(--shadow-sm-light), var(--shadow-sm-dark));
+	--bar-bg: light-dark(var(--bar-bg-light), var(--bar-bg-dark));
+	--tip-bg: light-dark(var(--tip-bg-light), var(--tip-bg-dark));
+	--tip-fg: light-dark(var(--tip-fg-light), var(--tip-fg-dark));
+	--tip-label: light-dark(var(--tip-label-light), var(--tip-label-dark));
+
+	/* Category palette — each row pairs a soft bg with a readable fg. */
+	--tint-blue: light-dark(#e8edff, #1e2740);
+	--tint-blue-fg: light-dark(#2740b8, #a7bbf0);
+	--tint-purple: light-dark(#f2e7ff, #2c2245);
+	--tint-purple-fg: light-dark(#6a32b1, #c4a8f5);
+	--tint-green: light-dark(#def7e9, #163828);
+	--tint-green-fg: light-dark(#1c7a4c, #8ad6a8);
+	--tint-orange: light-dark(#ffe6dc, #3a221b);
+	--tint-orange-fg: light-dark(#c0432e, #f0a890);
+	--tint-amber: light-dark(#fff1d4, #3a2d11);
+	--tint-amber-fg: light-dark(#a36100, #e9b86b);
+	--tint-pink: light-dark(#ffdee9, #3a1f2c);
+	--tint-pink-fg: light-dark(#b41868, #f0a3c2);
+	--tint-azure: light-dark(#dceefc, #1a2a3d);
+	--tint-azure-fg: light-dark(#1e6cc3, #8fbef0);
+	--tint-teal: light-dark(#d8f3fe, #16313c);
+	--tint-teal-fg: light-dark(#1c5d7a, #87cfe8);
+
+	/* Declare both schemes so the browser themes native UI (scrollbars,
+	   default canvas, form controls) to match the chosen scheme. */
+	color-scheme: light dark;
+	accent-color: var(--primary);
 }
+
+/* Hard pins set on <html data-theme="…"> by the toggle (and the inline
+   pre-paint script). Overriding `color-scheme` collapses light-dark() to the
+   chosen branch automatically — no token reassignment needed. */
+:root[data-theme='light'] {
+	color-scheme: light;
+}
+:root[data-theme='dark'] {
+	color-scheme: dark;
+}
+
+/* `light-dark()` requires Baseline 2024-05 (Safari ≥17.5, Chrome 123, Firefox 120).
+   Older browsers fall back to the light side via the default value resolution,
+   which is acceptable for a tiny tail. The previous `@supports not` block
+   triplicated the entire token table for ~30-month-old browsers — dropped. */
 
 * {
 	box-sizing: border-box;
@@ -54,4 +168,348 @@ code {
 	padding: 1px 4px;
 	border-radius: 3px;
 	font-size: 0.92em;
+}
+
+/* Small "follow our contributor guide" note that lives below the lead on
+   the /models, /tasks, and /benchmarks hero. Defined once here so the
+   three pages don't drift apart. */
+.contribute-note {
+	margin: 8px 0 0;
+	font-size: 13px;
+	color: var(--text-subtle);
+}
+
+/* Per-modality colour pair via `.modality-tint[data-modality=text|image|audio|video]`.
+   Each variant sets the tint-pair custom properties; one paint rule below
+   reads them, collapsing 4 declaration blocks into 4 var-only blocks + 1
+   shared paint rule. */
+[data-modality='text'] {
+	--modality-tint: var(--tint-teal);
+	--modality-tint-fg: var(--tint-teal-fg);
+}
+[data-modality='image'] {
+	--modality-tint: var(--tint-blue);
+	--modality-tint-fg: var(--tint-blue-fg);
+}
+[data-modality='audio'] {
+	--modality-tint: var(--tint-amber);
+	--modality-tint-fg: var(--tint-amber-fg);
+}
+[data-modality='video'] {
+	--modality-tint: var(--tint-purple);
+	--modality-tint-fg: var(--tint-purple-fg);
+}
+.modality-tint {
+	background: var(--modality-tint, var(--surface-muted));
+	color: var(--modality-tint-fg, var(--text-muted));
+}
+
+/* Hero lead paragraph used by every top-level index hero (/, /tasks,
+   /models, /benchmarks). Pages override font-size where they want a
+   larger / smaller block. */
+.lead {
+	margin: 0;
+	color: var(--text-muted);
+}
+
+/* Sticky search + sort shelf shared by every overview page. */
+.toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 12px;
+	margin: 12px 0 18px;
+	padding: 10px 12px;
+	background: var(--bar-bg);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	box-shadow: var(--shadow-sm);
+	position: sticky;
+	top: var(--header-offset, 56px);
+	z-index: 5;
+}
+@media (max-width: 640px) {
+	.toolbar {
+		margin: 10px 0 14px;
+		padding: 10px;
+		gap: 8px 10px;
+	}
+	.toolbar .sort {
+		margin-left: 0;
+	}
+}
+
+/* Sort + direction-toggle widget shared by the /models and /tasks
+   index toolbars. */
+.sort {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.sort select {
+	padding: 6px 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+	font-family: inherit;
+	font-size: 12px;
+	color: var(--text);
+}
+.dir-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 6px 8px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+	color: var(--text-muted);
+	font-size: 13px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	cursor: pointer;
+}
+.dir-btn:hover {
+	color: var(--text);
+	border-color: var(--border-strong);
+}
+
+/* Breadcrumb strip shared by detail pages. */
+.breadcrumb {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 14px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.breadcrumb a {
+	color: var(--text-muted);
+	text-decoration: none;
+}
+.breadcrumb a:hover {
+	color: var(--text);
+}
+.breadcrumb .sep {
+	color: var(--border-strong);
+}
+.breadcrumb .current {
+	color: var(--text);
+	font-weight: 600;
+}
+
+/* `min-width: 0` is load-bearing: `.shell` is a flex column, and without
+   it a long unbreakable token (BibTeX, wide URL) stretches the page past
+   the viewport instead of being clipped by internal scrollports. */
+.page {
+	width: 100%;
+	max-width: 1280px;
+	margin: 0 auto;
+	padding: 18px 28px 56px;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+.muted {
+	margin: 0;
+	color: var(--text-muted);
+}
+
+/* Shared thin scrollbar — applied to internally-scrolling regions
+   (filter pill lists, tab strips, task-info tables) so they don't
+   each redeclare the same `::-webkit-scrollbar` rules. */
+.scroll-thin {
+	scrollbar-width: thin;
+}
+.scroll-thin::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+	background: var(--border-strong);
+	border-radius: 3px;
+}
+
+/* Heat-shading classes for leaderboard table cells. ~1500 cells per
+   SummaryTable render share 55 distinct percentages. Static classes let
+   the browser's style cache dedupe; the inline-style alternative would
+   ship a fresh `style="background-color: …"` attribute per cell with
+   no caching. See `heat()` / `heatClass()` in src/lib/format.ts. */
+.heat-1 {
+	background-color: color-mix(in srgb, var(--heat) 1%, transparent);
+}
+.heat-2 {
+	background-color: color-mix(in srgb, var(--heat) 2%, transparent);
+}
+.heat-3 {
+	background-color: color-mix(in srgb, var(--heat) 3%, transparent);
+}
+.heat-4 {
+	background-color: color-mix(in srgb, var(--heat) 4%, transparent);
+}
+.heat-5 {
+	background-color: color-mix(in srgb, var(--heat) 5%, transparent);
+}
+.heat-6 {
+	background-color: color-mix(in srgb, var(--heat) 6%, transparent);
+}
+.heat-7 {
+	background-color: color-mix(in srgb, var(--heat) 7%, transparent);
+}
+.heat-8 {
+	background-color: color-mix(in srgb, var(--heat) 8%, transparent);
+}
+.heat-9 {
+	background-color: color-mix(in srgb, var(--heat) 9%, transparent);
+}
+.heat-10 {
+	background-color: color-mix(in srgb, var(--heat) 10%, transparent);
+}
+.heat-11 {
+	background-color: color-mix(in srgb, var(--heat) 11%, transparent);
+}
+.heat-12 {
+	background-color: color-mix(in srgb, var(--heat) 12%, transparent);
+}
+.heat-13 {
+	background-color: color-mix(in srgb, var(--heat) 13%, transparent);
+}
+.heat-14 {
+	background-color: color-mix(in srgb, var(--heat) 14%, transparent);
+}
+.heat-15 {
+	background-color: color-mix(in srgb, var(--heat) 15%, transparent);
+}
+.heat-16 {
+	background-color: color-mix(in srgb, var(--heat) 16%, transparent);
+}
+.heat-17 {
+	background-color: color-mix(in srgb, var(--heat) 17%, transparent);
+}
+.heat-18 {
+	background-color: color-mix(in srgb, var(--heat) 18%, transparent);
+}
+.heat-19 {
+	background-color: color-mix(in srgb, var(--heat) 19%, transparent);
+}
+.heat-20 {
+	background-color: color-mix(in srgb, var(--heat) 20%, transparent);
+}
+.heat-21 {
+	background-color: color-mix(in srgb, var(--heat) 21%, transparent);
+}
+.heat-22 {
+	background-color: color-mix(in srgb, var(--heat) 22%, transparent);
+}
+.heat-23 {
+	background-color: color-mix(in srgb, var(--heat) 23%, transparent);
+}
+.heat-24 {
+	background-color: color-mix(in srgb, var(--heat) 24%, transparent);
+}
+.heat-25 {
+	background-color: color-mix(in srgb, var(--heat) 25%, transparent);
+}
+.heat-26 {
+	background-color: color-mix(in srgb, var(--heat) 26%, transparent);
+}
+.heat-27 {
+	background-color: color-mix(in srgb, var(--heat) 27%, transparent);
+}
+.heat-28 {
+	background-color: color-mix(in srgb, var(--heat) 28%, transparent);
+}
+.heat-29 {
+	background-color: color-mix(in srgb, var(--heat) 29%, transparent);
+}
+.heat-30 {
+	background-color: color-mix(in srgb, var(--heat) 30%, transparent);
+}
+.heat-31 {
+	background-color: color-mix(in srgb, var(--heat) 31%, transparent);
+}
+.heat-32 {
+	background-color: color-mix(in srgb, var(--heat) 32%, transparent);
+}
+.heat-33 {
+	background-color: color-mix(in srgb, var(--heat) 33%, transparent);
+}
+.heat-34 {
+	background-color: color-mix(in srgb, var(--heat) 34%, transparent);
+}
+.heat-35 {
+	background-color: color-mix(in srgb, var(--heat) 35%, transparent);
+}
+.heat-36 {
+	background-color: color-mix(in srgb, var(--heat) 36%, transparent);
+}
+.heat-37 {
+	background-color: color-mix(in srgb, var(--heat) 37%, transparent);
+}
+.heat-38 {
+	background-color: color-mix(in srgb, var(--heat) 38%, transparent);
+}
+.heat-39 {
+	background-color: color-mix(in srgb, var(--heat) 39%, transparent);
+}
+.heat-40 {
+	background-color: color-mix(in srgb, var(--heat) 40%, transparent);
+}
+.heat-41 {
+	background-color: color-mix(in srgb, var(--heat) 41%, transparent);
+}
+.heat-42 {
+	background-color: color-mix(in srgb, var(--heat) 42%, transparent);
+}
+.heat-43 {
+	background-color: color-mix(in srgb, var(--heat) 43%, transparent);
+}
+.heat-44 {
+	background-color: color-mix(in srgb, var(--heat) 44%, transparent);
+}
+.heat-45 {
+	background-color: color-mix(in srgb, var(--heat) 45%, transparent);
+}
+.heat-46 {
+	background-color: color-mix(in srgb, var(--heat) 46%, transparent);
+}
+.heat-47 {
+	background-color: color-mix(in srgb, var(--heat) 47%, transparent);
+}
+.heat-48 {
+	background-color: color-mix(in srgb, var(--heat) 48%, transparent);
+}
+.heat-49 {
+	background-color: color-mix(in srgb, var(--heat) 49%, transparent);
+}
+.heat-50 {
+	background-color: color-mix(in srgb, var(--heat) 50%, transparent);
+}
+.heat-51 {
+	background-color: color-mix(in srgb, var(--heat) 51%, transparent);
+}
+.heat-52 {
+	background-color: color-mix(in srgb, var(--heat) 52%, transparent);
+}
+.heat-53 {
+	background-color: color-mix(in srgb, var(--heat) 53%, transparent);
+}
+.heat-54 {
+	background-color: color-mix(in srgb, var(--heat) 54%, transparent);
+}
+.heat-55 {
+	background-color: color-mix(in srgb, var(--heat) 55%, transparent);
+}
+
+.empty {
+	padding: 40px;
+	text-align: center;
+	color: var(--text-muted);
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 12px;
 }

@@ -1,68 +1,27 @@
 <script lang="ts">
-	import type { BenchmarkSummary } from '$lib/types';
+	import { downloadCsv, type CsvCell } from '$lib/csv';
 
 	interface Props {
-		summary: BenchmarkSummary;
+		/** Base filename — extension is appended automatically. */
+		filename: string;
+		/**
+		 * Called lazily on click. Returning the rows from a callback keeps the
+		 * parent free of upfront serialisation cost on every render — only the
+		 * actual click pays.
+		 */
+		build: () => { headers: string[]; rows: CsvCell[][] };
+		/** Button label. Default reads naturally on every page. */
+		label?: string;
 	}
-	let { summary }: Props = $props();
+	let { filename, build, label = 'Download CSV' }: Props = $props();
 
-	function escapeCsv(value: string): string {
-		if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-			return `"${value.replace(/"/g, '""')}"`;
-		}
-		return value;
-	}
-
-	function buildCsv(): string {
-		const headers = [
-			'Rank',
-			'Model',
-			'Zero-shot',
-			'Active Params (B)',
-			'Total Params (B)',
-			'Embedding Dim',
-			'Max Tokens',
-			'Mean (Task)',
-			'Mean (TaskType)',
-			...summary.taskTypes
-		];
-		const lines = [headers.map(escapeCsv).join(',')];
-		for (const row of summary.rows) {
-			const cells: (string | number)[] = [
-				row.rank,
-				row.model.name,
-				row.zeroShotPct === -1 ? 'NA' : row.zeroShotPct,
-				row.activeParamsB,
-				row.totalParamsB,
-				row.embeddingDim,
-				row.maxTokens,
-				(row.meanTask * 100).toFixed(2),
-				(row.meanTaskType * 100).toFixed(2),
-				...summary.taskTypes.map((tt) =>
-					row.scoresByTaskType[tt] !== undefined
-						? (row.scoresByTaskType[tt] * 100).toFixed(2)
-						: ''
-				)
-			];
-			lines.push(cells.map((c) => escapeCsv(String(c))).join(','));
-		}
-		return lines.join('\n');
-	}
-
-	function download() {
-		const blob = new Blob([buildCsv()], { type: 'text/csv;charset=utf-8' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `${summary.benchmarkName.replace(/[^a-z0-9]+/gi, '_')}_summary.csv`;
-		document.body.appendChild(a);
-		a.click();
-		document.body.removeChild(a);
-		URL.revokeObjectURL(url);
+	function onClick() {
+		const { headers, rows } = build();
+		downloadCsv(filename, headers, rows);
 	}
 </script>
 
-<button type="button" class="dl" onclick={download} title="Download summary as CSV">
+<button type="button" class="dl" onclick={onClick} title="Download table as CSV">
 	<svg
 		viewBox="0 0 24 24"
 		width="14"
@@ -78,7 +37,7 @@
 		<path d="m7 10 5 5 5-5" />
 		<path d="M5 21h14" />
 	</svg>
-	<span>Download CSV</span>
+	<span>{label}</span>
 </button>
 
 <style>

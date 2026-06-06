@@ -1,0 +1,344 @@
+import { env } from '$env/dynamic/public';
+
+/**
+ * Insert a space before each new capitalized word so CamelCase task type
+ * identifiers read naturally in the UI. The backend canonicalises these to
+ * CamelCase ("BitextMining") so per-type column keys line up with
+ * `tasksMeta[].type` across filter / table / chart code; this is the one
+ * place that humanises the same string for display.
+ *
+ * Examples:
+ *   "BitextMining"          -> "Bitext Mining"
+ *   "InstructionReranking"  -> "Instruction Reranking"
+ *   "STS"                   -> "STS"
+ *   "Classification"        -> "Classification"
+ */
+export function humanizeType(s: string): string {
+	return s.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+}
+
+// Canonical visual order for modality chips across every card / hero
+// (`video → audio → image → text`). Heaviest medium first so the most
+// distinctive marker reads earliest; unknown modalities sort after the
+// canonical ones, alphabetically among themselves. Pure / stable: never
+// mutates the input array.
+const MODALITY_ORDER: Record<string, number> = {
+	video: 0,
+	audio: 1,
+	image: 2,
+	text: 3
+};
+export function sortModalities<T extends string>(mods: readonly T[] | undefined): T[] {
+	if (!mods) return [];
+	return [...mods].sort((a, b) => {
+		const ai = MODALITY_ORDER[a] ?? 99;
+		const bi = MODALITY_ORDER[b] ?? 99;
+		if (ai !== bi) return ai - bi;
+		return a.localeCompare(b);
+	});
+}
+
+/**
+ * Resolve an API-relative URL (one starting with "/") against PUBLIC_API_URL.
+ * Absolute URLs and empty/null inputs pass through unchanged. Used so the
+ * backend can serve cache-friendly proxy paths (e.g. /v1/icon/<name>) without
+ * the frontend having to know the API origin at every consumer.
+ */
+export function apiUrl(path: string | null | undefined): string | undefined {
+	if (!path) return undefined;
+	if (/^https?:\/\//i.test(path)) return path;
+	const base = env.PUBLIC_API_URL?.trim().replace(/\/$/, '') ?? '';
+	if (!base) return path; // offline build — return as-is, will 404 but harmlessly
+	return `${base}${path.startsWith('/') ? path : '/' + path}`;
+}
+
+/**
+ * A benchmark icon may be a URL (flag SVG, hosted PNG, our /v1/icon proxy path)
+ * or short text/emoji ("🌍"). URLs get rendered as <img>; everything else
+ * is rendered as text in the consumer's UI.
+ */
+export function isIconUrl(icon: string | null | undefined): boolean {
+	if (!icon) return false;
+	return icon.startsWith('/') || /^(https?:|data:)/i.test(icon);
+}
+
+/**
+ * URL-safe form of a benchmark / model / task name for use in route paths
+ * (e.g. ``/models/{slug(name)}``). Benchmark names contain parens, commas,
+ * and spaces — ``encodeURIComponent`` covers them all. Identical helper
+ * was inlined in 7 components before this was extracted.
+ */
+export function slug(name: string): string {
+	return encodeURIComponent(name);
+}
+
+// Variant of `slug` that preserves forward slashes — for HuggingFace-style
+// `org/displayName` identifiers used by the `/models/[...name]` and
+// `/tasks/[name]` routes, where rendering the path literally (rather than
+// `%2F`-encoded) keeps the URL readable for users and shareable as-is.
+export function modelPath(name: string): string {
+	return name
+		.split('/')
+		.map((segment) => encodeURIComponent(segment))
+		.join('/');
+}
+
+/** Tabular integer with locale grouping, em-dash for falsy values. */
+export function fmtInt(n: number | null | undefined): string {
+	return n ? n.toLocaleString() : '—';
+}
+
+/**
+ * Compact integer formatting for dense UI strips: 1234 → "1.2k", 1000000 → "1M".
+ * Falsy values render as ``'0'`` (callers usually guard with a length check
+ * before showing the stat at all). Used by the benchmark cards' stats-line
+ * so massive multilingual benchmarks (1000+ languages, 300+ models) still
+ * fit on one row without forcing the layout to wrap.
+ */
+const COMPACT_FMT = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+export function fmtCompact(n: number | null | undefined): string {
+	if (!n) return '0';
+	if (n < 1000) return n.toString();
+	return COMPACT_FMT.format(n);
+}
+
+/**
+ * Split a parameter count (in billions) into a value + unit pair, so
+ * tables can right-align the number and left-align the unit. ``0`` →
+ * ``("—", "")``; ``≥1`` keeps billions; ``<1`` switches to millions.
+ */
+export function fmtParamsValue(b: number): string {
+	if (b === 0) return '—';
+	if (b >= 1) return b.toFixed(1);
+	return (b * 1000).toFixed(0);
+}
+export function fmtParamsUnit(b: number): string {
+	if (b === 0) return '';
+	return b >= 1 ? 'B' : 'M';
+}
+
+/** Direction of a sortable column. */
+export type SortDir = 'asc' | 'desc';
+
+/**
+ * Glyph shown in a sortable column header. ``↑`` / ``↓`` when active,
+ * ``inactiveGlyph`` (default ``↕``, SummaryTable uses ``''``) otherwise.
+ */
+export function sortIcon<K extends string>(
+	key: K,
+	activeKey: K | null,
+	dir: SortDir,
+	inactiveGlyph = '↕'
+): string {
+	if (activeKey !== key) return inactiveGlyph;
+	return dir === 'asc' ? '↑' : '↓';
+}
+
+/** `aria-sort` value for a sortable `<th>` — active column gets the live direction. */
+export function ariaSort<K extends string>(
+	key: K,
+	activeKey: K | null,
+	dir: SortDir
+): 'ascending' | 'descending' | 'none' {
+	if (activeKey !== key) return 'none';
+	return dir === 'asc' ? 'ascending' : 'descending';
+}
+
+/**
+ * Score formatted as a 2-decimal percentage (``0.7613`` → ``"76.13"``).
+ * ``null``/``undefined`` becomes ``"—"`` so cells with missing data
+ * render as a clear placeholder instead of ``"NaN"``.
+ */
+/**
+ * Split a canonical ``org/name`` HuggingFace identifier into its two
+ * segments. The API never ships ``org`` / ``displayName`` separately on
+ * lightweight payloads (e.g. `LeaderModel`) — consumers derive them
+ * here so the wire stays tight. Returns ``{ org: '', displayName: name }``
+ * when no slash is present.
+ */
+export function splitModelName(name: string): { org: string; displayName: string } {
+	const i = name.indexOf('/');
+	if (i < 0) return { org: '', displayName: name };
+	return { org: name.slice(0, i), displayName: name.slice(i + 1) };
+}
+
+export function fmtPct(score: number | null | undefined): string {
+	if (score == null) return '—';
+	return (score * 100).toFixed(2);
+}
+
+/** Real value vs the em-dash / NA placeholder used by ``fmtPct``/``fmtInt``. */
+export function hasValue(s: string): boolean {
+	return s !== '—' && s !== '⚠️ NA';
+}
+
+/**
+ * Zero-shot percentage label. ``-1`` is the "unknown" sentinel from the API
+ * — rendered as a warning marker so the user knows the value is missing
+ * rather than zero. Shared across SummaryTable, BenchScoreTable, ModelHoverPortal.
+ */
+export function fmtZeroShot(pct: number): string {
+	if (pct === -1) return '⚠️ NA';
+	return `${pct.toFixed(0)}%`;
+}
+
+/**
+ * Heat-shading class for a score cell, normalised against the column's own
+ * [min, max] range. The strongest cell in a column gets ~55 % primary tint;
+ * the weakest gets 0 %. Returns ``heat-N`` (matching the static rules in
+ * ``app.css``) or ``''`` for null / out-of-range inputs.
+ *
+ * Was previously an inline ``style="background-color: …"`` string per cell —
+ * static classes let the browser's style cache dedupe, where unique inline
+ * styles per cell couldn't be shared at scale.
+ */
+export function heat(score: number | null | undefined, min: number, max: number): string {
+	if (score == null) return '';
+	if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
+	if (max <= min) return '';
+	const ratio = Math.max(0, Math.min(1, (score - min) / (max - min)));
+	const pct = Math.round(ratio * 55);
+	if (pct === 0) return '';
+	return `heat-${pct}`;
+}
+
+/**
+ * Default sort direction for a column. Names / ranks read more
+ * naturally ascending (A→Z, 1→N); numeric score columns read better
+ * descending (best first). Pass the list of keys that should default
+ * to ``'asc'``; everything else defaults to ``'desc'``.
+ */
+export function defaultDirFor<K extends string>(key: K, ascKeys: readonly K[]): SortDir {
+	return ascKeys.includes(key) ? 'asc' : 'desc';
+}
+
+/**
+ * Max numeric value in an array that may include ``null`` / ``undefined``.
+ * Returns ``0`` when no numbers are present so the result is safe to
+ * use as a denominator (the matching ``heat`` helper short-circuits on
+ * non-positive max).
+ */
+export function maxOf(vs: readonly (number | null | undefined)[]): number {
+	let max = -Infinity;
+	let seen = false;
+	for (const v of vs) {
+		if (typeof v !== 'number') continue;
+		if (v > max) max = v;
+		seen = true;
+	}
+	return seen ? max : 0;
+}
+
+/**
+ * Min numeric value in an array that may include ``null`` / ``undefined``.
+ * Returns ``0`` when no numbers are present. The matching ``heat``
+ * helper short-circuits when min ≥ max, so degenerate inputs render
+ * as un-tinted cells.
+ */
+export function minOf(vs: readonly (number | null | undefined)[]): number {
+	let min = Infinity;
+	let seen = false;
+	for (const v of vs) {
+		if (typeof v !== 'number') continue;
+		if (v < min) min = v;
+		seen = true;
+	}
+	return seen ? min : 0;
+}
+
+/**
+ * For every key in ``keys``, the max value across ``rows`` looked up
+ * via ``getValue``. Used by leaderboard tables to highlight the
+ * best-in-column score (per task, per task-type, per language).
+ * Missing values (``undefined``) are skipped; if a column has no
+ * values at all the result entry is ``-Infinity``.
+ */
+export function bestPerColumn<R, K extends string>(
+	keys: readonly K[],
+	rows: readonly R[],
+	getValue: (row: R, key: K) => number | undefined
+): Record<string, number> {
+	const best: Record<string, number> = {};
+	for (const k of keys) {
+		let max = -Infinity;
+		for (const r of rows) {
+			const v = getValue(r, k);
+			if (v !== undefined && v > max) max = v;
+		}
+		best[k] = max;
+	}
+	return best;
+}
+
+/**
+ * Mirror of ``bestPerColumn`` for the *worst* value in each column.
+ * Used as the lower bound when computing heat-shading against the
+ * column's own [min, max] range. Empty columns yield ``+Infinity``.
+ */
+export function worstPerColumn<R, K extends string>(
+	keys: readonly K[],
+	rows: readonly R[],
+	getValue: (row: R, key: K) => number | undefined
+): Record<string, number> {
+	const worst: Record<string, number> = {};
+	for (const k of keys) {
+		let min = Infinity;
+		for (const r of rows) {
+			const v = getValue(r, k);
+			if (v !== undefined && v < min) min = v;
+		}
+		worst[k] = min;
+	}
+	return worst;
+}
+
+/**
+ * Single-pass version of ``bestPerColumn`` + ``worstPerColumn``. Tables
+ * always need both bounds (the best cell for the bold-highlight, both
+ * bounds for the heat ramp), so combining halves the row × column work.
+ */
+export function bestWorstPerColumn<R, K extends string>(
+	keys: readonly K[],
+	rows: readonly R[],
+	getValue: (row: R, key: K) => number | undefined
+): { best: Record<string, number>; worst: Record<string, number> } {
+	const best: Record<string, number> = {};
+	const worst: Record<string, number> = {};
+	for (const k of keys) {
+		let mn = Infinity;
+		let mx = -Infinity;
+		for (const r of rows) {
+			const v = getValue(r, k);
+			if (v === undefined) continue;
+			if (v < mn) mn = v;
+			if (v > mx) mx = v;
+		}
+		best[k] = mx;
+		worst[k] = mn;
+	}
+	return { best, worst };
+}
+
+/**
+ * Three-state sort click handler used by every leaderboard table.
+ *  1. New column → activate, use ``defaultDir(key)``.
+ *  2. Same column, still at the default direction → flip.
+ *  3. Same column, already flipped → clear (return null key).
+ *
+ * Returns the next ``{ key, dir }`` instead of mutating, so callers
+ * stay in control of the reactive ``$state`` writes.
+ */
+export function nextSort<K extends string>(
+	clickedKey: K,
+	currentKey: K | null,
+	currentDir: SortDir,
+	defaultDir: (k: K) => SortDir
+): { key: K | null; dir: SortDir } {
+	if (currentKey !== clickedKey) {
+		return { key: clickedKey, dir: defaultDir(clickedKey) };
+	}
+	if (currentDir === defaultDir(clickedKey)) {
+		return { key: clickedKey, dir: currentDir === 'asc' ? 'desc' : 'asc' };
+	}
+	return { key: null, dir: currentDir };
+}
