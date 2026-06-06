@@ -11,6 +11,7 @@
 	import { flattenMenu, type Benchmark, type BenchmarkLeaders, type MenuEntry } from '$lib/types';
 	import MenuSection from '$lib/components/MenuSection.svelte';
 	import PrimaryLeaderTile from '$lib/components/PrimaryLeaderTile.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 
 	let menu = $state<MenuEntry[]>([]);
 	let loading = $state(true);
@@ -84,6 +85,11 @@
 	// Domain).
 	let sections = $derived(menu);
 </script>
+
+<ShareMeta
+	title="Benchmark Overview"
+	description="MTEB Leaderboard home — primary General / Retrieval / English benchmark winners plus curated sections for language, modality, retrieval, and domain-specific evaluations."
+/>
 
 <div class="page">
 	<header class="hero">

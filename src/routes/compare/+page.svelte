@@ -4,6 +4,7 @@
 	import { loadBenchmarkMenu, loadModelScores, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { Data, Layout } from 'plotly.js';
 	import type { Benchmark, BenchmarkSummary, SummaryRow } from '$lib/types';
@@ -484,6 +485,11 @@
 		return t;
 	}
 </script>
+
+<ShareMeta
+	title="Compare models"
+	description="Side-by-side metric cards plus a radar chart for up to four embedding models on any MTEB benchmark — per-metric winners highlighted, deep-linkable via ?model=… &benchmark=…"
+/>
 
 <svelte:window onclick={onDocClick} onkeydown={onKey} />
 
