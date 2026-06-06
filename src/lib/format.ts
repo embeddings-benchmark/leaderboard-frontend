@@ -83,6 +83,36 @@ export function modelPath(name: string): string {
 		.join('/');
 }
 
+/**
+ * Stable per-row identifier for tables that may hold experiment-variant rows.
+ *
+ * Multiple rows can share the same ``model.name`` when the backend emits
+ * experiment ablations (one row per kwargs combination). The Svelte ``{#each}``
+ * key, pin store, and any other identity-keyed map needs a string that's
+ * unique per (model, experiments) pair.
+ *
+ * Base rows return ``model.name`` unchanged so legacy ``?pin=org/name`` URL
+ * params (and any code that still passes the raw name) keep working.
+ * Variant rows append ``"::"`` + a deterministic kwargs serialisation that
+ * matches the backend's variant id (sorted keys, ``__`` between pairs, ``_``
+ * between key and value).
+ */
+export function rowId(row: {
+	model: { name: string };
+	experiments?: Record<string, unknown> | null;
+}): string {
+	const exp = row.experiments;
+	if (!exp) return row.model.name;
+	const keys = Object.keys(exp);
+	if (keys.length === 0) return row.model.name;
+	const serialized = keys
+		.slice()
+		.sort()
+		.map((k) => `${k}_${exp[k]}`)
+		.join('__');
+	return `${row.model.name}::${serialized}`;
+}
+
 /** Tabular integer with locale grouping, em-dash for falsy values. */
 export function fmtInt(n: number | null | undefined): string {
 	return n ? n.toLocaleString() : '—';

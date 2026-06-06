@@ -79,7 +79,8 @@
 		heat,
 		humanizeType,
 		maxOf,
-		minOf
+		minOf,
+		rowId
 	} from '$lib/format';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
@@ -175,12 +176,14 @@
 				return ((va.v as number) - (vb.v as number)) * dir;
 			});
 		}
-		// Float pinned rows to the top in a single partition pass.
+		// Float pinned rows to the top in a single partition pass. Pin keys
+		// are per-row identities (see `rowId`) so pinning a base model and a
+		// variant of the same model independently surfaces both.
 		if (pinnedModels.size === 0) return rows;
 		const pinned: SummaryRow[] = [];
 		const unpinned: SummaryRow[] = [];
 		for (const r of rows) {
-			if (pinnedModels.has(r.model.name)) pinned.push(r);
+			if (pinnedModels.has(rowId(r))) pinned.push(r);
 			else unpinned.push(r);
 		}
 		return [...pinned, ...unpinned];
@@ -212,7 +215,9 @@
 		// already covers everything for any ordering of the same set.
 		const baseRows = summary.rows;
 		const total = baseRows.length;
-		const signature = `${total}|${baseRows[0]?.model.name ?? ''}|${baseRows[total - 1]?.model.name ?? ''}`;
+		const signature = `${total}|${baseRows[0] ? rowId(baseRows[0]) : ''}|${
+			baseRows[total - 1] ? rowId(baseRows[total - 1]) : ''
+		}`;
 		if (signature === lastRowSignature) return;
 		lastRowSignature = signature;
 		const myVersion = ++growVersion;
@@ -624,11 +629,12 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each renderedRows as row (row.model.name)}
-					<tr class:pinned={pinnedModels.has(row.model.name)}>
+				{#each renderedRows as row (rowId(row))}
+					{@const rid = rowId(row)}
+					<tr class:pinned={pinnedModels.has(rid)}>
 						<td class="sticky-left">
 							<div class="rank-cell">
-								<PinButton name={row.model.name} />
+								<PinButton name={rid} />
 								<span class="rank-pill">#{row.rank}</span>
 							</div>
 						</td>
@@ -640,7 +646,7 @@
 							onfocusin={(e) => showModelTip(e, row)}
 							onfocusout={hideModelTip}
 						>
-							<ModelCellName model={row.model} />
+							<ModelCellName model={row.model} experiments={row.experiments} />
 						</td>
 						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
 							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span

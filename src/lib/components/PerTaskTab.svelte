@@ -5,7 +5,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { resolve } from '$app/paths';
-	import { bestWorstPerColumn, heat, humanizeType, slug } from '$lib/format';
+	import { bestWorstPerColumn, heat, humanizeType, rowId, slug } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { safeIdle } from '$lib/idle';
 	import MarkdownText from './MarkdownText.svelte';
@@ -184,11 +184,12 @@
 	let worst = $derived(taskBests.worst);
 	// Per-row Set of trained-on task names — cell template would otherwise
 	// run `Array.includes` per cell (200×200 = up to 1.2M ops on a re-render).
+	// Keyed by `rowId` so experiment variants don't share the base's set.
 	let trainedByModel = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const m = new Map<string, Set<string>>();
 		for (const r of summary.rows) {
-			m.set(r.model.name, new Set(r.trainedOnTasks ?? []));
+			m.set(rowId(r), new Set(r.trainedOnTasks ?? []));
 		}
 		return m;
 	});
@@ -214,7 +215,7 @@
 			});
 		}
 		if (pinnedModels.size === 0) return rows;
-		const isPinned = (r: SummaryRow) => pinnedModels.has(r.model.name);
+		const isPinned = (r: SummaryRow) => pinnedModels.has(rowId(r));
 		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
 	});
 
@@ -233,7 +234,9 @@
 
 	$effect(() => {
 		const total = sortedRows.length;
-		const signature = `${total}|${sortedRows[0]?.model.name ?? ''}|${sortedRows[total - 1]?.model.name ?? ''}`;
+		const signature = `${total}|${sortedRows[0] ? rowId(sortedRows[0]) : ''}|${
+			sortedRows[total - 1] ? rowId(sortedRows[total - 1]) : ''
+		}`;
 		if (signature === lastRowSignature) return;
 		lastRowSignature = signature;
 		const myVersion = ++growVersion;
@@ -317,11 +320,12 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each renderedRows as row (row.model.name)}
-						{@const rowTrained = trainedByModel.get(row.model.name)}
-						<tr class:pinned={pinnedModels.has(row.model.name)}>
+					{#each renderedRows as row (rowId(row))}
+						{@const rid = rowId(row)}
+						{@const rowTrained = trainedByModel.get(rid)}
+						<tr class:pinned={pinnedModels.has(rid)}>
 							<td class="tbl-pin-col tbl-sticky-pin">
-								<PinButton name={row.model.name} />
+								<PinButton name={rid} />
 							</td>
 							<td
 								class="tbl-sticky-col"
@@ -331,7 +335,7 @@
 								onfocusin={(e) => onCellEnter(e, row)}
 								onfocusout={onCellLeave}
 							>
-								<ModelCellName model={row.model} />
+								<ModelCellName model={row.model} experiments={row.experiments} />
 							</td>
 							{#each sortedTasks as task (task)}
 								{@const trained = rowTrained?.has(task) ?? false}

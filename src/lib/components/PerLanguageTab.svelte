@@ -5,7 +5,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { type CsvCell } from '$lib/csv';
-	import { heat as heatBase } from '$lib/format';
+	import { heat as heatBase, rowId } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { loadPerLanguage } from '$lib/data/service';
 	import ModelCellName from './ModelCellName.svelte';
@@ -155,7 +155,7 @@
 		const pinned: SummaryRow[] = [];
 		const unpinned: SummaryRow[] = [];
 		for (const r of rows) {
-			if (pinnedModels.has(r.model.name)) pinned.push(r);
+			if (pinnedModels.has(rowId(r))) pinned.push(r);
 			else unpinned.push(r);
 		}
 		return [...pinned, ...unpinned];
@@ -213,11 +213,12 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each sortedRows as row (row.model.name)}
+				{#each sortedRows as row (rowId(row))}
+					{@const rid = rowId(row)}
 					{@const mean = rowMean(row)}
-					<tr class:pinned={pinnedModels.has(row.model.name)}>
+					<tr class:pinned={pinnedModels.has(rid)}>
 						<td class="tbl-pin-col tbl-sticky-pin">
-							<PinButton name={row.model.name} />
+							<PinButton name={rid} />
 						</td>
 						<td
 							class="tbl-sticky-col"
@@ -227,7 +228,7 @@
 							onfocusin={(e) => onCellEnter(e, row)}
 							onfocusout={onCellLeave}
 						>
-							<ModelCellName model={row.model} />
+							<ModelCellName model={row.model} experiments={row.experiments} />
 						</td>
 						<td
 							class="tbl-num {heat(mean, worstMean, bestMean)}"
