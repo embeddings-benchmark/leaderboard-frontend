@@ -56,7 +56,6 @@
 		});
 	});
 
-
 	// Filter sets are seeded with every value so the default state is
 	// "everything on"; `filteredAll` treats `size === ALL.length` as filter-off
 	// so rows with empty modality / type / domain lists stay visible.
@@ -110,8 +109,7 @@
 		else simplifiedTypeFilter.add(t);
 	}
 	function toggleAllSimplifiedTypes() {
-		if (simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length)
-			simplifiedTypeFilter.clear();
+		if (simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length) simplifiedTypeFilter.clear();
 		else for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
 	}
 	function toggleLanguage(l: string) {
@@ -123,9 +121,7 @@
 		else for (const v of LANGUAGES) languageFilter.add(v);
 	}
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
-	let allSimplifiedTypes = $derived(
-		simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length
-	);
+	let allSimplifiedTypes = $derived(simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
 
@@ -190,10 +186,7 @@
 			if (q && !b.name.toLowerCase().includes(q) && !b.displayName.toLowerCase().includes(q))
 				return false;
 			if (!modalityOff && !(b.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
-			if (
-				!simplifiedOff &&
-				!(b.simplifiedTaskTypes ?? []).some((t) => simplifiedTypeFilter.has(t))
-			)
+			if (!simplifiedOff && !(b.simplifiedTaskTypes ?? []).some((t) => simplifiedTypeFilter.has(t)))
 				return false;
 			if (!domainOff && !(b.domains ?? []).some((d) => domainFilter.has(d))) return false;
 			if (!languageOff && !(b.languages ?? []).some((l) => languageFilter.has(l))) return false;
@@ -416,7 +409,11 @@
 					<!-- Cap collapsed; on expand we drop the .scroll wrapper so
 					     the full language list flows in the sidebar and the
 					     page scroll handles overflow. Same pattern as /tasks. -->
-					<div class="pills" class:scroll={!languagesExpanded} class:scroll-thin={!languagesExpanded}>
+					<div
+						class="pills"
+						class:scroll={!languagesExpanded}
+						class:scroll-thin={!languagesExpanded}
+					>
 						{#each visibleLanguages as l (l)}
 							<label class="pill type-fill">
 								<input

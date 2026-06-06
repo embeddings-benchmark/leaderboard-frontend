@@ -245,7 +245,6 @@ function createFilters() {
 	// same-benchmark refresh so the picks/available counter doesn't
 	// read "9/8" after a server-scoped refetch shrinks the universe.
 	function pruneToAvailable(target: SvelteSet<string>, available: readonly string[]) {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const present = new Set<string>(available);
 		for (const v of target) {
 			if (!present.has(v)) target.delete(v);
@@ -618,8 +617,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			let scoresByTaskType: Record<string, number> = row.scoresByTaskType;
 			if (!fullView) {
 				const lenient =
-					filters.languages.size > 0 &&
-					filters.languages.size < filters.availableLanguages.length;
+					filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
 				let taskSum = 0;
 				let taskN = 0;
 				for (const t of taskNamesOut) {

@@ -43,6 +43,9 @@
 				// `ModelMeta.languages` may be missing (older backends, models
 				// with no declared language scope) — those rows pass the
 				// filter trivially via the "everything checked" default.
+				// Plain Set is correct here — used as a throwaway local
+				// accumulator, never read reactively.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const langSet = new Set<string>();
 				for (const x of m) for (const l of x.languages ?? []) langSet.add(l);
 				LANGUAGES = [...langSet].sort();

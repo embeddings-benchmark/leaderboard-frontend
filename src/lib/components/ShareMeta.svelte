@@ -10,7 +10,13 @@
 
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	// `$env/dynamic/public` (not `static/public`) so the typecheck doesn't
+	// hard-require PUBLIC_API_URL to be set at sync time — `static/public`
+	// types only include vars present in the .env files visible during
+	// `svelte-kit sync`, and CI runners without a `.env` get "no exported
+	// member PUBLIC_API_URL". Dynamic is `Record<string, string | undefined>`
+	// — we already guard for the unset case below.
+	import { env } from '$env/dynamic/public';
 
 	interface Props {
 		// Card title. Will be suffixed with " · MTEB Leaderboard" so the brand
@@ -38,21 +44,13 @@
 		// MTEB brand reads at a glance). `summary` is a smaller square card.
 		twitterCard?: 'summary' | 'summary_large_image';
 	}
-	let {
-		title,
-		description,
-		image,
-		entity,
-		twitterCard = 'summary_large_image'
-	}: Props = $props();
+	let { title, description, image, entity, twitterCard = 'summary_large_image' }: Props = $props();
 
 	let fullTitle = $derived(`${title} · MTEB Leaderboard`);
 	// Cap to 200 chars — every major social card truncates around there, and
 	// the per-call slice keeps the meta tag short. Strips newlines too because
 	// some readers (Slack) treat newlines as <br> inside the card body.
-	let desc = $derived(
-		description.replace(/\s+/g, ' ').trim().slice(0, 200)
-	);
+	let desc = $derived(description.replace(/\s+/g, ' ').trim().slice(0, 200));
 	// Absolute origin needed for OG / Twitter — relative URLs don't resolve in
 	// the crawler. `page.url` is available during SSR / prerender and after
 	// client hydration; on the SSR pass with no host (vite dev), origin is
@@ -64,7 +62,7 @@
 	// /data/og volume (see `mteb/api/og/generate.mjs`). When PUBLIC_API_URL
 	// isn't set (offline mock build), `entityImage` resolves to null and
 	// the fallback chain below kicks in.
-	let apiBase = $derived(PUBLIC_API_URL?.trim().replace(/\/$/, '') || '');
+	let apiBase = $derived(env.PUBLIC_API_URL?.trim().replace(/\/$/, '') || '');
 	// Encode each path segment individually so model names like
 	// `microsoft/harrier-oss-v1-27b` stay nested in the URL — Starlette's
 	// StaticFiles decodes `%2F` to `/` before file lookup, so a single

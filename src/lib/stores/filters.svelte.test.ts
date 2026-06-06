@@ -45,6 +45,14 @@ function makeRow(
 	scoresByTask: Record<string, number>,
 	scoresByTaskType: Record<string, number>
 ): SummaryRow {
+	// Derive the means from the score maps so the fixture matches what the
+	// API would emit — `applyFilters` under "no narrowing" preserves
+	// `row.meanTask` rather than recomputing, so a `null` fixture would
+	// look like a regression on the happy-path assertions.
+	const meanOf = (m: Record<string, number>): number | null => {
+		const xs = Object.values(m);
+		return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+	};
 	return {
 		rank,
 		model,
@@ -53,8 +61,8 @@ function makeRow(
 		totalParamsB: model.totalParamsB,
 		embeddingDim: model.embeddingDim,
 		maxTokens: model.maxTokens,
-		meanTask: null,
-		meanTaskType: null,
+		meanTask: meanOf(scoresByTask),
+		meanTaskType: meanOf(scoresByTaskType),
 		scoresByTask,
 		scoresByTaskType
 	};

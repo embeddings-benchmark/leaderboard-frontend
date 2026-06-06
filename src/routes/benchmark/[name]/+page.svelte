@@ -134,8 +134,7 @@
 	$effect(() => {
 		if (!leaderboard.summary || leaderboard.selected !== benchmarkName) return;
 		const narrowed =
-			filters.languages.size > 0 &&
-			filters.languages.size < filters.availableLanguages.length;
+			filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
 		const langs = narrowed ? Array.from(filters.languages) : undefined;
 		leaderboard.requestSummaryForLanguages(langs);
 	});

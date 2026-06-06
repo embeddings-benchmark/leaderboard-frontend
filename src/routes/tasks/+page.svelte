@@ -485,7 +485,11 @@
 					     overflow). Keeping the inner 320 px scrollport on expand
 					     was the bug — visually nothing changed at the top, so
 					     "Show all" looked like it added empty space below. -->
-					<div class="pills" class:scroll={!languagesExpanded} class:scroll-thin={!languagesExpanded}>
+					<div
+						class="pills"
+						class:scroll={!languagesExpanded}
+						class:scroll-thin={!languagesExpanded}
+					>
 						{#each visibleLanguages as l (l)}
 							<label class="pill type-fill">
 								<input
