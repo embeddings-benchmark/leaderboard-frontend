@@ -8,8 +8,7 @@
 	import { base, resolve } from '$app/paths';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
-	import ShareMeta from '$lib/components/ShareMeta.svelte';
-
+	
 	let { children } = $props();
 
 	// $app/state's `updated.current` flips to true when the poll detects a new
@@ -67,15 +66,13 @@
 	<link rel="icon" href="{base}/dots-icon.ico" type="image/x-icon" />
 </svelte:head>
 
-<!-- Default share metadata. Detail pages (per-benchmark, per-task,
-     per-model) mount their own ShareMeta with the loaded entity name +
-     description; the LAST `<svelte:head>` block wins on a route, so the
-     nested page-level call overrides these defaults without us having to
-     thread props through layout slots. -->
-<ShareMeta
-	title="Open embedding-model leaderboard"
-	description="The Massive Text Embedding Benchmark — open leaderboard for text, image, and multimodal embedding models across 100+ benchmarks and 1700+ tasks."
-/>
+<!-- ShareMeta is intentionally NOT rendered at the layout level. Every
+     route renders its own (per-entity title/description + per-entity OG
+     hero card). Slack picks the FIRST og:image it encounters in the head,
+     while most other crawlers pick the last — keeping a layout-level
+     default + a page-level override resulted in Slack always showing
+     og-default.png even on routes with a proper hero. Pushing all
+     ShareMeta into the page level eliminates the duplicate. -->
 
 <div class="shell">
 	<header class="bar">
