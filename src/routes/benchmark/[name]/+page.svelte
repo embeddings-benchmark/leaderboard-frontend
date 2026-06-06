@@ -7,6 +7,7 @@
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import CopyableId from '$lib/components/CopyableId.svelte';
@@ -213,6 +214,15 @@
 		return { headers, rows };
 	}
 </script>
+
+<ShareMeta
+	title={benchmark?.displayName ?? benchmarkName}
+	description={benchmark?.description
+		? `${benchmark.tasks.length} tasks, ${benchmark.languages.length} languages, ${filteredSummary?.rows.length ?? '—'} models — ${benchmark.description}`
+		: `Benchmark on the MTEB Leaderboard.`}
+	entity={{ kind: 'benchmark', name: benchmarkName }}
+	image={benchmark?.icon && isIconUrl(benchmark.icon) ? apiUrl(benchmark.icon) : undefined}
+/>
 
 <div class="app">
 	<main class="main">

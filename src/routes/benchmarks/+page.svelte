@@ -3,6 +3,7 @@
 	import { loadBenchmarks } from '$lib/data/service';
 	import type { Benchmark } from '$lib/types';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
@@ -248,6 +249,11 @@
 		return [...featured, ...other];
 	});
 </script>
+
+<ShareMeta
+	title="All benchmarks"
+	description={`Every benchmark registered in MTEB — ${allBenchmarks.length || '100+'} suites spanning multilingual, multimodal, retrieval, classification, clustering, semantic similarity, and domain-specific evaluations.`}
+/>
 
 <div class="app">
 	<main class="main">

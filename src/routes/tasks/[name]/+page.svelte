@@ -9,6 +9,7 @@
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import { sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
@@ -216,6 +217,14 @@
 		return { headers, rows };
 	}
 </script>
+
+<ShareMeta
+	title={taskName}
+	description={task?.meta?.description
+		? `${task.meta.type} task · ${task.meta.languages.length} languages · ${task.meta.domains.length} domains — ${task.meta.description}`
+		: `${taskName} on the MTEB Leaderboard.`}
+	entity={{ kind: 'task', name: taskName }}
+/>
 
 <div class="page">
 	<nav class="breadcrumb" aria-label="Breadcrumb">

@@ -6,6 +6,7 @@
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import { sortModalities } from '$lib/format';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
@@ -191,6 +192,11 @@
 		return b >= 1 ? `${b.toFixed(1)}B` : `${(b * 1000).toFixed(0)}M`;
 	}
 </script>
+
+<ShareMeta
+	title="Models"
+	description={`Every embedding model on the MTEB Leaderboard — ${ALL_MODELS.length || '700+'} models with architecture type, parameter count, embedding dimension, context length, release date, and supported languages.`}
+/>
 
 <div class="app">
 	<main class="main">

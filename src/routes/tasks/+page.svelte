@@ -5,6 +5,7 @@
 	import { flattenMenu } from '$lib/types';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import TaskCard from '$lib/components/TaskCard.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
@@ -317,6 +318,11 @@
 	});
 	let visibleTasks = $derived(filtered.slice(0, visibleCount));
 </script>
+
+<ShareMeta
+	title="Tasks"
+	description={`Every task across every benchmark on the MTEB Leaderboard — ${ALL_TASKS.length || '1700+'} entries spanning retrieval, classification, clustering, pair classification, and semantic similarity.`}
+/>
 
 <div class="app">
 	<main class="main">

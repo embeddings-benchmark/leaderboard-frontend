@@ -8,6 +8,7 @@
 	import { base, resolve } from '$app/paths';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 
 	let { children } = $props();
 
@@ -64,8 +65,17 @@
 
 <svelte:head>
 	<link rel="icon" href="{base}/dots-icon.ico" type="image/x-icon" />
-	<title>MTEB Leaderboard</title>
 </svelte:head>
+
+<!-- Default share metadata. Detail pages (per-benchmark, per-task,
+     per-model) mount their own ShareMeta with the loaded entity name +
+     description; the LAST `<svelte:head>` block wins on a route, so the
+     nested page-level call overrides these defaults without us having to
+     thread props through layout slots. -->
+<ShareMeta
+	title="Open embedding-model leaderboard"
+	description="The Massive Text Embedding Benchmark — open leaderboard for text, image, and multimodal embedding models across 100+ benchmarks and 1700+ tasks."
+/>
 
 <div class="shell">
 	<header class="bar">

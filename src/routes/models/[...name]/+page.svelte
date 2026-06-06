@@ -7,6 +7,7 @@
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import { sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
@@ -133,6 +134,14 @@
 		return { headers, rows };
 	}
 </script>
+
+<ShareMeta
+	title={model?.displayName ?? modelName}
+	description={model
+		? `${model.modelType} embedding model · ${fmtParamsValue(model.totalParamsB)}${fmtParamsUnit(model.totalParamsB)} params · ${model.embeddingDim || '—'}-dim · ${model.maxTokens || '—'} max tokens${model.openWeights ? ' · open weights' : ''}`
+		: `${modelName} on the MTEB Leaderboard.`}
+	entity={{ kind: 'model', name: modelName }}
+/>
 
 <div class="page">
 	<nav class="breadcrumb" aria-label="Breadcrumb">
