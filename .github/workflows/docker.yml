@@ -2,10 +2,10 @@ name: Build & publish Docker image
 
 on:
   push:
-    branches: [main, integration]
+    branches: [main]
     tags: ['v*']
   pull_request:
-    branches: [main, integration]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
