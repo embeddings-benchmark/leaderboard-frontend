@@ -18,19 +18,31 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/common
 
       - name: Type-check
+        # `$env/static/public` types are generated from env vars present
+        # at `svelte-kit sync` time. CI has no .env, so seed the public
+        # vars here — values don't matter for the typegen, only that
+        # the keys exist (mirrors .github/workflows/typecheck.yml).
+        env:
+          PUBLIC_API_URL: https://mteb-leaderboard-backend.hf.space
+          PUBLIC_SITE_URL: https://mteb-leaderboardv3.hf.space
         run: npm run check
 
       - name: Build
+        # PUBLIC_* values get inlined into the bundle here, so use the
+        # canonical production endpoints — the GitHub Pages build hits
+        # the same backend as the HF Space build.
         env:
           BASE_PATH: /${{ github.event.repository.name }}
+          PUBLIC_API_URL: https://mteb-leaderboard-backend.hf.space
+          PUBLIC_SITE_URL: https://mteb-leaderboardv3.hf.space
         run: npm run build
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: build
 
@@ -43,4 +55,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

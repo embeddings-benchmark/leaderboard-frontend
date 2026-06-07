@@ -1,4 +1,4 @@
-name: Type check
+name: Unit tests
 
 on:
   push:
@@ -8,20 +8,21 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: typecheck-${{ github.ref }}
+  group: test-unit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  typecheck:
+  vitest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/common
-      - name: svelte-check
+      - name: vitest
         # `$env/static/public` types are generated from env vars present
-        # at `svelte-kit sync` time. CI has no .env, so seed the public
-        # vars here — values don't matter, only that the keys exist.
+        # at `svelte-kit sync` time (vitest goes through the same import
+        # graph as the app). Seed the public vars so the import resolves;
+        # values don't need to be reachable.
         env:
           PUBLIC_API_URL: https://mteb-leaderboard-backend.hf.space
           PUBLIC_SITE_URL: https://mteb-leaderboardv3.hf.space
-        run: npm run check
+        run: npm run test:unit
