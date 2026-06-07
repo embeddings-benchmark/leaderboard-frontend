@@ -63,7 +63,15 @@
 	</div>
 	<span class="prim-sub">{benchmark.numModels ?? 0} models · {benchmark.tasks.length} tasks</span>
 	{#if leaders === 'loading' || leaders === undefined}
-		<div class="prim-state">Loading…</div>
+		<div class="prim-list-head">Top models</div>
+		<ul class="prim-buckets" aria-busy="true" aria-label="Loading leaders">
+			{#each [0, 1, 2, 3] as i (i)}
+				<li class="bucket">
+					<span class="skel bk-chip-skel"></span>
+					<span class="skel bk-name-skel"></span>
+				</li>
+			{/each}
+		</ul>
 	{:else if leaders === 'error'}
 		<div class="prim-state error">Couldn't load.</div>
 	{:else if orderedBuckets.every((bk) => !bk.leader)}
@@ -238,5 +246,16 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		min-width: 0;
+	}
+	/* Skeleton shapes for the loading state — sized to match the real
+	   chip + name row so the layer doesn't reflow when data lands. */
+	.bk-chip-skel {
+		justify-self: stretch;
+		height: 18px;
+		border-radius: 999px;
+	}
+	.bk-name-skel {
+		height: 14px;
+		width: 70%;
 	}
 </style>

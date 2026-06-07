@@ -11,6 +11,7 @@
 	import { sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
 
@@ -394,9 +395,7 @@
 				{/if}
 			</header>
 			{#if loadingScores}
-				<p class="muted">
-					Walking every benchmark for this model — first hit can take a while on cold cache…
-				</p>
+				<SkeletonTable rows={8} cols={6} />
 			{:else if scoresError}
 				<p class="muted">Failed to load scores: {scoresError}</p>
 			{:else if rawRows.length === 0}

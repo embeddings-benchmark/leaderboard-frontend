@@ -8,6 +8,7 @@
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import TaskCard from '$lib/components/TaskCard.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import { COLLATOR } from '$lib/format';
 	import { getParam, updateUrl } from '$lib/url-state';
@@ -367,65 +368,69 @@
 			</p>
 		</header>
 
+		<!-- Toolbar stays outside the loading branch so the search input +
+		     sort widget are interactive immediately and the cards land in
+		     the same position they'd be without the skeleton. The match
+		     count hides while data loads to avoid the misleading "0/0". -->
+		<div class="toolbar">
+			<SearchInput
+				bind:value={query}
+				placeholder="Search tasks by name…"
+				ariaLabel="Search tasks"
+			/>
+			<div class="sort">
+				<label for="sort-select">Sort by</label>
+				<select
+					id="sort-select"
+					value={sort}
+					onchange={(e) =>
+						onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
+				>
+					{#each SORTS as s (s.id)}
+						<option value={s.id}>{s.label}</option>
+					{/each}
+				</select>
+				<button
+					type="button"
+					class="dir-btn"
+					onclick={toggleSortDir}
+					aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+					title={sortDir === 'asc'
+						? 'Ascending (click for descending)'
+						: 'Descending (click for ascending)'}
+				>
+					<SortDirIcon dir={sortDir} />
+				</button>
+			</div>
+			{#if !loadingData && !loadError}
+				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
+			{/if}
+		</div>
+
 		{#if loadingData}
-			<p class="empty">Loading tasks…</p>
+			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load tasks: {loadError}</p>
+		{:else if filtered.length === 0}
+			<p class="empty">No tasks match those filters.</p>
 		{:else}
-			<div class="toolbar">
-				<SearchInput
-					bind:value={query}
-					placeholder="Search tasks by name…"
-					ariaLabel="Search tasks"
-				/>
-				<div class="sort">
-					<label for="sort-select">Sort by</label>
-					<select
-						id="sort-select"
-						value={sort}
-						onchange={(e) =>
-							onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
-					>
-						{#each SORTS as s (s.id)}
-							<option value={s.id}>{s.label}</option>
-						{/each}
-					</select>
-					<button
-						type="button"
-						class="dir-btn"
-						onclick={toggleSortDir}
-						aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
-						title={sortDir === 'asc'
-							? 'Ascending (click for descending)'
-							: 'Descending (click for ascending)'}
-					>
-						<SortDirIcon dir={sortDir} />
-					</button>
-				</div>
-				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
+			<div class="grid" data-loaded>
+				{#each visibleTasks as t (t.name)}
+					<TaskCard
+						name={t.name}
+						type={t.type}
+						simplifiedType={t.simplifiedType}
+						description={t.description}
+						modalities={t.modalities}
+						stats={[
+							{ label: 'Benchmarks', value: t.benchmarks.length },
+							{ label: 'Languages', value: t.languages.length },
+							{ label: 'Domains', value: t.domains.length },
+							{ label: 'Main metric', value: t.mainScore || '—', variant: 'metric' }
+						]}
+					/>
+				{/each}
 			</div>
-
-			{#if filtered.length === 0}
-				<p class="empty">No tasks match those filters.</p>
-			{:else}
-				<div class="grid" data-loaded>
-					{#each visibleTasks as t (t.name)}
-						<TaskCard
-							name={t.name}
-							type={t.type}
-							simplifiedType={t.simplifiedType}
-							description={t.description}
-							modalities={t.modalities}
-							stats={[
-								{ label: 'Benchmarks', value: t.benchmarks.length },
-								{ label: 'Languages', value: t.languages.length },
-								{ label: 'Domains', value: t.domains.length },
-								{ label: 'Main metric', value: t.mainScore || '—', variant: 'metric' }
-							]}
-						/>
-					{/each}
-				</div>
-			{/if}
 		{/if}
 	</main>
 

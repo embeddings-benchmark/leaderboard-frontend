@@ -11,6 +11,7 @@
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import CopyableId from '$lib/components/CopyableId.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
@@ -379,7 +380,7 @@
 
 			<section class="tab-body">
 				{#if !filteredSummary}
-					<p class="muted">Loading…</p>
+					<SkeletonTable />
 				{:else if filteredSummary.rows.length === 0}
 					<p class="muted">No models match the current filters.</p>
 				{:else}

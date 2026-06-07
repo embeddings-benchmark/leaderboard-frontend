@@ -14,6 +14,7 @@
 	import { clampTooltipX } from '$lib/cell-hover';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
 
 	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
@@ -444,7 +445,7 @@
 				{/if}
 			</header>
 			{#if loadingScores}
-				<p class="muted">Fetching scores — this can take a few seconds on cold cache…</p>
+				<SkeletonTable rows={8} cols={6} />
 			{:else if scoresError}
 				<p class="muted">Failed to load scores: {scoresError}</p>
 			{:else if scores.length === 0}

@@ -8,6 +8,7 @@
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 
@@ -278,7 +279,7 @@
 		</div>
 
 		{#if loading}
-			<p class="muted">Loading benchmarks…</p>
+			<SkeletonGrid />
 		{:else if error}
 			<p class="muted">Failed to load: {error}</p>
 		{:else if filteredAll.length === 0}

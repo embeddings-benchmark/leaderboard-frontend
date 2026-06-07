@@ -9,6 +9,7 @@
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { ModelMeta } from '$lib/types';
@@ -283,7 +284,7 @@
 		</div>
 
 		{#if loadingData}
-			<p class="empty">Loading models…</p>
+			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load models: {loadError}</p>
 		{:else if filtered.length === 0}

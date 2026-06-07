@@ -513,3 +513,28 @@ code {
 	border: 1px solid var(--border);
 	border-radius: 12px;
 }
+
+/* Skeleton placeholder block — components compose `.skel` with explicit
+   width / height (or via a wrapper class) to mimic the real content's
+   layout while data loads. Soft pulse keeps the screen alive without
+   the visual noise of a true shimmer; reduced-motion users get a flat
+   static block. */
+.skel {
+	display: block;
+	background: color-mix(in srgb, var(--text) 9%, transparent);
+	border-radius: 6px;
+	animation: skel-pulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes skel-pulse {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0.5;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.skel {
+		animation: none;
+	}
+}

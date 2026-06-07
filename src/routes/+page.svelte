@@ -129,7 +129,28 @@
 	</header>
 
 	{#if loading}
-		<p class="muted">Loading benchmarks…</p>
+		<section class="primary" aria-busy="true" aria-label="Loading featured leaderboards">
+			<div class="section-head">
+				<span class="eyebrow">Featured</span>
+			</div>
+			<div class="primary-grid">
+				{#each [0, 1, 2] as i (i)}
+					<div class="prim-skel">
+						<div class="skel" style="width: 80px; height: 11px;"></div>
+						<div class="skel" style="width: 60%; height: 19px; margin-top: 8px;"></div>
+						<div class="skel" style="width: 40%; height: 11px; margin-top: 4px;"></div>
+						<div class="prim-skel-rows">
+							{#each [0, 1, 2, 3] as r (r)}
+								<div class="prim-skel-row">
+									<div class="skel" style="width: 64px; height: 18px; border-radius: 999px;"></div>
+									<div class="skel" style="flex: 1; height: 14px;"></div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</section>
 	{:else}
 		<section class="primary" aria-label="Featured leaderboards">
 			<div class="section-head">
@@ -208,6 +229,29 @@
 	.sections {
 		display: flex;
 		flex-direction: column;
+	}
+	/* Skeleton placeholder for a PrimaryLeaderTile — same outer shell so
+	   the layout doesn't shift when the real tiles land. */
+	.prim-skel {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 18px 18px 14px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+	}
+	.prim-skel-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		margin-top: 14px;
+	}
+	.prim-skel-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 4px;
 	}
 
 	@media (max-width: 980px) {
