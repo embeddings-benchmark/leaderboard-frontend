@@ -13,6 +13,10 @@
 
 	interface TaskEntry {
 		name: string;
+		// Lowercased name cached at load — the name-search keystroke filter
+		// runs 1700x per recompute, so a per-entry `.toLowerCase()` would
+		// allocate 1700 strings per stroke. Memoised once here.
+		nameLower: string;
 		type: string;
 		simplifiedType: string;
 		languages: string[];
@@ -31,6 +35,12 @@
 		'clustering',
 		'semantic-similarity'
 	] as const;
+
+	// Shared collator — `Intl.Collator.compare` has ~2x the throughput of
+	// `String.prototype.localeCompare` because it avoids the per-call options
+	// parsing. The initial 1700-entry sort + repeat sort-button presses both
+	// take this hot path.
+	const COLLATOR = new Intl.Collator(undefined, { sensitivity: 'base' });
 
 	let ALL_TASKS = $state<TaskEntry[]>([]);
 	let SIMPLIFIED_PRESENT = $state<string[]>([]);
@@ -56,34 +66,57 @@
 						occurrences.set(t, list);
 					}
 				}
-				const entries: TaskEntry[] = tasks.map((m) => ({
-					name: m.name,
-					type: m.type,
-					simplifiedType: m.simplifiedType ?? m.type?.toLowerCase() ?? '',
-					languages: m.languages ?? [],
-					domains: m.domains ?? [],
-					// Fallback for the old `modality: str` payload shape.
-					modalities:
+				// Build entries + extract every facet in one pass over the
+				// 1700+ task registry. The original code ran four separate
+				// `flatMap()` passes (one per facet), each allocating a fresh
+				// intermediate array; this fuses them into a single walk.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const modSet = new Set<string>();
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const domSet = new Set<string>();
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const langSet = new Set<string>();
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const presentSet = new Set<string>();
+				const entries: TaskEntry[] = new Array(tasks.length);
+				for (let i = 0; i < tasks.length; i++) {
+					const m = tasks[i];
+					const simplifiedType = m.simplifiedType ?? m.type?.toLowerCase() ?? '';
+					const modalities =
 						m.modalities ??
 						((m as unknown as { modality?: string }).modality
 							? [(m as unknown as { modality: string }).modality]
-							: []),
-					description: m.description ?? '',
-					benchmarks: occurrences.get(m.name) ?? [],
-					mainScore: m.mainScore ?? ''
-				}));
-				entries.sort((a, b) => a.name.localeCompare(b.name));
+							: []);
+					const languages = m.languages ?? [];
+					const domains = m.domains ?? [];
+					entries[i] = {
+						name: m.name,
+						nameLower: m.name.toLowerCase(),
+						type: m.type,
+						simplifiedType,
+						languages,
+						domains,
+						modalities,
+						description: m.description ?? '',
+						benchmarks: occurrences.get(m.name) ?? [],
+						mainScore: m.mainScore ?? ''
+					};
+					presentSet.add(simplifiedType);
+					for (const x of modalities) modSet.add(x);
+					for (const x of domains) domSet.add(x);
+					for (const x of languages) langSet.add(x);
+				}
+				entries.sort((a, b) => COLLATOR.compare(a.name, b.name));
 				ALL_TASKS = entries;
-				const presentSet = new Set(entries.map((t) => t.simplifiedType));
 				// Curated order first, then any extras alphabetised.
 				SIMPLIFIED_PRESENT = [
 					...SIMPLIFIED_TYPES.filter((t) => presentSet.has(t)),
 					...[...presentSet].filter((t) => !SIMPLIFIED_TYPES.includes(t as never)).sort()
 				];
 
-				MODALITIES = Array.from(new Set(entries.flatMap((t) => t.modalities))).sort();
-				DOMAINS = Array.from(new Set(entries.flatMap((t) => t.domains))).sort();
-				LANGUAGES = Array.from(new Set(entries.flatMap((t) => t.languages))).sort();
+				MODALITIES = [...modSet].sort();
+				DOMAINS = [...domSet].sort();
+				LANGUAGES = [...langSet].sort();
 				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
@@ -218,11 +251,11 @@
 		const domainOff = domainFilter.size === DOMAINS.length;
 		const languageOff = languageFilter.size === LANGUAGES.length;
 		return ALL_TASKS.filter((t) => {
-			if (q && !t.name.toLowerCase().includes(q)) return false;
+			if (q && !t.nameLower.includes(q)) return false;
 			if (!typeOff && !typeFilter.has(t.simplifiedType)) return false;
-			if (!modalityOff && !(t.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
-			if (!domainOff && !(t.domains ?? []).some((d) => domainFilter.has(d))) return false;
-			if (!languageOff && !(t.languages ?? []).some((l) => languageFilter.has(l))) return false;
+			if (!modalityOff && !t.modalities.some((m) => modalityFilter.has(m))) return false;
+			if (!domainOff && !t.domains.some((d) => domainFilter.has(d))) return false;
+			if (!languageOff && !t.languages.some((l) => languageFilter.has(l))) return false;
 			return true;
 		});
 	});
@@ -233,20 +266,20 @@
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
-				cmp = a.name.localeCompare(b.name);
+				cmp = COLLATOR.compare(a.name, b.name);
 			} else if (sort === 'type') {
 				const r = typeRank(a.simplifiedType) - typeRank(b.simplifiedType);
-				cmp = r !== 0 ? r : a.simplifiedType.localeCompare(b.simplifiedType);
+				cmp = r !== 0 ? r : COLLATOR.compare(a.simplifiedType, b.simplifiedType);
 			} else if (sort === 'benchmarks') {
 				cmp = a.benchmarks.length - b.benchmarks.length;
 			} else if (sort === 'languages') {
 				cmp = a.languages.length - b.languages.length;
 			} else if (sort === 'metric') {
-				cmp = a.mainScore.localeCompare(b.mainScore);
+				cmp = COLLATOR.compare(a.mainScore, b.mainScore);
 			} else {
 				cmp = 0;
 			}
-			if (cmp === 0) return a.name.localeCompare(b.name);
+			if (cmp === 0) return COLLATOR.compare(a.name, b.name);
 			return sortDir === 'asc' ? cmp : -cmp;
 		});
 		return list;

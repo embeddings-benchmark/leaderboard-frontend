@@ -111,6 +111,12 @@
 		transition:
 			transform 0.12s ease,
 			border-color 0.12s ease;
+		/* Skip render/paint for off-screen cards (the /benchmarks catalogue
+		   can run to 75+ cards on the home page). `contain: layout paint`
+		   scopes hover and filter mutations to the card. */
+		content-visibility: auto;
+		contain-intrinsic-size: 240px;
+		contain: layout paint;
 	}
 	.card:hover {
 		transform: translateY(-1px);

@@ -1,11 +1,7 @@
 <script lang="ts">
-	// Primary leaderboard tile — big featured card with a top-per-size-
-	// bucket leader list. Whole card is clickable via a stretched-link
-	// pattern on `.prim-title::after`.
-
 	import { resolve } from '$app/paths';
 	import type { Benchmark, BenchmarkLeaders } from '$lib/types';
-	import { apiUrl, isIconUrl, splitModelName } from '$lib/format';
+	import { apiUrl, isIconUrl, slug, splitModelName } from '$lib/format';
 
 	type TintKey = 'multilingual' | 'retrieval' | 'english';
 
@@ -38,12 +34,16 @@
 	);
 </script>
 
-<article class="prim" data-key={tintKey}>
+<a
+	class="prim"
+	data-key={tintKey}
+	href={resolve('/benchmark/[name]', { name: slug(benchmark.name) })}
+	aria-label={`Open ${benchmark.displayName} leaderboard`}
+>
 	<header class="prim-head">
 		<span class="prim-label">{label}</span>
-		<span class="prim-open" aria-hidden="true">Open →</span>
 	</header>
-	<a class="prim-title" href={resolve('/benchmark/[name]', { name: benchmark.name })}>
+	<div class="prim-title">
 		{#if benchmark.icon}
 			{#if isIconUrl(benchmark.icon)}
 				<img
@@ -60,7 +60,7 @@
 			{/if}
 		{/if}
 		<span class="prim-title-text">{benchmark.displayName}</span>
-	</a>
+	</div>
 	<span class="prim-sub">{benchmark.numModels ?? 0} models · {benchmark.tasks.length} tasks</span>
 	{#if leaders === 'loading' || leaders === undefined}
 		<div class="prim-state">Loading…</div>
@@ -82,7 +82,7 @@
 			{/each}
 		</ul>
 	{/if}
-</article>
+</a>
 
 <style>
 	.prim {
@@ -100,7 +100,8 @@
 		border: 1px solid color-mix(in srgb, var(--tint-fg) 22%, var(--border));
 		border-radius: 14px;
 		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
-		position: relative;
+		text-decoration: none;
+		color: inherit;
 		transition:
 			transform 0.14s,
 			border-color 0.14s,
@@ -111,11 +112,10 @@
 		border-color: var(--tint-fg);
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.08);
 	}
-	.prim:hover .prim-title,
-	.prim:hover .prim-open {
+	.prim:hover .prim-title {
 		color: var(--tint-fg);
 	}
-	.prim:focus-within {
+	.prim:focus-visible {
 		outline: 2px solid var(--tint-fg);
 		outline-offset: 2px;
 	}
@@ -134,7 +134,6 @@
 	.prim-head {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 	}
 	.prim-label {
 		font-size: 11px;
@@ -143,19 +142,11 @@
 		letter-spacing: 0.08em;
 		color: var(--tint-fg);
 	}
-	.prim-open {
-		font-size: 12px;
-		font-weight: 700;
-		color: var(--tint-fg);
-		text-decoration: none;
-	}
 	.prim-title {
 		font-size: 19px;
 		font-weight: 700;
 		color: var(--ink-strong);
-		text-decoration: none;
 		margin-top: 2px;
-		position: static;
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
@@ -182,15 +173,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	.prim-title::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-	}
-	.prim-title:focus-visible {
-		outline: none;
 	}
 	.prim-sub {
 		font-size: 12px;

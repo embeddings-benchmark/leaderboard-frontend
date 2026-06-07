@@ -10,10 +10,10 @@
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { sortModalities } from '$lib/format';
+	import { slug, sortModalities } from '$lib/format';
+	import { clampTooltipX } from '$lib/cell-hover';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
-	import { slug } from '$lib/format';
 	import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
 
 	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
@@ -166,18 +166,10 @@
 	};
 
 	const INFO_TIP_MAX_WIDTH = 360;
-	const INFO_TIP_EDGE = 8;
 	type InfoTipState = { visible: boolean; tip: InfoTip | null; x: number; y: number };
 	let infoTip = $state<InfoTipState>({ visible: false, tip: null, x: 0, y: 0 });
 	let infoTipHideTimer: ReturnType<typeof setTimeout> | null = null;
-	function clampInfoX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = INFO_TIP_MAX_WIDTH / 2;
-		const min = INFO_TIP_EDGE + half;
-		const max = window.innerWidth - INFO_TIP_EDGE - half;
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampInfoX = (x: number) => clampTooltipX(x, INFO_TIP_MAX_WIDTH);
 	function cancelInfoTipHide() {
 		if (infoTipHideTimer !== null) {
 			clearTimeout(infoTipHideTimer);

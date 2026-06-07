@@ -7,17 +7,30 @@
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { sortModalities } from '$lib/format';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { ModelMeta } from '$lib/types';
-	import { modelPath, fmtInt } from '$lib/format';
+	import { modelPath, fmtInt, fmtParamsCompact, sortModalities } from '$lib/format';
 
 	let ALL_MODELS = $state<ModelMeta[]>([]);
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
+
+	// Lowercased "name\ndisplayName\norg" per model — substring search in
+	// `passes()` runs over this single concatenated string instead of three
+	// `.toLowerCase()` calls per row per keystroke.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const _modelLower = new WeakMap<ModelMeta, string>();
+	function lowerFor(m: ModelMeta): string {
+		let v = _modelLower.get(m);
+		if (v === undefined) {
+			v = `${m.name}\n${m.displayName}\n${m.org}`.toLowerCase();
+			_modelLower.set(m, v);
+		}
+		return v;
+	}
 
 	// Local language filter state. Lives in the page (not the shared
 	// `filters` store) because /models is the only place that uses it.
@@ -91,37 +104,45 @@
 	// list. Same logic as applyFilters() in filters.svelte.ts, just minus the
 	// benchmark-scope / sort / re-rank parts that only make sense for a
 	// summary's rows.
-	function passes(m: ModelMeta): boolean {
+	function buildPasses(): (m: ModelMeta) => boolean {
+		// All cross-row inputs read once at the top so the per-row predicate
+		// doesn't re-read them 800x per keystroke.
 		const q = filters.nameQuery.trim().toLowerCase();
-		if (
-			q &&
-			!m.name.toLowerCase().includes(q) &&
-			!m.displayName.toLowerCase().includes(q) &&
-			!m.org.toLowerCase().includes(q)
-		)
-			return false;
-		if (filters.availability === 'open' && !m.openWeights) return false;
-		if (filters.availability === 'proprietary' && m.openWeights) return false;
-		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
-		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
-		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
-		// Empty pick set = "deselect everything" → nothing matches.
-		if (!filters.modelTypes.has(m.modelType)) return false;
-		if (m.totalParamsB > 0) {
-			const paramsM = m.totalParamsB * 1000;
-			if (paramsM < filters.minModelSizeM) return false;
-			if (paramsM > filters.maxModelSizeM) return false;
-		}
-		// Language predicate: "all on" = filter off; otherwise require
-		// at least one declared language to be in the picked set.
-		// Models with no declared languages (`undefined`/`[]`) get a
-		// pass — language metadata is optional upstream and we don't
-		// want to silently drop pre-tagged models.
-		if (LANGUAGES.length > 0 && languagesPicked.size !== LANGUAGES.length) {
-			const mlangs = m.languages ?? [];
-			if (mlangs.length > 0 && !mlangs.some((l) => languagesPicked.has(l))) return false;
-		}
-		return true;
+		const availability = filters.availability;
+		const instructions = filters.instructions;
+		const stOnly = filters.sentenceTransformersOnly;
+		const modelTypes = filters.modelTypes;
+		const modelTypesSize = modelTypes.size;
+		const sizeMin = filters.minModelSizeM;
+		const sizeMax = filters.maxModelSizeM;
+		const langPicked = languagesPicked;
+		const langCount = LANGUAGES.length;
+		const langActive = langCount > 0 && langPicked.size !== langCount;
+		return (m: ModelMeta) => {
+			if (q && !lowerFor(m).includes(q)) return false;
+			if (availability === 'open' && !m.openWeights) return false;
+			if (availability === 'proprietary' && m.openWeights) return false;
+			if (instructions === 'only_instruction' && !m.instructionTuned) return false;
+			if (instructions === 'only_non_instruction' && m.instructionTuned) return false;
+			if (stOnly && !m.sentenceTransformersCompatible) return false;
+			// Empty pick set = "deselect everything" → nothing matches.
+			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
+			if (m.totalParamsB > 0) {
+				const paramsM = m.totalParamsB * 1000;
+				if (paramsM < sizeMin) return false;
+				if (paramsM > sizeMax) return false;
+			}
+			// Language predicate: "all on" = filter off; otherwise require
+			// at least one declared language to be in the picked set.
+			// Models with no declared languages (`undefined`/`[]`) get a
+			// pass — language metadata is optional upstream and we don't
+			// want to silently drop pre-tagged models.
+			if (langActive) {
+				const mlangs = m.languages;
+				if (mlangs && mlangs.length > 0 && !mlangs.some((l) => langPicked.has(l))) return false;
+			}
+			return true;
+		};
 	}
 
 	function toggleLanguage(l: string) {
@@ -136,7 +157,7 @@
 	// Split filter / sort so name-query keystrokes (which only narrow rows)
 	// don't trigger a full re-sort. The sort only re-runs when its inputs
 	// (`sort`, `sortDir`, or the filtered list identity) change.
-	let matched = $derived(ALL_MODELS.filter(passes));
+	let matched = $derived.by(() => ALL_MODELS.filter(buildPasses()));
 	let filtered = $derived.by(() => {
 		const list = [...matched];
 		list.sort((a, b) => {
@@ -189,11 +210,6 @@
 		}, 80);
 	});
 	let visibleModels = $derived(filtered.slice(0, visibleCount));
-
-	function fmtParams(b: number): string {
-		if (!b) return '—';
-		return b >= 1 ? `${b.toFixed(1)}B` : `${(b * 1000).toFixed(0)}M`;
-	}
 </script>
 
 <ShareMeta
@@ -280,7 +296,7 @@
 						<dl class="stats">
 							<div>
 								<dt>Params</dt>
-								<dd>{fmtParams(m.totalParamsB)}</dd>
+								<dd>{fmtParamsCompact(m.totalParamsB)}</dd>
 							</div>
 							<div>
 								<dt>Embed dim</dt>
@@ -365,7 +381,14 @@
 		gap: 12px;
 	}
 	.card {
-		background: var(--surface);
+		/* Per-type rules below set `--card-tint` / `--card-accent`. This
+		   single gradient declaration handles every variant — color-mix
+		   resolves once per element, not per paint. */
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--card-tint, transparent) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 14px 16px;
@@ -384,10 +407,11 @@
 			transform 0.12s ease,
 			border-color 0.12s ease,
 			box-shadow 0.12s ease;
-		/* Skip render/paint for off-screen cards (the registry is long); the
-		   `min-height` above doubles as the intrinsic-size placeholder. */
+		/* Skip render/paint for off-screen cards (the registry is long).
+		   Layout + paint containment scopes invalidation to each card. */
 		content-visibility: auto;
 		contain-intrinsic-size: 220px;
+		contain: layout paint;
 	}
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));
@@ -406,53 +430,28 @@
 		height: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	/* Per-type cards: a flat surface so dark mode reads cleanly, plus the
-	   accent bar (.card::before) and a soft 40% tint at the very top via
-	   the theme-aware --tint-* tokens. */
+	/* Per-type tints: just set the custom properties; the gradient + accent
+	   strip in `.card` / `.card::before` consume them. Mapping documented
+	   in CLAUDE.md (dense → blue, cross-encoder → orange, …). */
 	.card[data-type='dense'] {
-		--card-accent: var(--tint-blue-fg);
 		--card-tint: var(--tint-blue);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+		--card-accent: var(--tint-blue-fg);
 	}
 	.card[data-type='cross-encoder'] {
-		--card-accent: var(--tint-orange-fg);
 		--card-tint: var(--tint-orange);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+		--card-accent: var(--tint-orange-fg);
 	}
 	.card[data-type='late-interaction'] {
-		--card-accent: var(--tint-green-fg);
 		--card-tint: var(--tint-green);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+		--card-accent: var(--tint-green-fg);
 	}
 	.card[data-type='sparse'] {
-		--card-accent: var(--tint-amber-fg);
 		--card-tint: var(--tint-amber);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+		--card-accent: var(--tint-amber-fg);
 	}
 	.card[data-type='router'] {
-		--card-accent: var(--tint-purple-fg);
 		--card-tint: var(--tint-purple);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+		--card-accent: var(--tint-purple-fg);
 	}
 	.card:hover {
 		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));

@@ -75,7 +75,14 @@
 
 <style>
 	.card {
-		background: var(--surface);
+		/* Gradient header band: per-stype rules below set `--card-tint` /
+		   `--card-accent` so this single declaration covers every variant.
+		   color-mix is evaluated once per element, not per paint. */
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--card-tint, transparent) 55%, var(--surface)) 0%,
+			var(--surface) 64px
+		);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 14px 16px;
@@ -90,11 +97,14 @@
 			transform 0.12s ease,
 			border-color 0.12s ease,
 			box-shadow 0.12s ease;
-		/* `content-visibility: auto` lets the browser skip rendering off-screen
-		   cards (1759 entries on the full registry). `contain-intrinsic-size`
-		   reserves placeholder space so the scrollbar geometry stays stable. */
+		/* `content-visibility: auto` skips render/paint for off-screen cards
+		   (1700+ entries on the full registry). `contain-intrinsic-size`
+		   reserves placeholder space so the scrollbar stays stable. Layout
+		   + paint containment on every card scopes invalidation to a single
+		   card — hover/filter mutations don't reflow the whole grid. */
 		content-visibility: auto;
 		contain-intrinsic-size: 280px;
+		contain: layout paint;
 	}
 	.card:hover {
 		transform: translateY(-1px);
@@ -117,47 +127,28 @@
 		height: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	/* Per-stype accent + subtle header wash — matches the simplified
-	   task-type color mapping documented in CLAUDE.md. */
+	/* Per-stype accent + tint variables — the gradient + accent strip in
+	   `.card` / `.card::before` consume these via `--card-tint` /
+	   `--card-accent`. Mapping documented in CLAUDE.md. */
 	.card[data-stype='retrieval'] {
+		--card-tint: var(--tint-purple);
 		--card-accent: var(--tint-purple-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='classification'] {
+		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='pair-classification'] {
+		--card-tint: var(--tint-green);
 		--card-accent: var(--tint-green-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='clustering'] {
+		--card-tint: var(--tint-orange);
 		--card-accent: var(--tint-orange-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='semantic-similarity'] {
+		--card-tint: var(--tint-pink);
 		--card-accent: var(--tint-pink-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-pink) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card-head {
 		display: flex;

@@ -117,6 +117,16 @@ export function fmtParamsUnit(b: number): string {
 	return b >= 1 ? 'B' : 'M';
 }
 
+/**
+ * One-string formatter for billion-scale params. `sep` lets callers pick
+ * tight (`"1.5B"`, default) or spaced (`"1.5 B"`) units; the spaced form
+ * suits the hover-card layout. Returns `"—"` for null/0.
+ */
+export function fmtParamsCompact(b: number | null | undefined, sep = ''): string {
+	if (!b) return '—';
+	return b >= 1 ? `${b.toFixed(1)}${sep}B` : `${(b * 1000).toFixed(0)}${sep}M`;
+}
+
 /** Direction of a sortable column. */
 export type SortDir = 'asc' | 'desc';
 
@@ -341,4 +351,18 @@ export function nextSort<K extends string>(
 		return { key: clickedKey, dir: currentDir === 'asc' ? 'desc' : 'asc' };
 	}
 	return { key: null, dir: currentDir };
+}
+
+/**
+ * Partition `rows` so pinned ones come first, others keep their order.
+ * Returns the input array unchanged when nothing is pinned, so derivations
+ * that depend on it can avoid a needless re-render.
+ */
+export function floatPinnedToTop<T>(rows: readonly T[], isPinned: (r: T) => boolean): T[] {
+	if (rows.length === 0) return rows as T[];
+	const pinned: T[] = [];
+	const unpinned: T[] = [];
+	for (const r of rows) (isPinned(r) ? pinned : unpinned).push(r);
+	if (pinned.length === 0) return rows as T[];
+	return [...pinned, ...unpinned];
 }

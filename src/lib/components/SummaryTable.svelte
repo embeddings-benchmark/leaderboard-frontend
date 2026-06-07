@@ -72,6 +72,7 @@
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import {
 		bestWorstPerColumn,
+		floatPinnedToTop,
 		fmtParamsUnit,
 		fmtParamsValue,
 		fmtPct,
@@ -85,7 +86,7 @@
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { safeIdle } from '$lib/idle';
-	import { isBoundaryCross } from '$lib/cell-hover';
+	import { clampTooltipX, isBoundaryCross } from '$lib/cell-hover';
 	import ModelCellName from './ModelCellName.svelte';
 	import PinButton from './PinButton.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
@@ -95,8 +96,15 @@
 
 	interface Props {
 		summary: BenchmarkSummary;
+		// `false` when this pane is mounted but hidden behind another tab. We
+		// then skip subscribing `sortedRows` to `pinnedModels` so pin clicks
+		// in the visible pane don't invalidate the hidden one's derived.
+		// Defaults to `true` so callers that don't use the prewarm pattern
+		// (e.g. /benchmark/[name] only mounts the active tab when prerender
+		// is off) keep the live-pin behaviour.
+		active?: boolean;
 	}
-	let { summary }: Props = $props();
+	let { summary, active = true }: Props = $props();
 
 	type SortKey =
 		| 'rank'
@@ -175,15 +183,11 @@
 				return ((va.v as number) - (vb.v as number)) * dir;
 			});
 		}
-		// Float pinned rows to the top in a single partition pass.
-		if (pinnedModels.size === 0) return rows;
-		const pinned: SummaryRow[] = [];
-		const unpinned: SummaryRow[] = [];
-		for (const r of rows) {
-			if (pinnedModels.has(r.model.name)) pinned.push(r);
-			else unpinned.push(r);
-		}
-		return [...pinned, ...unpinned];
+		// Inactive panes don't subscribe to `pinnedModels` — pin clicks
+		// elsewhere don't invalidate this derived. Reactivates on tab switch
+		// (the `active` prop change re-fires the derived).
+		if (!active) return rows;
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name));
 	});
 
 	// Progressive row render — Firefox benefits a lot (cold first-paint
@@ -389,16 +393,7 @@
 	// rightmost task-type columns on narrow screens.
 	const TIP_MAX_WIDTH = 340;
 	const TIP_EDGE = 8;
-	function clampTipX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = TIP_MAX_WIDTH / 2;
-		const min = TIP_EDGE + half;
-		const max = window.innerWidth - TIP_EDGE - half;
-		// On very narrow viewports (< TIP_MAX_WIDTH) min > max; centre on the
-		// viewport in that case rather than letting min clobber max.
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampTipX = (x: number) => clampTooltipX(x, TIP_MAX_WIDTH, TIP_EDGE);
 
 	function showTip(e: PointerEvent | FocusEvent) {
 		cancelHide();

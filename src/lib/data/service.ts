@@ -12,17 +12,6 @@ import type {
 	TaskMeta,
 	TaskScores
 } from '$lib/types';
-import { DEFAULT_BENCHMARK_NAME } from './defaults';
-
-// Mock-data modules are dynamic-imported below so prod bundles never ship the
-// ~800-line fixture set. Flip `USE_MOCK = true` locally if you need to develop
-// against the offline fixtures under `./mock*` without a backend.
-type MockModule = typeof import('./mockBenchmarks');
-type MockSummaryModule = typeof import('./mockSummary');
-let _mockMod: Promise<MockModule> | null = null;
-let _mockSumMod: Promise<MockSummaryModule> | null = null;
-const loadMockBenchmarks = () => (_mockMod ??= import('./mockBenchmarks'));
-const loadMockSummaryMod = () => (_mockSumMod ??= import('./mockSummary'));
 
 // MUST use `$env/static/public` — `$env/dynamic/public` reads from a
 // SvelteKit runtime object that adapter-static + nginx never populate,
@@ -31,16 +20,8 @@ const loadMockSummaryMod = () => (_mockSumMod ??= import('./mockSummary'));
 // build env (Docker build-args / .env.local in dev).
 const API = PUBLIC_API_URL?.trim() ?? '';
 
-// Code-level toggle for the deterministic mock fallback. Off by default so a
-// missed `PUBLIC_API_URL` env throws loudly instead of silently shipping mock
-// data. Flip locally when iterating on UI without the FastAPI backend up.
-const USE_MOCK = false;
-
 function noApiError(scope: string): Error {
-	return new Error(
-		`${scope}: PUBLIC_API_URL is not set. Configure a backend URL ` +
-			`(or flip USE_MOCK = true in src/lib/data/service.ts for offline dev).`
-	);
+	return new Error(`${scope}: PUBLIC_API_URL is not set. Configure a backend URL.`);
 }
 
 // All app loaders go through the versioned `/v1/` API surface.
@@ -148,10 +129,7 @@ function enrichModelScores(s: ModelScores): ModelScores {
 }
 
 export async function loadBenchmarkMenu(): Promise<MenuEntry[]> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadBenchmarkMenu');
-		return (await loadMockBenchmarks()).BENCHMARK_MENU;
-	}
+	if (!API) throw noApiError('loadBenchmarkMenu');
 	return cachedHttp<MenuEntry[]>('/benchmarks/menu');
 }
 
@@ -160,23 +138,13 @@ export async function loadBenchmarkMenu(): Promise<MenuEntry[]> {
  *  /benchmarks catalogue can render them with the "newer version
  *  available" hint. */
 export async function loadBenchmarks(includeHidden = false): Promise<Benchmark[]> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadBenchmarks');
-		const { BENCHMARK_INDEX } = await loadMockBenchmarks();
-		return Object.values(BENCHMARK_INDEX);
-	}
+	if (!API) throw noApiError('loadBenchmarks');
 	const qs = includeHidden ? '?include_hidden=true' : '';
 	return cachedHttp<Benchmark[]>(`/benchmarks${qs}`);
 }
 
 export async function loadBenchmark(name: string): Promise<Benchmark> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadBenchmark');
-		const { BENCHMARK_INDEX } = await loadMockBenchmarks();
-		const benchmark = BENCHMARK_INDEX[name];
-		if (!benchmark) throw new Error(`Unknown benchmark: ${name}`);
-		return benchmark;
-	}
+	if (!API) throw noApiError('loadBenchmark');
 	return cachedHttp<Benchmark>(`/benchmarks/${encodeURIComponent(name)}`);
 }
 
@@ -184,11 +152,7 @@ export async function loadSummary(
 	benchmarkName: string,
 	languages?: ReadonlyArray<string>
 ): Promise<BenchmarkSummary> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadSummary');
-		const { buildMockSummary } = await loadMockSummaryMod();
-		return buildMockSummary(benchmarkName);
-	}
+	if (!API) throw noApiError('loadSummary');
 	// Path is `/scores` (consistent with /tasks/{name}/scores and
 	// /models/{name}/scores). The backend keeps `/summary` as a
 	// deprecated alias for one frontend deploy window. When `languages`
@@ -215,10 +179,7 @@ export async function loadSummary(
  * a benchmark with no `language` column in its long frame).
  */
 export async function loadPerLanguage(benchmarkName: string): Promise<BenchmarkPerLanguage> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadPerLanguage');
-		return { benchmarkName, rows: [] };
-	}
+	if (!API) throw noApiError('loadPerLanguage');
 	return cachedHttp<BenchmarkPerLanguage>(
 		`/benchmarks/${encodeURIComponent(benchmarkName)}/per-language`
 	);
@@ -232,44 +193,12 @@ export async function loadPerLanguage(benchmarkName: string): Promise<BenchmarkP
  * benchmarks). Each bucket is a `[min, max]` tuple in billions of
  * parameters; pass `null` as `max` for the open-ended top bucket
  * (encoded on the wire as bare `min`).
- *
- * Falls back to building leaders client-side from the mock summary
- * when `PUBLIC_USE_MOCK=1` and the API is unset — keeps the home
- * page working offline without a separate mock for this endpoint.
  */
 export async function loadLeaders(
 	benchmarkName: string,
 	buckets: ReadonlyArray<readonly [number, number | null]>
 ): Promise<BenchmarkLeaders> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadLeaders');
-		const summary = await loadSummary(benchmarkName);
-		return {
-			benchmarkName: summary.benchmarkName,
-			buckets: buckets.map(([lo, hi]) => {
-				const candidates = summary.rows.filter(
-					(r) => r.totalParamsB > 0 && r.totalParamsB >= lo && (hi == null || r.totalParamsB < hi)
-				);
-				candidates.sort((a, b) => (b.meanTask ?? -1) - (a.meanTask ?? -1));
-				const top = candidates[0];
-				return {
-					min: lo,
-					max: hi,
-					leader: top
-						? {
-								rank: top.rank,
-								model: {
-									name: top.model.name,
-									modelType: top.model.modelType
-								},
-								meanTask: top.meanTask,
-								totalParamsB: top.totalParamsB
-							}
-						: null
-				};
-			})
-		};
-	}
+	if (!API) throw noApiError('loadLeaders');
 	// Wire format is a JSON-encoded array of [min, max] tuples — the
 	// backend parses it as `?buckets=[[0,0.5],...,[5,null]]`. Single
 	// query param keeps the URL cacheable by the shared cachedHttp
@@ -305,56 +234,24 @@ function buildQuery(params: Record<string, unknown>): string {
 }
 
 export async function loadTasks(filters: TaskFilters = {}): Promise<TaskMeta[]> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadTasks');
-		const { buildMockSummary } = await loadMockSummaryMod();
-		return buildMockSummary(DEFAULT_BENCHMARK_NAME).tasksMeta;
-	}
+	if (!API) throw noApiError('loadTasks');
 	return cachedHttp<TaskMeta[]>(`/tasks${buildQuery(filters as Record<string, unknown>)}`);
 }
 
 export async function loadTask(name: string): Promise<TaskMeta> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadTask');
-		const { buildMockSummary } = await loadMockSummaryMod();
-		const meta = buildMockSummary(DEFAULT_BENCHMARK_NAME).tasksMeta.find((t) => t.name === name);
-		if (!meta) throw new Error(`Unknown task: ${name}`);
-		return meta;
-	}
+	if (!API) throw noApiError('loadTask');
 	return cachedHttp<TaskMeta>(`/tasks/${encodeURIComponent(name)}`);
 }
 
 export async function loadTaskScores(name: string): Promise<TaskScores> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadTaskScores');
-		const { buildMockSummary } = await loadMockSummaryMod();
-		const summary = buildMockSummary(DEFAULT_BENCHMARK_NAME);
-		const meta = summary.tasksMeta.find((t) => t.name === name);
-		if (!meta) throw new Error(`Unknown task: ${name}`);
-		const rows = summary.rows
-			.map((r) => ({
-				rank: 0,
-				model: r.model,
-				score: r.scoresByTask[name] ?? 0,
-				subsetScores: {},
-				benchmarks: [summary.benchmarkName]
-			}))
-			.filter((r) => r.score > 0)
-			.sort((a, b) => b.score - a.score);
-		rows.forEach((r, i) => (r.rank = i + 1));
-		return { task: meta, benchmarks: [summary.benchmarkName], subsets: [], rows };
-	}
+	if (!API) throw noApiError('loadTaskScores');
 	return enrichTaskScores(
 		await cachedHttp<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`)
 	);
 }
 
 export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[]> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadModels');
-		const { buildMockSummary } = await loadMockSummaryMod();
-		return buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.map((r) => r.model);
-	}
+	if (!API) throw noApiError('loadModels');
 	const out = await cachedHttp<ModelMeta[]>(
 		`/models${buildQuery(filters as Record<string, unknown>)}`
 	);
@@ -363,43 +260,14 @@ export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[
 }
 
 export async function loadModel(name: string): Promise<ModelMeta> {
-	if (!API) {
-		if (!USE_MOCK) throw noApiError('loadModel');
-		const { buildMockSummary } = await loadMockSummaryMod();
-		const meta = buildMockSummary(DEFAULT_BENCHMARK_NAME).rows.find(
-			(r) => r.model.name === name
-		)?.model;
-		if (!meta) throw new Error(`Unknown model: ${name}`);
-		return meta;
-	}
+	if (!API) throw noApiError('loadModel');
 	return fillOrgAndDisplay(
 		await cachedHttp<ModelMeta>(`/models/${encodeURIComponent(name)}`)
 	) as ModelMeta;
 }
 
 export async function loadModelScores(name: string): Promise<ModelScores> {
-	if (!API) {
-		const { buildMockSummary } = await loadMockSummaryMod();
-		const summary = buildMockSummary(DEFAULT_BENCHMARK_NAME);
-		const row = summary.rows.find((r) => r.model.name === name);
-		if (!row) throw new Error(`Unknown model: ${name}`);
-		return {
-			model: row.model,
-			rows: [
-				{
-					benchmarkName: summary.benchmarkName,
-					benchmarkDisplayName: summary.benchmarkName,
-					rank: row.rank,
-					totalModels: summary.rows.length,
-					meanTask: row.meanTask,
-					meanTaskType: row.meanTaskType,
-					zeroShotPct: row.zeroShotPct,
-					taskTypes: summary.taskTypes,
-					scoresByTaskType: row.scoresByTaskType
-				}
-			]
-		};
-	}
+	if (!API) throw noApiError('loadModelScores');
 	return enrichModelScores(
 		await cachedHttp<ModelScores>(`/models/${encodeURIComponent(name)}/scores`)
 	);

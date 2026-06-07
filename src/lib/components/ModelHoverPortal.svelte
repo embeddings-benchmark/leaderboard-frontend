@@ -1,11 +1,7 @@
 <script lang="ts" module>
 	import type { SummaryRow } from '$lib/types';
-	import { fmtZeroShot } from '$lib/format';
+	import { fmtZeroShot, fmtParamsCompact } from '$lib/format';
 
-	function fmtParams(b: number): string {
-		if (!b) return '—';
-		return b >= 1 ? `${b.toFixed(1)} B` : `${(b * 1000).toFixed(0)} M`;
-	}
 	function fmtInt(n: number): string {
 		if (!n) return '—';
 		return n.toLocaleString();
@@ -22,7 +18,7 @@
 		const m = row.model;
 		const out = [
 			{ k: 'Type', v: m.modelType },
-			{ k: 'Active params', v: fmtParams(row.activeParamsB) },
+			{ k: 'Active params', v: fmtParamsCompact(row.activeParamsB, ' ') },
 			{ k: 'Zero-shot', v: fmtZeroShot(row.zeroShotPct) },
 			{ k: 'Embedding dim', v: row.embeddingDim ? fmtInt(row.embeddingDim) : '—' },
 			{ k: 'Max tokens', v: row.maxTokens ? fmtInt(row.maxTokens) : '—' },
