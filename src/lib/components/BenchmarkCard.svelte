@@ -112,11 +112,11 @@
 			transform 0.12s ease,
 			border-color 0.12s ease;
 		/* Skip render/paint for off-screen cards (the /benchmarks catalogue
-		   can run to 75+ cards on the home page). `contain: layout paint`
-		   scopes hover and filter mutations to the card. */
+		   can run to 75+ cards on the home page). `content-visibility: auto`
+		   already implies `contain: size layout paint style` — an explicit
+		   `contain:` would replace that set and break `contain-intrinsic-size`. */
 		content-visibility: auto;
 		contain-intrinsic-size: 240px;
-		contain: layout paint;
 	}
 	.card:hover {
 		transform: translateY(-1px);

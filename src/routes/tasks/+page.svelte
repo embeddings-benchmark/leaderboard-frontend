@@ -9,6 +9,8 @@
 	import TaskCard from '$lib/components/TaskCard.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
+	import { COLLATOR } from '$lib/format';
+	import { getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 
 	interface TaskEntry {
@@ -35,12 +37,6 @@
 		'clustering',
 		'semantic-similarity'
 	] as const;
-
-	// Shared collator — `Intl.Collator.compare` has ~2x the throughput of
-	// `String.prototype.localeCompare` because it avoids the per-call options
-	// parsing. The initial 1700-entry sort + repeat sort-button presses both
-	// take this hot path.
-	const COLLATOR = new Intl.Collator(undefined, { sensitivity: 'base' });
 
 	let ALL_TASKS = $state<TaskEntry[]>([]);
 	let SIMPLIFIED_PRESENT = $state<string[]>([]);
@@ -156,8 +152,26 @@
 	let sidebarCollapsed = $state(
 		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 	);
-	let sort = $state<SortId>('name');
-	let sortDir = $state<SortDir>(NATURAL_DIR.name);
+	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
+	// page and back via the browser restores the user's sort choice.
+	const SORT_IDS = new Set(SORTS.map((s) => s.id));
+	const DEFAULT_SORT: SortId = 'name';
+	const _urlSort = getParam('s.tasks');
+	const _urlDir = getParam('d.tasks');
+	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
+		? (_urlSort as SortId)
+		: DEFAULT_SORT;
+	let sort = $state<SortId>(initialSort);
+	let sortDir = $state<SortDir>(
+		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
+	);
+	$effect(() => {
+		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
+		updateUrl({
+			's.tasks': isDefault ? null : sort,
+			'd.tasks': isDefault ? null : sortDir
+		});
+	});
 
 	function onSortKeyChange(next: SortId) {
 		sort = next;

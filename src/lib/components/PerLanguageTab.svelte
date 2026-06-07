@@ -154,7 +154,7 @@
 			});
 		}
 		if (!active) return rows;
-		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name));
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name), pinnedModels.size);
 	});
 
 	function fmt(n: number | null): string {

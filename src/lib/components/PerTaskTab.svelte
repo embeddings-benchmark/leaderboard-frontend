@@ -203,7 +203,7 @@
 			});
 		}
 		if (!active) return rows;
-		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name));
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name), pinnedModels.size);
 	});
 
 	// Heaviest table on the page (~100k cells). Stream rows in idle

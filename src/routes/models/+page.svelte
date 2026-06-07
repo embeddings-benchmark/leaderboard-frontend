@@ -12,25 +12,20 @@
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { ModelMeta } from '$lib/types';
-	import { modelPath, fmtInt, fmtParamsCompact, sortModalities } from '$lib/format';
+	import {
+		COLLATOR,
+		fmtInt,
+		fmtParamsCompact,
+		modelPath,
+		modelSearchKey,
+		sortModalities
+	} from '$lib/format';
+	import { getParam, updateUrl } from '$lib/url-state';
 
 	let ALL_MODELS = $state<ModelMeta[]>([]);
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
 
-	// Lowercased "name\ndisplayName\norg" per model — substring search in
-	// `passes()` runs over this single concatenated string instead of three
-	// `.toLowerCase()` calls per row per keystroke.
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
-	const _modelLower = new WeakMap<ModelMeta, string>();
-	function lowerFor(m: ModelMeta): string {
-		let v = _modelLower.get(m);
-		if (v === undefined) {
-			v = `${m.name}\n${m.displayName}\n${m.org}`.toLowerCase();
-			_modelLower.set(m, v);
-		}
-		return v;
-	}
 
 	// Local language filter state. Lives in the page (not the shared
 	// `filters` store) because /models is the only place that uses it.
@@ -88,9 +83,28 @@
 		released: 'desc'
 	};
 	// Default sort: newest release first. Surfaces just-shipped models at
-	// the top so visitors see what's current without scrolling.
-	let sort = $state<SortId>('released');
-	let sortDir = $state<SortDir>(NATURAL_DIR.released);
+	// the top so visitors see what's current without scrolling. State is
+	// URL-backed (`?s.models=…&d.models=…`) so navigating to a model detail
+	// page and back via the browser restores the user's sort choice.
+	const SORT_IDS = new Set(SORTS.map((s) => s.id));
+	const DEFAULT_SORT: SortId = 'released';
+	const _urlSort = getParam('s.models');
+	const _urlDir = getParam('d.models');
+	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
+		? (_urlSort as SortId)
+		: DEFAULT_SORT;
+	let sort = $state<SortId>(initialSort);
+	let sortDir = $state<SortDir>(
+		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
+	);
+	$effect(() => {
+		// Omit defaults from the URL so the canonical "fresh visit" link is clean.
+		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
+		updateUrl({
+			's.models': isDefault ? null : sort,
+			'd.models': isDefault ? null : sortDir
+		});
+	});
 
 	function onSortKeyChange(next: SortId) {
 		sort = next;
@@ -119,7 +133,7 @@
 		const langCount = LANGUAGES.length;
 		const langActive = langCount > 0 && langPicked.size !== langCount;
 		return (m: ModelMeta) => {
-			if (q && !lowerFor(m).includes(q)) return false;
+			if (q && !modelSearchKey(m).includes(q)) return false;
 			if (availability === 'open' && !m.openWeights) return false;
 			if (availability === 'proprietary' && m.openWeights) return false;
 			if (instructions === 'only_instruction' && !m.instructionTuned) return false;
@@ -163,13 +177,13 @@
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
-				cmp = a.name.localeCompare(b.name);
+				cmp = COLLATOR.compare(a.name, b.name);
 			} else if (sort === 'params') {
 				const aP = a.totalParamsB || -1;
 				const bP = b.totalParamsB || -1;
 				cmp = aP - bP;
 			} else if (sort === 'released') {
-				cmp = (a.releaseDate ?? '').localeCompare(b.releaseDate ?? '');
+				cmp = COLLATOR.compare(a.releaseDate ?? '', b.releaseDate ?? '');
 			} else {
 				cmp = 0;
 			}
@@ -408,10 +422,11 @@
 			border-color 0.12s ease,
 			box-shadow 0.12s ease;
 		/* Skip render/paint for off-screen cards (the registry is long).
-		   Layout + paint containment scopes invalidation to each card. */
+		   `content-visibility: auto` already implies `contain: size layout
+		   paint style`; an explicit `contain:` would replace that set and
+		   break `contain-intrinsic-size`. */
 		content-visibility: auto;
 		contain-intrinsic-size: 220px;
-		contain: layout paint;
 	}
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));

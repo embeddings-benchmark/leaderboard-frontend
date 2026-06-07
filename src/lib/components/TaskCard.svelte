@@ -98,13 +98,12 @@
 			border-color 0.12s ease,
 			box-shadow 0.12s ease;
 		/* `content-visibility: auto` skips render/paint for off-screen cards
-		   (1700+ entries on the full registry). `contain-intrinsic-size`
-		   reserves placeholder space so the scrollbar stays stable. Layout
-		   + paint containment on every card scopes invalidation to a single
-		   card — hover/filter mutations don't reflow the whole grid. */
+		   (1700+ entries on the full registry). It implicitly applies
+		   `contain: size layout paint style`, so an explicit `contain:` here
+		   would *replace* (not augment) that set — dropping size containment
+		   and breaking `contain-intrinsic-size`. */
 		content-visibility: auto;
 		contain-intrinsic-size: 280px;
-		contain: layout paint;
 	}
 	.card:hover {
 		transform: translateY(-1px);

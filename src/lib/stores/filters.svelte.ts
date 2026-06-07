@@ -2,6 +2,7 @@ import { untrack } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 
 import type { BenchmarkSummary, ModelType, SummaryRow, TaskMeta } from '$lib/types';
+import { modelSearchKey } from '$lib/format';
 import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
 
 export type ZeroShotMode = 'allow_all' | 'remove_unknown' | 'only_zero_shot';
@@ -24,6 +25,10 @@ export const MODEL_TYPES: ModelType[] = [
 
 export const MODEL_MODALITIES = ['text', 'image', 'audio', 'video'] as const;
 export type ModelModality = (typeof MODEL_MODALITIES)[number];
+
+// Shared default for models whose `modalities` field is missing — avoids
+// allocating a fresh `['text']` array per row in the hot filter pass.
+const TEXT_ONLY: readonly string[] = ['text'];
 
 interface FiltersState {
 	// model filters
@@ -638,14 +643,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		filters.zeroShot !== 'allow_all';
 	const passesRowFilter = (row: SummaryRow): boolean => {
 		const m = row.model;
-		if (
-			q &&
-			!m.name.toLowerCase().includes(q) &&
-			!m.displayName.toLowerCase().includes(q) &&
-			!m.org.toLowerCase().includes(q)
-		) {
-			return false;
-		}
+		if (q && !modelSearchKey(m).includes(q)) return false;
 		if (filters.availability === 'open' && !m.openWeights) return false;
 		if (filters.availability === 'proprietary' && m.openWeights) return false;
 
@@ -659,8 +657,15 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		if (!filters.modelTypes.has(m.modelType)) return false;
 
 		if (filters.modelModalities.size < MODEL_MODALITIES.length) {
-			const mm = m.modalities ?? ['text'];
-			if (!mm.some((x) => filters.modelModalities.has(x))) return false;
+			const mm = m.modalities ?? TEXT_ONLY;
+			let any = false;
+			for (const x of mm) {
+				if (filters.modelModalities.has(x)) {
+					any = true;
+					break;
+				}
+			}
+			if (!any) return false;
 		}
 
 		// Size filter is inactive until the user actually moves the slider.
@@ -696,6 +701,13 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		//     to lenient means for the language-scoped summary.
 		// Memoised by `(row identity, narrow signature)` — a name-search
 		// keystroke under a fixed task filter reuses every survivor's cache.
+		// Lenient: any present value contributes. Strict: all values must be
+		// present for a non-null mean — matches the backend's
+		// `_skipna_false_mean` policy.
+		const meanOrNull = (sum: number, n: number, total: number): number | null => {
+			if (lenient) return n > 0 ? sum / n : null;
+			return total > 0 && n === total ? sum / total : null;
+		};
 		const computeAgg = (row: SummaryRow) => {
 			let taskSum = 0;
 			let taskN = 0;
@@ -706,13 +718,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 					taskN++;
 				}
 			}
-			const meanTask = lenient
-				? taskN > 0
-					? taskSum / taskN
-					: null
-				: taskNamesOut.length > 0 && taskN === taskNamesOut.length
-					? taskSum / taskN
-					: null;
+			const meanTask = meanOrNull(taskSum, taskN, taskNamesOut.length);
 
 			const scoresByTaskType: Record<string, number> = {};
 			for (const tt of taskTypesOut) {
@@ -727,9 +733,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 						typeN++;
 					}
 				}
-				if (lenient ? typeN > 0 : typeN === typeTasks.length) {
-					scoresByTaskType[tt] = typeSum / typeN;
-				}
+				const typeMean = meanOrNull(typeSum, typeN, typeTasks.length);
+				if (typeMean !== null) scoresByTaskType[tt] = typeMean;
 			}
 
 			let mttSum = 0;
@@ -741,13 +746,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 					mttN++;
 				}
 			}
-			const meanTaskType = lenient
-				? mttN > 0
-					? mttSum / mttN
-					: null
-				: taskTypesOut.length > 0 && mttN === taskTypesOut.length
-					? mttSum / mttN
-					: null;
+			const meanTaskType = meanOrNull(mttSum, mttN, taskTypesOut.length);
 			return { meanTask, meanTaskType, scoresByTaskType };
 		};
 
@@ -801,7 +800,12 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 					const v = r.scoresByTask[taskName];
 					if (v !== undefined) ranked.push({ name: r.model.name, v });
 				}
-				ranked.sort((a, b) => b.v - a.v);
+				// Stable tie-break on model name so Borda points land on the
+				// same row regardless of the filter pass that produced
+				// `visibleNames`. Without this, tied scores would award
+				// points in whatever order `summary.rows` happened to be in,
+				// shifting Borda totals across re-renders.
+				ranked.sort((a, b) => b.v - a.v || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 				sortedByTask.set(taskName, ranked);
 			}
 		}

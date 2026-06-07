@@ -187,7 +187,7 @@
 		// elsewhere don't invalidate this derived. Reactivates on tab switch
 		// (the `active` prop change re-fires the derived).
 		if (!active) return rows;
-		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name));
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name), pinnedModels.size);
 	});
 
 	// Progressive row render — Firefox benefits a lot (cold first-paint
