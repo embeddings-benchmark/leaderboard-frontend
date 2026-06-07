@@ -48,6 +48,11 @@
 	// Short explanations for the per-task-type columns. Surfaced on
 	// column-header hover so users skimming the table know what each
 	// score is measuring without leaving the page.
+	// Keyed by the *real* task type as it appears on `tasksMeta[i].type`, not by
+	// the stripped form on `summary.taskTypes` — the backend's display label
+	// strips parens (and an `S` next to them) for column ids, so e.g.
+	// `VisualSTS(eng)` arrives in `summary.taskTypes` as `VisualSTeng`. The
+	// table reverses that via `realTaskType` below before looking up here.
 	const TASK_TYPE_INFO: Record<string, string> = {
 		Classification: 'Classify text into pre-defined labels (sentiment, topic, intent, …).',
 		Clustering:
@@ -63,7 +68,22 @@
 		BitextMining:
 			'Pair sentences across two languages that carry the same meaning (translation alignment).',
 		Summarization:
-			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.'
+			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.',
+		// Vision / image-modality task types — surfaced on MIEB / MVEB / Image*.
+		ImageClassification: 'Classify images into pre-defined labels.',
+		ImageClustering: 'Group similar images together without supervision.',
+		ZeroShotClassification:
+			'Classify images / text into labels without per-task supervision; scored on held-out labels.',
+		DocumentUnderstanding:
+			'Parse document layouts (text, tables, figures) and answer questions over them.',
+		MultilingualRetrieval: 'Find relevant documents in a multilingual corpus.',
+		VisionCentricQA: 'Answer questions that require visual understanding of an image.',
+		Compositionality:
+			'Test compositional understanding (objects, attributes, and relations) in vision-language models.',
+		'VisualSTS(eng)':
+			'Rate semantic similarity between English sentence pairs rendered as images.',
+		'VisualSTS(multi)':
+			'Rate semantic similarity between multilingual sentence pairs rendered as images.'
 	};
 </script>
 
@@ -248,6 +268,27 @@
 	// regardless of locale, etc.
 	// `summary.taskTypes` is pre-sorted at the service boundary.
 	let sortedTaskTypes = $derived(summary.taskTypes);
+
+	// `summary.taskTypes` carries the backend's stripped form (no parens,
+	// and a stray `S` next to them eaten too — e.g. `VisualSTS(eng)` ⇒
+	// `VisualSTeng`). `tasksMeta[i].type` keeps the real form. Build a
+	// reverse map so the column header can show the human label, and
+	// `TASK_TYPE_INFO` lookups hit even when the description key contains
+	// parens. Falls through to the stripped form when no task in the
+	// summary backs the column (shouldn't happen in practice).
+	let realTaskType = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<string, string>();
+		for (const t of summary.tasksMeta) {
+			if (!t.type) continue;
+			// Mirror the backend strip: drop parens, plus an `S` immediately
+			// adjacent to `(` or `)`. Captures the observed
+			// `VisualSTS(eng)` → `VisualSTeng` transform.
+			const stripped = t.type.replace(/S?\(|\)S?/g, '');
+			if (!m.has(stripped)) m.set(stripped, t.type);
+		}
+		return m;
+	});
 	let typeBests = $derived(
 		bestWorstPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
 	);
@@ -597,11 +638,13 @@
 					{#if showTaskTypes}
 						{#each sortedTaskTypes as tt (tt)}
 							{@const k = `tt:${tt}` as SortKey}
-							{@const desc = TASK_TYPE_INFO[tt]}
+							{@const real = realTaskType.get(tt) ?? tt}
+							{@const desc = TASK_TYPE_INFO[real] ?? TASK_TYPE_INFO[tt]}
+							{@const label = humanizeType(real)}
 							<th
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
-								data-tip-title={desc ? humanizeType(tt) : ''}
+								data-tip-title={desc ? label : ''}
 								data-tip={desc ?? ''}
 								onpointerenter={desc ? showTip : undefined}
 								onpointerleave={desc ? hideTip : undefined}
@@ -609,8 +652,8 @@
 								onfocusout={desc ? hideTip : undefined}
 							>
 								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
-									<span>{humanizeType(tt)}</span>
-									{#if desc}<InfoDot ariaLabel="What is {humanizeType(tt)}?" />{/if}
+									<span>{label}</span>
+									{#if desc}<InfoDot ariaLabel="What is {label}?" />{/if}
 									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
 								</button>
 							</th>

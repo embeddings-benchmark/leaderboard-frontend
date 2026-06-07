@@ -444,7 +444,7 @@
 						(filters.sentenceTransformersOnly = (e.currentTarget as HTMLInputElement).checked)}
 				/>
 				<span class="switch-track"><span class="switch-knob"></span></span>
-				<span class="switch-label">Sentence-Transformers compatible only</span>
+				<span class="switch-label">Sentence-Transformers compatible</span>
 			</label>
 		</div>
 
