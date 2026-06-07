@@ -28,6 +28,9 @@
 		description: string;
 		benchmarks: string[];
 		mainScore: string;
+		// Distinct models evaluated on this task — backend overlay from the
+		// unified results frame. `0` for tasks the cache hasn't filled in.
+		numModels: number;
 	}
 
 	// Curated order — matches the `.type-pill[data-stype=…]` palette below.
@@ -96,7 +99,8 @@
 						modalities,
 						description: m.description ?? '',
 						benchmarks: occurrences.get(m.name) ?? [],
-						mainScore: m.mainScore ?? ''
+						mainScore: m.mainScore ?? '',
+						numModels: m.numModels ?? 0
 					};
 					presentSet.add(simplifiedType);
 					for (const x of modalities) modSet.add(x);
@@ -127,6 +131,7 @@
 	});
 
 	const SORTS = [
+		{ id: 'models', label: 'Model count' },
 		{ id: 'name', label: 'Name' },
 		{ id: 'type', label: 'Type' },
 		{ id: 'benchmarks', label: 'Benchmark count' },
@@ -136,6 +141,7 @@
 	type SortId = (typeof SORTS)[number]['id'];
 	type SortDir = 'asc' | 'desc';
 	const NATURAL_DIR: Record<SortId, SortDir> = {
+		models: 'desc',
 		name: 'asc',
 		type: 'asc',
 		benchmarks: 'desc',
@@ -156,7 +162,7 @@
 	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
 	// page and back via the browser restores the user's sort choice.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
-	const DEFAULT_SORT: SortId = 'name';
+	const DEFAULT_SORT: SortId = 'models';
 	const _urlSort = getParam('s.tasks');
 	const _urlDir = getParam('d.tasks');
 	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
@@ -227,23 +233,11 @@
 	});
 
 	let languageQuery = $state('');
-	let languagesExpanded = $state(false);
-	const LANGUAGE_CAP = 40;
 	let filteredLanguages = $derived.by(() => {
 		const q = languageQuery.trim().toLowerCase();
 		if (!q) return LANGUAGES;
 		return LANGUAGES.filter((l) => l.toLowerCase().includes(q));
 	});
-	// Show only the first ``LANGUAGE_CAP`` matches by default — the full
-	// registry holds ~1100 entries and a 21k-px scroll port is unusable.
-	// `languagesExpanded` flips on "Show all" and stays on for the rest
-	// of the session; the search input narrows the list and bypasses the
-	// cap when matches fit comfortably.
-	let visibleLanguages = $derived(
-		languagesExpanded || filteredLanguages.length <= LANGUAGE_CAP
-			? filteredLanguages
-			: filteredLanguages.slice(0, LANGUAGE_CAP)
-	);
 
 	const SIMPLIFIED_RANK: Record<string, number> = Object.fromEntries(
 		SIMPLIFIED_TYPES.map((t, i) => [t, i])
@@ -289,6 +283,8 @@
 				cmp = a.benchmarks.length - b.benchmarks.length;
 			} else if (sort === 'languages') {
 				cmp = a.languages.length - b.languages.length;
+			} else if (sort === 'models') {
+				cmp = a.numModels - b.numModels;
 			} else if (sort === 'metric') {
 				cmp = COLLATOR.compare(a.mainScore, b.mainScore);
 			} else {
@@ -425,7 +421,7 @@
 						stats={[
 							{ label: 'Benchmarks', value: t.benchmarks.length },
 							{ label: 'Languages', value: t.languages.length },
-							{ label: 'Domains', value: t.domains.length },
+							{ label: 'Models', value: t.numModels },
 							{ label: 'Main metric', value: t.mainScore || '—', variant: 'metric' }
 						]}
 					/>
@@ -532,17 +528,8 @@
 						placeholder="Search languages…"
 						bind:value={languageQuery}
 					/>
-					<!-- Cap collapsed; on expand we drop the .scroll wrapper so the
-					     full list flows in the sidebar (and the page scroll handles
-					     overflow). Keeping the inner 320 px scrollport on expand
-					     was the bug — visually nothing changed at the top, so
-					     "Show all" looked like it added empty space below. -->
-					<div
-						class="pills"
-						class:scroll={!languagesExpanded}
-						class:scroll-thin={!languagesExpanded}
-					>
-						{#each visibleLanguages as l (l)}
+					<div class="pills scroll scroll-thin">
+						{#each filteredLanguages as l (l)}
 							<label class="pill type-fill">
 								<input
 									type="checkbox"
@@ -552,19 +539,10 @@
 								<span>{l}</span>
 							</label>
 						{/each}
-						{#if visibleLanguages.length === 0}
+						{#if filteredLanguages.length === 0}
 							<p class="muted no-match">No languages match.</p>
 						{/if}
 					</div>
-					{#if filteredLanguages.length > LANGUAGE_CAP}
-						<button
-							type="button"
-							class="link-btn show-more-btn"
-							onclick={() => (languagesExpanded = !languagesExpanded)}
-						>
-							{languagesExpanded ? 'Show fewer' : `Show all ${filteredLanguages.length}`}
-						</button>
-					{/if}
 				</div>
 			</div>
 		{/if}

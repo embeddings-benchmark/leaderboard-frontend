@@ -119,21 +119,12 @@
 		onToggleAllLanguages
 	}: Props = $props();
 
-	// Same cap-then-expand pattern the inline rail used: hide the long
-	// tail behind a "Show all N" until the user opts in.
 	let modelLangQuery = $state('');
-	let modelLangsExpanded = $state(false);
-	const MODEL_LANGUAGE_CAP = 40;
 	let filteredModelLangs = $derived.by(() => {
 		const all = languageOptions ?? [];
 		const q = modelLangQuery.trim().toLowerCase();
 		return q ? all.filter((l) => l.toLowerCase().includes(q)) : all;
 	});
-	let visibleModelLangs = $derived(
-		modelLangsExpanded || filteredModelLangs.length <= MODEL_LANGUAGE_CAP
-			? filteredModelLangs
-			: filteredModelLangs.slice(0, MODEL_LANGUAGE_CAP)
-	);
 	let allModelLangsOn = $derived(
 		!!languagesPicked && !!languageOptions && languagesPicked.size === languageOptions.length
 	);
@@ -538,8 +529,8 @@
 					placeholder="Search languages…"
 					bind:value={modelLangQuery}
 				/>
-				<div class="pills">
-					{#each visibleModelLangs as l (l)}
+				<div class="pills scroll-y scroll-thin">
+					{#each filteredModelLangs as l (l)}
 						<button
 							type="button"
 							class="pill"
@@ -550,16 +541,10 @@
 							<span>{l}</span>
 						</button>
 					{/each}
+					{#if filteredModelLangs.length === 0}
+						<p class="muted">No matches.</p>
+					{/if}
 				</div>
-				{#if filteredModelLangs.length > MODEL_LANGUAGE_CAP}
-					<button
-						type="button"
-						class="link-btn show-more-btn"
-						onclick={() => (modelLangsExpanded = !modelLangsExpanded)}
-					>
-						{modelLangsExpanded ? 'Show fewer' : `Show all ${filteredModelLangs.length}`}
-					</button>
-				{/if}
 			</div>
 		{/if}
 	{/snippet}
@@ -822,6 +807,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
+		/* Fill the sidebar so the inner `.flat-groups` can claim leftover
+		   vertical space and pass it to the last facet (Language). The
+		   sidebar shell sets `overflow: hidden`; this is where overflow
+		   is handled if total content exceeds the viewport. */
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
 	}
 
 	/* Active filter chips ----------------------------------------------------- */
@@ -834,6 +826,7 @@
 		background: var(--primary-soft);
 		border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 		border-radius: 10px;
+		flex-shrink: 0;
 	}
 	.chips {
 		display: flex;
@@ -894,6 +887,11 @@
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		overflow: hidden;
+		/* Stay at natural height inside `.filter-content`'s flex column —
+		   without this, flex would shrink the block and `overflow: hidden`
+		   above would silently clip the body instead of letting the
+		   container's own `overflow-y: auto` scroll. */
+		flex-shrink: 0;
 	}
 	.block-head {
 		display: flex;
@@ -952,6 +950,27 @@
 		flex-direction: column;
 		gap: 16px;
 		padding: 0 2px;
+		/* Fill `.filter-content` so the last group (Language) can absorb the
+		   leftover sidebar height — matches the /tasks + /benchmarks
+		   sidebar behaviour. */
+		flex: 1;
+		min-height: 0;
+	}
+	/* Same pattern as `.filters > .group:last-child` in sidebar.css: only
+	   the bottom-most facet grows; siblings stay at their natural height
+	   so removing flex:1 from the shared `.group` rule doesn't collapse
+	   them. `flex-basis: 0` so the calculation only sees leftover space,
+	   not the language list's natural content; `min-height: 280px` keeps
+	   the facet usable on short viewports and lets `.filter-content`
+	   scroll instead. */
+	.flat-groups > .group:last-child {
+		flex: 1 1 0;
+		min-height: 280px;
+	}
+	.flat-groups > .group:last-child .pills.scroll-y {
+		flex: 1;
+		min-height: 0;
+		max-height: none;
 	}
 
 	/* Groups ------------------------------------------------------------------ */

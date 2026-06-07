@@ -32,12 +32,15 @@
 		models: 'desc'
 	};
 	const SORT_IDS = SORTS.map((s) => s.id) as readonly SortId[];
+	// Default to "Model count" desc — popularity is the most useful first
+	// impression when browsing the benchmark catalogue.
+	const DEFAULT_SORT: SortId = 'models';
 	const initialSort = getParam('sort');
 	const initialDir = getParam('dir');
 	const seedSort: SortId =
 		initialSort && (SORT_IDS as readonly string[]).includes(initialSort)
 			? (initialSort as SortId)
-			: 'name';
+			: DEFAULT_SORT;
 	let sort = $state<SortId>(seedSort);
 	let sortDir = $state<SortDir>(
 		initialDir === 'asc' || initialDir === 'desc' ? initialDir : NATURAL_DIR[seedSort]
@@ -52,7 +55,7 @@
 	$effect(() => {
 		updateUrl({
 			q: query.trim() || null,
-			sort: sort === 'name' ? null : sort,
+			sort: sort === DEFAULT_SORT ? null : sort,
 			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir
 		});
 	});
@@ -73,8 +76,6 @@
 	);
 	let domainQuery = $state('');
 	let languageQuery = $state('');
-	let languagesExpanded = $state(false);
-	const LANGUAGE_CAP = 40;
 	let visibleDomains = $derived.by(() => {
 		const q = domainQuery.trim().toLowerCase();
 		return q ? DOMAINS.filter((d) => d.toLowerCase().includes(q)) : DOMAINS;
@@ -83,11 +84,6 @@
 		const q = languageQuery.trim().toLowerCase();
 		return q ? LANGUAGES.filter((l) => l.toLowerCase().includes(q)) : LANGUAGES;
 	});
-	let visibleLanguages = $derived(
-		languagesExpanded || filteredLanguages.length <= LANGUAGE_CAP
-			? filteredLanguages
-			: filteredLanguages.slice(0, LANGUAGE_CAP)
-	);
 
 	function toggleModality(m: string) {
 		if (modalityFilter.has(m)) modalityFilter.delete(m);
@@ -407,15 +403,8 @@
 						placeholder="Search languages…"
 						bind:value={languageQuery}
 					/>
-					<!-- Cap collapsed; on expand we drop the .scroll wrapper so
-					     the full language list flows in the sidebar and the
-					     page scroll handles overflow. Same pattern as /tasks. -->
-					<div
-						class="pills"
-						class:scroll={!languagesExpanded}
-						class:scroll-thin={!languagesExpanded}
-					>
-						{#each visibleLanguages as l (l)}
+					<div class="pills scroll scroll-thin">
+						{#each filteredLanguages as l (l)}
 							<label class="pill type-fill">
 								<input
 									type="checkbox"
@@ -425,19 +414,10 @@
 								<span>{l}</span>
 							</label>
 						{/each}
-						{#if visibleLanguages.length === 0}
+						{#if filteredLanguages.length === 0}
 							<p class="muted no-match">No languages match.</p>
 						{/if}
 					</div>
-					{#if filteredLanguages.length > LANGUAGE_CAP}
-						<button
-							type="button"
-							class="link-btn show-more-btn"
-							onclick={() => (languagesExpanded = !languagesExpanded)}
-						>
-							{languagesExpanded ? 'Show fewer' : `Show all ${filteredLanguages.length}`}
-						</button>
-					{/if}
 				</div>
 			</div>
 		{/if}

@@ -4,7 +4,11 @@
 
 /* In-flow flex column so the main content reflows when the drawer
    toggles. Content shrinks/grows instead of being covered, which
-   keeps wide tables from being clipped under the panel. */
+   keeps wide tables from being clipped under the panel.
+
+   Outer `overflow: hidden` + `display: flex` lets `.filters` claim the
+   full inner height so the last facet (Language) can `flex: 1` and
+   fill any empty space at the bottom of the sidebar. */
 .sidebar {
 	--header-offset: 64px;
 
@@ -17,7 +21,9 @@
 	height: calc(100vh - var(--header-offset));
 	position: sticky;
 	top: var(--header-offset);
-	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 	z-index: 5;
 	transition:
 		flex-basis 0.18s ease,
@@ -89,13 +95,22 @@
 	flex-direction: column;
 	gap: 18px;
 	padding: 14px 16px 24px;
+	/* Fill the sidebar so `.group:last-child { flex: 1 }` has somewhere to
+	   grow. `min-height: 0` lets the inner scrollport shrink past its
+	   intrinsic content when the sidebar is short. */
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
 }
 .group {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	min-width: 0;
-	flex: 1;
+	/* Natural-height by default so the leftover sidebar space lands on
+	   `.filters > .group:last-child` (Language) rather than being split
+	   evenly across every facet. */
+	flex: 0 0 auto;
 }
 .group-head {
 	display: flex;
@@ -144,15 +159,6 @@
 .link-btn:hover {
 	text-decoration: underline;
 }
-/* Expand button under a capped pill list (e.g. /tasks Language group's
-   "Show all 1037" affordance). Inline-block so it sits in flow under
-   the scrollport instead of stretching the sidebar to its width. */
-.show-more-btn {
-	display: inline-block;
-	margin-top: 6px;
-	padding: 2px 0;
-}
-
 .pills {
 	display: flex;
 	flex-wrap: wrap;
@@ -167,10 +173,25 @@
    inner-overflowed row into the sidebar's `scrollHeight`, leaving the
    user with a phantom ~350 px tall empty band below the last facet. */
 .pills.scroll {
-	max-height: 320px;
+	max-height: 380px;
 	overflow-y: auto;
 	padding-right: 4px;
 	contain: layout;
+}
+/* Last facet (Language) grows to fill whatever sidebar height the other
+   groups leave behind, scrolling internally when it can't. `flex-basis: 0`
+   makes the flex calculation ignore the natural content size, so the
+   container only grows when there's *leftover* space; `min-height: 280px`
+   keeps it usable on short viewports — at that point `.filters` itself
+   scrolls. */
+.filters > .group:last-child {
+	flex: 1 1 0;
+	min-height: 280px;
+}
+.filters > .group:last-child .pills.scroll {
+	flex: 1;
+	min-height: 0;
+	max-height: none;
 }
 .pill {
 	display: inline-flex;
