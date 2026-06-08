@@ -173,7 +173,6 @@ body:has(.sidebar:not(.collapsed)) {
 	max-height: 380px;
 	overflow-y: auto;
 	contain: layout;
-	scrollbar-gutter: stable;
 }
 /* Marker for the facet that absorbs leftover sidebar height (Language).
    `flex-basis: 0` so growth comes from leftover space, not the natural
