@@ -48,5 +48,9 @@ clean: ## Remove build artifacts, caches, and node_modules
 	rm -rf node_modules build .svelte-kit test-results playwright-report
 
 kill-ports: ## Kill anything bound to the dev (5173/5174) and preview (4173) ports
-	-@lsof -ti:5173,5174,4173 | xargs kill 2>/dev/null || true
+	@# `-sTCP:LISTEN` so we only target the actual server processes —
+	@# without it, lsof also returns PIDs of CLIENTS connected to those
+	@# ports (e.g. the browser tab holding vite's HMR websocket) and
+	@# `kill` would SIGTERM the browser too.
+	-@lsof -ti:5173,5174,4173 -sTCP:LISTEN | xargs kill 2>/dev/null || true
 	@echo "ports cleared"
