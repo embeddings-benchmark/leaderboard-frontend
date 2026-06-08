@@ -204,6 +204,32 @@ code {
 	color: var(--modality-tint-fg, var(--text-muted));
 }
 
+/* Accent-rail: inset rounded marker on the left edge, coloured by
+   `--card-accent`. Grows toward the edges on hover. Shared by the
+   benchmark / task / model cards, the PrimaryLeaderTile featured tiles,
+   and the /benchmark/[name] hero. Consumers must:
+   - set `position: relative` (or rely on it being already set),
+   - add the extra left padding (`18px` on cards, `30px` on the hero) that
+     clears the 4 px rail,
+   - set `--card-accent` via per-category attribute blocks. */
+.accent-rail::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 16px;
+	bottom: 16px;
+	width: 4px;
+	border-radius: 0 4px 4px 0;
+	background: var(--card-accent, var(--border-strong));
+	transition:
+		top 0.15s ease,
+		bottom 0.15s ease;
+}
+.accent-rail:hover::before {
+	top: 11px;
+	bottom: 11px;
+}
+
 /* Hero lead paragraph used by every top-level index hero (/, /tasks,
    /models, /benchmarks). Pages override font-size where they want a
    larger / smaller block. */

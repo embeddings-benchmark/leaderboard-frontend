@@ -36,7 +36,11 @@
 	}: Props = $props();
 </script>
 
-<a class="card" href={resolve('/tasks/[name]', { name: slug(name) })} data-stype={simplifiedType}>
+<a
+	class="card accent-rail"
+	href={resolve('/tasks/[name]', { name: slug(name) })}
+	data-stype={simplifiedType}
+>
 	<div class="card-head">
 		<span class="title" title={name}>{name}</span>
 	</div>
@@ -102,24 +106,6 @@
 		content-visibility: auto;
 		contain-intrinsic-size: 280px;
 	}
-	/* Inset rounded marker rail — grows toward the card edges on hover. */
-	.card::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 16px;
-		bottom: 16px;
-		width: 4px;
-		border-radius: 0 4px 4px 0;
-		background: var(--card-accent, var(--border-strong));
-		transition:
-			top 0.15s ease,
-			bottom 0.15s ease;
-	}
-	.card:hover::before {
-		top: 11px;
-		bottom: 11px;
-	}
 	.card:hover {
 		transform: translateY(-1px);
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
@@ -132,17 +118,8 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Per-stype accent — mapping documented in CLAUDE.md. */
+	/* Per-stype accent — mirrors the `.group-chip` colour map (CLAUDE.md).
+	   All chip-coloured stypes set an accent so the rail matches the chip. */
 	.card[data-stype='retrieval'] {
 		--card-accent: var(--tint-purple-fg);
 	}

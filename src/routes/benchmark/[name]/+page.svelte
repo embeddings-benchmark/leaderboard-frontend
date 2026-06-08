@@ -292,7 +292,7 @@
 				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else}
-			<section class="hero card" data-modality={accentModality}>
+			<section class="hero card accent-rail" data-modality={accentModality}>
 				<div class="hero-left">
 					<div class="title-block">
 						{#if benchmark.icon}
@@ -475,16 +475,9 @@
 		position: relative;
 		overflow: hidden;
 	}
-	/* Left-edge accent strip; canonical modality→tint mapping in app.css. */
-	.hero[data-modality]::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--card-accent, var(--border));
-	}
+	/* Modality → tint pairs are the canonical mapping (text → teal,
+	   image → blue, audio → amber, video → purple); the rail itself comes
+	   from the shared `.accent-rail` utility in src/app.css. */
 	.hero[data-modality='text'] {
 		--card-accent: var(--tint-teal-fg);
 	}

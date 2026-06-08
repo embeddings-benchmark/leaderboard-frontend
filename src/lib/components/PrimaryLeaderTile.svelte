@@ -35,7 +35,7 @@
 </script>
 
 <a
-	class="prim"
+	class="prim accent-rail"
 	data-key={tintKey}
 	href={resolve('/benchmark/[name]', { name: slug(benchmark.name) })}
 	aria-label={`Open ${benchmark.displayName} leaderboard`}
@@ -99,6 +99,9 @@
 	.prim {
 		--tint: var(--tint-blue);
 		--tint-fg: var(--tint-blue-fg);
+		/* Map to `--card-accent` so the shared `.accent-rail::before`
+		   (src/app.css) reads this tile's per-key tint. */
+		--card-accent: var(--tint-fg);
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
@@ -115,16 +118,6 @@
 			transform 0.14s,
 			border-color 0.14s,
 			box-shadow 0.14s;
-	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.prim::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--tint-fg);
 	}
 	.prim:hover {
 		transform: translateY(-1px);

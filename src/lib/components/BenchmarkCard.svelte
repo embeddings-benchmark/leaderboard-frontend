@@ -20,7 +20,7 @@
 </script>
 
 <a
-	class="card"
+	class="card accent-rail"
 	href={resolve('/benchmark/[name]', { name: slug(b.name) })}
 	data-modality={accentModality}
 >
@@ -135,16 +135,6 @@
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
-	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--card-accent, var(--border));
 	}
 	.card[data-modality='text'] {
 		--card-accent: var(--tint-teal-fg);

@@ -295,7 +295,7 @@
 			<div class="grid">
 				{#each visibleModels as m (m.name)}
 					<a
-						class="card"
+						class="card accent-rail"
 						href={resolve('/models/[...name]', { name: modelPath(m.name) })}
 						data-type={m.modelType}
 						title={m.modelType}
@@ -428,24 +428,6 @@
 		content-visibility: auto;
 		contain-intrinsic-size: 220px;
 	}
-	/* Inset rounded marker rail — grows toward the card edges on hover. */
-	.card::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 16px;
-		bottom: 16px;
-		width: 4px;
-		border-radius: 0 4px 4px 0;
-		background: var(--card-accent, var(--border-strong));
-		transition:
-			top 0.15s ease,
-			bottom 0.15s ease;
-	}
-	.card:hover::before {
-		top: 11px;
-		bottom: 11px;
-	}
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
@@ -455,17 +437,9 @@
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
 		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Per-type accent — mapping documented in CLAUDE.md. */
+	/* Per-type accent — mapping documented in CLAUDE.md. The shared
+	   `.accent-rail` in src/app.css reads `--card-accent`; the type chip
+	   reads `--card-tint` / `--card-accent`. */
 	.card[data-type='dense'] {
 		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
