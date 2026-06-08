@@ -724,7 +724,9 @@
 								{r.model.displayName}
 							</a>
 							<div class="model-meta">
-								<span class="chip type" data-type={r.model.modelType}>{fmtType(r.model.modelType)}</span>
+								<span class="chip type" data-type={r.model.modelType}
+									>{fmtType(r.model.modelType)}</span
+								>
 								{#if r.model.openWeights}
 									<span class="chip open">Open</span>
 								{:else}
