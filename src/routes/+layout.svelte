@@ -2,6 +2,7 @@
 	import '../app.css';
 	import '$lib/styles/leaderboard-table.css';
 	import '$lib/styles/sidebar.css';
+	import '$lib/styles/detail-page.css';
 	import { onMount } from 'svelte';
 	import { afterNavigate, beforeNavigate } from '$app/navigation';
 	import { page, updated } from '$app/state';

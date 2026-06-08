@@ -18,7 +18,7 @@
 
 <button
 	type="button"
-	class="top-btn"
+	class="top-btn floating-pill"
 	class:visible
 	aria-label="Back to top"
 	title="Back to top"
@@ -46,25 +46,9 @@
 <style>
 	.top-btn {
 		position: fixed;
-		left: 22px;
-		bottom: 22px;
+		left: max(22px, env(safe-area-inset-left));
+		bottom: max(22px, env(safe-area-inset-bottom));
 		z-index: 60;
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		height: 38px;
-		padding: 0 14px;
-		font-size: 13px;
-		font-weight: 600;
-		font-family: inherit;
-		color: var(--primary-strong);
-		background: var(--surface);
-		border: 1.5px solid var(--primary);
-		border-radius: 999px;
-		box-shadow:
-			0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
-			0 6px 18px rgb(var(--shadow-tint) / 0.12);
-		cursor: pointer;
 		opacity: 0;
 		pointer-events: none;
 		transform: translateY(6px);
@@ -82,22 +66,7 @@
 		transform: translateY(0);
 	}
 	.top-btn:hover {
-		background: color-mix(in srgb, var(--primary) 12%, var(--surface));
-		border-color: var(--primary-strong);
-		box-shadow:
-			0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent),
-			0 10px 22px rgb(var(--shadow-tint) / 0.16);
 		transform: translateY(-1px);
-	}
-	.top-btn:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 2px;
-	}
-	@supports (padding: env(safe-area-inset-bottom)) {
-		.top-btn {
-			bottom: max(22px, env(safe-area-inset-bottom));
-			left: max(22px, env(safe-area-inset-left));
-		}
 	}
 	@media (max-width: 480px) {
 		.top-btn span {

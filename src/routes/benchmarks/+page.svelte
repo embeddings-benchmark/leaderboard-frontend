@@ -3,6 +3,8 @@
 	import { loadBenchmarks } from '$lib/data/service';
 	import type { Benchmark } from '$lib/types';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
+	import FilterFacet from '$lib/components/FilterFacet.svelte';
+	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
@@ -71,9 +73,6 @@
 	const simplifiedTypeFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 	const languageFilter = new SvelteSet<string>();
-	let sidebarCollapsed = $state(
-		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
-	);
 	let domainQuery = $state('');
 	let languageQuery = $state('');
 	let visibleDomains = $derived.by(() => {
@@ -217,8 +216,8 @@
 	description={`Every benchmark registered in MTEB — ${allBenchmarks.length || '100+'} suites spanning multilingual, multimodal, retrieval, classification, clustering, semantic similarity, and domain-specific evaluations.`}
 />
 
-<div class="app">
-	<main class="main">
+<div class="layout-sidebar">
+	<main class="layout-main main">
 		<header class="hero">
 			<h1>All benchmarks</h1>
 			<p class="lead">
@@ -281,7 +280,7 @@
 					<h2>Benchmarks</h2>
 					<span class="count">{filteredAll.length}</span>
 				</header>
-				<div class="grid">
+				<div class="grid card-grid">
 					{#each filteredAll as b (b.name)}
 						<BenchmarkCard {b} />
 					{/each}
@@ -290,156 +289,70 @@
 		{/if}
 	</main>
 
-	<aside class="sidebar" class:collapsed={sidebarCollapsed} aria-label="Filters">
-		<button
-			type="button"
-			class="sidebar-toggle"
-			onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
-			aria-expanded={!sidebarCollapsed}
-			title={sidebarCollapsed ? 'Expand filters' : 'Collapse filters'}
+	<FilterSidebar>
+		<!-- `type-fill` paints checked chips in the shared primary tint
+		     across every facet on this page, instead of the per-stype
+		     colour /tasks uses for its Task group. -->
+		<FilterFacet
+			label="Task group"
+			items={SIMPLIFIED_TYPES_PRESENT}
+			picked={simplifiedTypeFilter}
+			onToggle={toggleSimplifiedType}
+			onToggleAll={toggleAllSimplifiedTypes}
+			allSelected={allSimplifiedTypes}
+			pillClass="type-fill"
+		/>
+		<FilterFacet
+			label="Modality"
+			items={MODALITIES}
+			picked={modalityFilter}
+			onToggle={toggleModality}
+			onToggleAll={toggleAllModalities}
+			allSelected={allModalities}
+			pillClass="modality-fill"
+			pillAttrs={(m) => ({ 'data-modality': m })}
 		>
-			<span class="chev" class:open={!sidebarCollapsed}>‹</span>
-			{#if !sidebarCollapsed}
-				<span class="toggle-label">Filters</span>
-			{/if}
-		</button>
-
-		{#if !sidebarCollapsed}
-			<div class="filters">
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Task group</span>
-						<button type="button" class="link-btn" onclick={toggleAllSimplifiedTypes}>
-							{allSimplifiedTypes ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<!-- `type-fill` paints checked chips in the shared primary
-					     tint (instead of the per-stype colour the /tasks page
-					     uses). On /benchmarks the Task group sits next to the
-					     other primary-tinted facets (Modality / Task type /
-					     Domain), so matching their treatment keeps the sidebar
-					     visually consistent. -->
-					<div class="pills">
-						{#each SIMPLIFIED_TYPES_PRESENT as t (t)}
-							<label class="pill type-fill">
-								<input
-									type="checkbox"
-									checked={simplifiedTypeFilter.has(t)}
-									onchange={() => toggleSimplifiedType(t)}
-								/>
-								<span>{t}</span>
-							</label>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Modality</span>
-						<button type="button" class="link-btn" onclick={toggleAllModalities}>
-							{allModalities ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each MODALITIES as m (m)}
-							<label class="pill modality-fill" data-modality={m}>
-								<input
-									type="checkbox"
-									checked={modalityFilter.has(m)}
-									onchange={() => toggleModality(m)}
-								/>
-								<ModalityIcon modality={m} size={12} />
-								<span>{m}</span>
-							</label>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Domain</span>
-						<button type="button" class="link-btn" onclick={toggleAllDomains}>
-							{allDomains ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="type-search"
-						placeholder="Search domains…"
-						bind:value={domainQuery}
-					/>
-					<div class="pills scroll scroll-thin">
-						{#each visibleDomains as d (d)}
-							<label class="pill type-fill">
-								<input
-									type="checkbox"
-									checked={domainFilter.has(d)}
-									onchange={() => toggleDomain(d)}
-								/>
-								<span>{d}</span>
-							</label>
-						{/each}
-						{#if visibleDomains.length === 0}
-							<p class="muted no-match">No domains match.</p>
-						{/if}
-					</div>
-				</div>
-
-				<div class="group grow">
-					<div class="group-head">
-						<span class="group-label">Language</span>
-						<button type="button" class="link-btn" onclick={toggleAllLanguages}>
-							{allLanguages ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="type-search"
-						placeholder="Search languages…"
-						bind:value={languageQuery}
-					/>
-					<div class="pills scroll scroll-thin">
-						{#each filteredLanguages as l (l)}
-							<label class="pill type-fill">
-								<input
-									type="checkbox"
-									checked={languageFilter.has(l)}
-									onchange={() => toggleLanguage(l)}
-								/>
-								<span>{l}</span>
-							</label>
-						{/each}
-						{#if filteredLanguages.length === 0}
-							<p class="muted no-match">No languages match.</p>
-						{/if}
-					</div>
-				</div>
-			</div>
-		{/if}
-	</aside>
+			{#snippet pillIcon(m)}<ModalityIcon modality={m} size={12} />{/snippet}
+		</FilterFacet>
+		<FilterFacet
+			label="Domain"
+			items={visibleDomains}
+			picked={domainFilter}
+			onToggle={toggleDomain}
+			onToggleAll={toggleAllDomains}
+			allSelected={allDomains}
+			pillClass="type-fill"
+			searchPlaceholder="Search domains…"
+			bind:searchValue={domainQuery}
+			scrollable
+			emptyMessage="No domains match."
+		/>
+		<FilterFacet
+			label="Language"
+			items={filteredLanguages}
+			picked={languageFilter}
+			onToggle={toggleLanguage}
+			onToggleAll={toggleAllLanguages}
+			allSelected={allLanguages}
+			pillClass="type-fill"
+			searchPlaceholder="Search languages…"
+			bind:searchValue={languageQuery}
+			scrollable
+			grow
+			emptyMessage="No languages match."
+		/>
+	</FilterSidebar>
 </div>
 
 <ScrollToTopButton />
 <ShareUrlButton />
 
 <style>
-	/* Two-column layout — mirrors /tasks and /models. `.app` is the
-	   page-level flex container so the sidebar can span the full viewport
-	   height; `.main` carries the 1280 px max-width + the page padding
-	   that used to live on `.page`. */
-	.app {
-		display: flex;
-		min-height: 100vh;
-	}
+	/* Tighter top padding than the shared `.layout-main` default so the
+	   catalogue hero sits closer to the top bar. */
 	.main {
-		flex: 1;
-		min-width: 0;
-		max-width: 1280px;
-		margin: 0 auto;
 		padding: 18px 28px 64px;
 	}
-	/* `.breadcrumb`, `.breadcrumb a`, `.breadcrumb .sep`,
-	   `.breadcrumb .current` live in src/app.css. */
 	.hero {
 		padding: 28px 0 18px;
 		position: relative;
@@ -462,13 +375,11 @@
 		background: var(--primary);
 		border-radius: 2px;
 	}
-	/* Base `.lead` (color + margin) lives in src/app.css. */
 	.lead {
 		font-size: 15px;
 		line-height: 1.55;
 	}
 
-	/* `.toolbar` (sticky shell + mobile rules) is shared in src/app.css. */
 	.count {
 		font-size: 12px;
 		color: var(--text-subtle);
@@ -491,12 +402,11 @@
 		font-weight: 700;
 		margin: 0;
 	}
+	/* Slightly wider gap than `.card-grid`'s 12 px so the per-section
+	   blocks breathe. */
 	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 14px;
 	}
-	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
 		padding: 20px 0;
 	}

@@ -11,16 +11,8 @@
 	const placeholders = $derived(Array.from({ length: count }, (_, i) => i));
 </script>
 
-<div class="grid" aria-busy="true" aria-label="Loading">
+<div class="card-grid" aria-busy="true" aria-label="Loading">
 	{#each placeholders as i (i)}
 		<SkeletonCard />
 	{/each}
 </div>
-
-<style>
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 12px;
-	}
-</style>

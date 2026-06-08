@@ -37,7 +37,7 @@
 </script>
 
 <a
-	class="card accent-rail"
+	class="card card-link card-link-vis accent-rail"
 	href={resolve('/tasks/[name]', { name: slug(name) })}
 	data-stype={simplifiedType}
 >
@@ -48,7 +48,7 @@
 		<p class="desc"><MarkdownText text={description} /></p>
 	{/if}
 	{#if stats.length > 0}
-		<dl class="stats">
+		<dl class="card-stats">
 			{#each stats as s (s.label)}
 				<div>
 					<dt>{s.label}</dt>
@@ -67,6 +67,7 @@
 			{/each}
 		</div>
 	{/if}
+
 	<div class="card-foot">
 		<!-- Chip surfaces the task group (simplified type, e.g. "retrieval",
 		     "classification"), not the raw `type` (e.g. "BitextMining"). The
@@ -79,56 +80,10 @@
 
 <style>
 	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		padding: 14px 16px 14px 18px;
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		position: relative;
-		overflow: hidden;
-		text-decoration: none;
-		color: inherit;
-		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease,
-			box-shadow 0.12s ease;
-		/* `content-visibility: auto` skips render/paint for off-screen cards
-		   (1700+ entries on the full registry). It implicitly applies
-		   `contain: size layout paint style`, so an explicit `contain:` here
-		   would *replace* (not augment) that set — dropping size containment
-		   and breaking `contain-intrinsic-size`. */
-		content-visibility: auto;
-		contain-intrinsic-size: 280px;
+		--card-intrinsic: 280px;
 	}
-	.card:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
-		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
-	}
-	.card:hover .title {
-		color: var(--card-accent, var(--primary-strong));
-	}
-	.card:focus-visible {
-		outline: 2px solid var(--card-accent, var(--primary));
-		outline-offset: 2px;
-	}
-	/* Per-stype accent — mirrors `.group-chip` (CLAUDE.md). */
-	.card[data-stype='retrieval'] {
-		--card-accent: var(--tint-purple-fg);
-	}
-	.card[data-stype='classification'] {
-		--card-accent: var(--tint-blue-fg);
-	}
-	.card[data-stype='pair-classification'] {
-		--card-accent: var(--tint-green-fg);
-	}
-	.card[data-stype='clustering'] {
-		--card-accent: var(--tint-orange-fg);
-	}
-	.card[data-stype='semantic-similarity'] {
-		--card-accent: var(--tint-pink-fg);
+	.card[data-stype] {
+		--card-accent: var(--category-tint-fg);
 	}
 	.card-head {
 		display: flex;
@@ -166,31 +121,7 @@
 			-webkit-box-orient: vertical;
 		}
 	}
-	.stats {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 8px 14px;
-		margin: 0;
-	}
-	.stats > div {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.stats dt {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.stats dd {
-		margin: 0;
-		font-size: 14px;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-	}
-	.stats dd.metric {
+	.card-stats dd.metric {
 		font-family: var(--font-mono);
 		font-size: 11px;
 		font-weight: 600;
@@ -211,6 +142,12 @@
 		padding-top: 8px;
 		border-top: 1px solid var(--border);
 	}
+	/* Chip surfaces the task group (e.g. "retrieval"). Base shell stays
+	   neutral; the `data-stype` attribute on each chip pulls the per-
+	   group tint pair from the global `[data-stype]` map in app.css
+	   (`--category-tint` / `--category-tint-fg`). When a category is set the
+	   border tints from currentColor; the no-stype fallback keeps the
+	   neutral border so empty / unknown groups read as plain. */
 	.group-chip {
 		display: inline-block;
 		padding: 3px 9px;
@@ -219,52 +156,11 @@
 		letter-spacing: 0.03em;
 		text-transform: uppercase;
 		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text-muted);
+		background: var(--category-tint, var(--surface-muted));
+		color: var(--category-tint-fg, var(--text-muted));
 		border: 1px solid var(--border);
 	}
-	/* Per-task-group tints, mirroring the parent card's `data-stype`
-	   accent. Mapping documented in CLAUDE.md (retrieval → purple,
-	   classification → blue, pair-classification → green,
-	   clustering → orange, semantic-similarity → pink, etc.). */
-	.group-chip[data-stype='classification'] {
-		background: var(--tint-blue);
-		color: var(--tint-blue-fg);
-		border-color: color-mix(in srgb, var(--tint-blue-fg) 35%, transparent);
-	}
-	.group-chip[data-stype='clustering'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
-	}
-	.group-chip[data-stype='pair-classification'] {
-		background: var(--tint-green);
-		color: var(--tint-green-fg);
-		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, transparent);
-	}
-	.group-chip[data-stype='reranking'] {
-		background: var(--tint-amber);
-		color: var(--tint-amber-fg);
-		border-color: color-mix(in srgb, var(--tint-amber-fg) 35%, transparent);
-	}
-	.group-chip[data-stype='retrieval'] {
-		background: var(--tint-purple);
-		color: var(--tint-purple-fg);
-		border-color: color-mix(in srgb, var(--tint-purple-fg) 35%, transparent);
-	}
-	.group-chip[data-stype='semantic-similarity'] {
-		background: var(--tint-pink);
-		color: var(--tint-pink-fg);
-		border-color: color-mix(in srgb, var(--tint-pink-fg) 35%, transparent);
-	}
-	.group-chip[data-stype='bitext-mining'] {
-		background: var(--tint-azure);
-		color: var(--tint-azure-fg);
-		border-color: color-mix(in srgb, var(--tint-azure-fg) 35%, transparent);
-	}
-	.group-chip[data-stype='instruction-reranking'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
+	.group-chip[data-stype]:not([data-stype='']) {
+		border-color: color-mix(in srgb, currentColor 35%, transparent);
 	}
 </style>

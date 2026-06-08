@@ -131,7 +131,7 @@
 	{#if loading}
 		<section class="primary" aria-busy="true" aria-label="Loading featured leaderboards">
 			<div class="section-head">
-				<span class="eyebrow">Featured</span>
+				<span class="eyebrow-chip">Featured</span>
 			</div>
 			<div class="primary-grid">
 				{#each [0, 1, 2] as i (i)}
@@ -154,7 +154,7 @@
 	{:else}
 		<section class="primary" aria-label="Featured leaderboards">
 			<div class="section-head">
-				<span class="eyebrow">Featured</span>
+				<span class="eyebrow-chip">Featured</span>
 			</div>
 			<div class="primary-grid">
 				{#each primaries as p (p.key)}
@@ -208,7 +208,7 @@
 		margin-bottom: 12px;
 		flex-wrap: wrap;
 	}
-	.eyebrow {
+	.eyebrow-chip {
 		font-size: 11px;
 		font-weight: 800;
 		letter-spacing: 0.08em;

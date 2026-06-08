@@ -6,6 +6,7 @@
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { languageLabel } from '$lib/data/languages';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
+	import InfoDot from '$lib/components/InfoDot.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
@@ -231,20 +232,20 @@
 	{#if !task && !metaError}
 		<p class="muted">Loading task…</p>
 	{:else if !task}
-		<section class="empty card">
+		<section class="empty panel">
 			<h1>Unknown task</h1>
 			<p>{metaError ?? `No task named “${taskName}” found.`}</p>
 			<a class="back" href={resolve('/tasks')}>← All tasks</a>
 		</section>
 	{:else}
-		<section class="hero card" data-stype={task.meta.simplifiedType}>
+		<section class="hero panel hero-grid" data-stype={task.meta.simplifiedType}>
 			<div class="hero-left">
 				<div class="kicker">
 					<!-- Hero badge mirrors the task-group chip on the index card:
 					     simplified type name (e.g. "retrieval") with the matching
 					     per-group tint. The raw `type` value lives in the
 					     spec-list row below. -->
-					<span class="type-badge" data-stype={task.meta.simplifiedType}>
+					<span class="category-badge" data-stype={task.meta.simplifiedType}>
 						{task.meta.simplifiedType || task.meta.type}
 					</span>
 					{#each sortModalities(task.meta.modalities) as m (m)}
@@ -258,22 +259,22 @@
 				<p class="desc"><MarkdownText text={task.meta.description} /></p>
 				{#if task.meta.domains.length > 0}
 					<div class="domains">
-						<span class="dim">Domains:</span>
+						<span class="eyebrow dim">Domains:</span>
 						{#each task.meta.domains as d (d)}
-							<span class="dom-chip">{d}</span>
+							<span class="chip-neutral">{d}</span>
 						{/each}
 					</div>
 				{/if}
 				{#if task.meta.languages.length > 0}
 					<div class="langs">
-						<span class="dim">Languages:</span>
+						<span class="eyebrow dim">Languages:</span>
 						{#each task.meta.languages as l (l)}
-							<span class="lang-chip" title={l}>{languageLabel(l)}</span>
+							<span class="chip-neutral" title={l}>{languageLabel(l)}</span>
 						{/each}
 					</div>
 				{/if}
 				<div class="bench-links">
-					<span class="dim">In benchmark{multipleBenchmarks ? 's' : ''}:</span>
+					<span class="eyebrow dim">In benchmark{multipleBenchmarks ? 's' : ''}:</span>
 					{#each benchmarks as b (b.name)}
 						<a class="bench-chip" href={resolve('/benchmark/[name]', { name: slug(b.name) })}
 							>{b.display}</a
@@ -340,16 +341,15 @@
 						<div class="row">
 							<dt>
 								Annotations
-								<button
-									type="button"
-									class="info-dot"
-									aria-label="What does this mean?"
-									data-tip-key="annotations"
-									onpointerenter={showInfoTip}
-									onpointerleave={hideInfoTip}
-									onfocusin={showInfoTip}
-									onfocusout={hideInfoTip}>?</button
-								>
+								<InfoDot
+									as="button"
+									ariaLabel="What does this mean?"
+									tipKey="annotations"
+									onPointerEnter={showInfoTip}
+									onPointerLeave={hideInfoTip}
+									onFocusIn={showInfoTip}
+									onFocusOut={hideInfoTip}
+								/>
 							</dt>
 							<dd>{task.meta.annotationsCreators}</dd>
 						</div>
@@ -370,16 +370,15 @@
 						<div class="row">
 							<dt>
 								Sample creation
-								<button
-									type="button"
-									class="info-dot"
-									aria-label="What does this mean?"
-									data-tip-key="sample-creation"
-									onpointerenter={showInfoTip}
-									onpointerleave={hideInfoTip}
-									onfocusin={showInfoTip}
-									onfocusout={hideInfoTip}>?</button
-								>
+								<InfoDot
+									as="button"
+									ariaLabel="What does this mean?"
+									tipKey="sample-creation"
+									onPointerEnter={showInfoTip}
+									onPointerLeave={hideInfoTip}
+									onFocusIn={showInfoTip}
+									onFocusOut={hideInfoTip}
+								/>
 							</dt>
 							<dd>{task.meta.sampleCreation}</dd>
 						</div>
@@ -407,7 +406,7 @@
 			     view. Only shown for public datasets — RTEB private
 			     hold-outs and similar are skipped so we don't surface a
 			     404'ing iframe. -->
-			<details class="dataset-preview">
+			<details class="dataset-preview details-flat">
 				<summary>
 					<span class="preview-title">Dataset preview</span>
 					<span class="preview-source">{task.meta.sourceDataset}</span>
@@ -459,7 +458,7 @@
 
 {#if infoTip.visible && infoTip.tip}
 	<div
-		class="info-tip"
+		class="info-tip tip-portal tip-portal-interactive"
 		role="tooltip"
 		style:left="{infoTip.x}px"
 		style:top="{infoTip.y}px"
@@ -480,27 +479,8 @@
 <ShareUrlButton />
 
 <style>
-	/* `.page` (1280 px centred, 18/28/56 padding) and `.breadcrumb`
-	   family live in src/app.css. */
-
-	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: 0 1px 3px rgb(var(--shadow-tint) / 0.04);
-	}
-
-	/* Hero ----------------------------------------------------------------- */
-	.hero {
-		display: grid;
-		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-		gap: 28px;
-		padding: 26px 28px 26px 32px;
-		margin-bottom: 18px;
-		position: relative;
-		overflow: hidden;
-	}
-	/* Left-edge accent strip — mapping mirrors the group-chip palette. */
+	/* Left-edge accent strip — `data-stype` resolves
+	   `--category-tint-fg` via the global mapping in app.css. */
 	.hero::before {
 		content: '';
 		position: absolute;
@@ -508,123 +488,9 @@
 		bottom: 0;
 		left: 0;
 		width: 3px;
-		background: var(--accent, var(--border));
-	}
-	.hero[data-stype='classification'] {
-		--accent: var(--tint-blue-fg);
-	}
-	.hero[data-stype='clustering'] {
-		--accent: var(--tint-orange-fg);
-	}
-	.hero[data-stype='pair-classification'] {
-		--accent: var(--tint-green-fg);
-	}
-	.hero[data-stype='reranking'] {
-		--accent: var(--tint-amber-fg);
-	}
-	.hero[data-stype='retrieval'] {
-		--accent: var(--tint-purple-fg);
-	}
-	.hero[data-stype='semantic-similarity'] {
-		--accent: var(--tint-pink-fg);
-	}
-	.hero[data-stype='bitext-mining'] {
-		--accent: var(--tint-azure-fg);
-	}
-	.hero[data-stype='instruction-reranking'] {
-		--accent: var(--tint-orange-fg);
-	}
-	.hero[data-stype='summarization'] {
-		--accent: var(--tint-teal-fg);
-	}
-	@media (max-width: 640px) {
-		.hero {
-			padding: 18px 16px;
-			gap: 16px;
-			margin-bottom: 12px;
-		}
-		.kpis {
-			gap: 8px;
-		}
-		.kpi {
-			padding: 8px 10px;
-		}
-		.kpi-value {
-			font-size: 17px;
-		}
-		.spec-list {
-			grid-template-columns: 110px minmax(0, 1fr);
-			column-gap: 12px;
-			row-gap: 8px;
-		}
-		.spec-list .chip {
-			overflow-wrap: anywhere;
-		}
-		.spec-list dd {
-			overflow-wrap: anywhere;
-		}
-	}
-	@media (max-width: 1000px) {
-		.hero {
-			grid-template-columns: minmax(0, 1fr);
-		}
+		background: var(--category-tint-fg, var(--border));
 	}
 
-	.kicker {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		margin-bottom: 12px;
-	}
-	.type-badge {
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		font-weight: 700;
-		padding: 4px 10px;
-		border-radius: 999px;
-		/* `currentColor` is the per-stype foreground tint set below, so
-		   one rule covers every variant — no need to repeat per-stype. */
-		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-	}
-	/* Per-task-group tints, matching the TaskCard `.group-chip` mapping
-	   and the parent card's `data-stype` accent. */
-	.type-badge[data-stype='classification'] {
-		background: var(--tint-blue);
-		color: var(--tint-blue-fg);
-	}
-	.type-badge[data-stype='clustering'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-	}
-	.type-badge[data-stype='pair-classification'] {
-		background: var(--tint-green);
-		color: var(--tint-green-fg);
-	}
-	.type-badge[data-stype='reranking'] {
-		background: var(--tint-amber);
-		color: var(--tint-amber-fg);
-	}
-	.type-badge[data-stype='retrieval'] {
-		background: var(--tint-purple);
-		color: var(--tint-purple-fg);
-	}
-	.type-badge[data-stype='semantic-similarity'] {
-		background: var(--tint-pink);
-		color: var(--tint-pink-fg);
-	}
-	.type-badge[data-stype='bitext-mining'] {
-		background: var(--tint-azure);
-		color: var(--tint-azure-fg);
-	}
-	.type-badge[data-stype='instruction-reranking'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-	}
-	.type-badge[data-stype='summarization'] {
-		background: var(--tint-teal);
-		color: var(--tint-teal-fg);
-	}
 	.hero h1 {
 		font-size: 26px;
 		font-weight: 800;
@@ -639,11 +505,6 @@
 		line-height: 1.5;
 	}
 	.dim {
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		font-weight: 600;
-		color: var(--text-subtle);
 		margin-right: 4px;
 	}
 	.domains,
@@ -658,17 +519,6 @@
 	.hero-left :global(.cite) {
 		margin-top: 10px;
 	}
-	.dom-chip,
-	.lang-chip {
-		display: inline-block;
-		padding: 2px 8px;
-		font-size: 11px;
-		font-weight: 500;
-		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text);
-		border: 1px solid var(--border);
-	}
 	.bench-chip {
 		display: inline-block;
 		padding: 3px 10px;
@@ -676,121 +526,27 @@
 		font-weight: 600;
 		border-radius: 999px;
 		background: var(--surface);
-		color: var(--accent, var(--primary-strong));
+		color: var(--category-tint-fg, var(--primary-strong));
 		border: 1px solid var(--border);
 		text-decoration: none;
 	}
 	.bench-chip:hover {
-		border-color: var(--accent, var(--primary));
+		border-color: var(--category-tint-fg, var(--primary));
 	}
 
-	.kpis {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 10px;
-		align-content: start;
-	}
-	.kpi {
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		padding: 10px 12px;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.kpi-label {
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.kpi-value {
-		font-size: 20px;
-		font-weight: 700;
-		color: var(--text);
-		font-variant-numeric: tabular-nums;
-	}
-
-	/* Dataset spec — definition list rendered inline in the hero card. */
-	.spec-list {
-		display: grid;
-		grid-template-columns: 160px minmax(0, 1fr);
-		row-gap: 6px;
-		column-gap: 14px;
-		margin: 12px 0 0;
-	}
-	.spec-list .row {
-		display: contents;
-	}
+	/* `<dt>` wraps a label + inline (?) info-dot, so align them on a
+	   baseline. */
 	.spec-list dt {
-		font-size: 12px;
-		font-weight: 500;
-		color: var(--text-subtle);
-		letter-spacing: 0.02em;
-		padding-top: 3px;
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-	}
-	.spec-list dd {
-		font-size: 13px;
-		color: var(--text);
-		margin: 0;
-		min-width: 0;
-		word-break: break-word;
-	}
-	.spec-list dd a {
-		color: var(--link);
-	}
-	.spec-list .muted-dd {
-		color: var(--text-subtle);
 	}
 	.spec-list .ds-link {
 		font-family: var(--font-mono);
 		font-size: 12.5px;
 	}
-	.spec-list .chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.spec-list .chip {
-		font-family: var(--font-mono);
-		font-size: 11.5px;
-		padding: 2px 8px;
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		color: var(--text);
-	}
-	/* Tiny inline (?) hint button. Hover surfaces the explanation in
-	   the fixed-positioned `.info-tip` portal below — same pattern as
-	   SummaryTable's column tips, so the bubble appears instantly
-	   without the browser-native `title` attribute's ~700 ms delay. */
-	.info-dot {
-		all: unset;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 14px;
-		height: 14px;
-		font-size: 9px;
-		font-weight: 700;
-		font-family: var(--font-mono);
-		color: var(--text-subtle);
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 50%;
-		cursor: help;
-	}
-	.info-dot:hover,
-	.info-dot:focus-visible {
-		color: var(--ink-strong, var(--text));
-		background: var(--primary-soft);
-		border-color: color-mix(in srgb, var(--primary) 30%, transparent);
-	}
+	/* Tip bubbles appear instantly without the browser-native `title`
+	   attribute's ~700 ms delay. */
 	/* Portal tip body — fixed position so it escapes any ancestor
 	   overflow / stacking context. Pointer-events: auto + the
 	   matching `cancelInfoTipHide` on enter lets the user mouse onto
@@ -798,22 +554,7 @@
 	   structured as a definition list: each row is a `<code>` term
 	   followed by its plain-prose explanation. */
 	.info-tip {
-		position: fixed;
-		transform: translate(-50%, 6px);
-		max-width: 360px;
 		padding: 10px 14px;
-		font-family: var(--font-sans);
-		font-size: 12px;
-		font-weight: 400;
-		line-height: 1.45;
-		color: var(--tip-fg);
-		background: var(--tip-bg);
-		border-radius: 6px;
-		box-shadow: 0 8px 18px rgb(var(--shadow-tint) / 0.22);
-		text-align: left;
-		white-space: normal;
-		z-index: 1000;
-		pointer-events: auto;
 	}
 	.info-tip-title {
 		margin: 0 0 6px;
@@ -843,7 +584,7 @@
 		font-family: var(--font-mono);
 		font-size: 11px;
 		padding: 1px 6px;
-		background: rgb(255, 255, 255, 0.08);
+		background: color-mix(in srgb, var(--tip-fg) 10%, transparent);
 		border-radius: 4px;
 		color: var(--tip-fg);
 		white-space: nowrap;
@@ -851,7 +592,7 @@
 	.info-tip-list dd {
 		margin: 0;
 		min-width: 0;
-		color: #c4cad2;
+		color: var(--tip-label);
 		overflow-wrap: anywhere;
 	}
 	@media (max-width: 720px) {
@@ -882,12 +623,8 @@
 		gap: 10px;
 		padding: 12px 16px;
 		cursor: pointer;
-		list-style: none;
 		user-select: none;
 		font-size: 14px;
-	}
-	.dataset-preview > summary::-webkit-details-marker {
-		display: none;
 	}
 	.dataset-preview > summary::before {
 		content: '';

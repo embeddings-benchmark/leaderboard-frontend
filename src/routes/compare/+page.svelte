@@ -525,10 +525,10 @@
 				{/if}
 			</div>
 			{#if benchPickerOpen}
-				<div class="picker-panel bench-panel" role="dialog" aria-label="Pick benchmark">
+				<div class="picker-panel panel bench-panel" role="dialog" aria-label="Pick benchmark">
 					<input
 						type="search"
-						class="picker-search"
+						class="picker-search input-text"
 						placeholder="Search benchmarks…"
 						bind:value={benchPickerQuery}
 					/>
@@ -585,10 +585,10 @@
 				{/if}
 			</div>
 			{#if taskPickerOpen}
-				<div class="picker-panel bench-panel" role="dialog" aria-label="Pick task">
+				<div class="picker-panel panel bench-panel" role="dialog" aria-label="Pick task">
 					<input
 						type="search"
-						class="picker-search"
+						class="picker-search input-text"
 						placeholder="Search tasks…"
 						bind:value={taskPickerQuery}
 					/>
@@ -621,7 +621,7 @@
 		{#if !primarySummary}
 			<p class="loading">Loading…</p>
 		{:else}
-			<section class="picker-bar">
+			<section class="picker-bar panel">
 				<div class="picks">
 					{#each pickedRows as r, i (r.model.name)}
 						<span class="pick-chip" style:--c={modelColor(i)}>
@@ -649,10 +649,10 @@
 								+ Add model
 							</button>
 							{#if pickerOpen}
-								<div class="picker-panel" role="dialog" aria-label="Pick model">
+								<div class="picker-panel panel" role="dialog" aria-label="Pick model">
 									<input
 										type="search"
-										class="picker-search"
+										class="picker-search input-text"
 										placeholder="Search models…"
 										bind:value={pickerQuery}
 									/>
@@ -765,7 +765,7 @@
 						{@const rankWinners = winnersForRow(rankValues, 'min')}
 						<div class="cell metric-head sticky bench-row-head">
 							<span class="bench-label">{benchIndex.get(bv.name)?.displayName ?? bv.name}</span>
-							<span class="bench-sub">Mean(Task) · Rank</span>
+							<span class="eyebrow bench-sub">Mean(Task) · Rank</span>
 						</div>
 						{#each pickedRows as p, i (p.model.name)}
 							{@const r = rows[i]}
@@ -832,7 +832,7 @@
 							)}
 							<div class="cell metric-head sticky bench-row-head">
 								<span class="bench-label">{ts.name}</span>
-								<span class="bench-sub">{ts.type}</span>
+								<span class="eyebrow bench-sub">{ts.type}</span>
 							</div>
 							{#each ts.scores as v, i (pickedRows[i].model.name)}
 								<div
@@ -851,7 +851,7 @@
 				</section>
 
 				{#if pickedBenchmarks.length === 1 && radarSpec && pickedRows.length >= 1 && primarySummary && primarySummary.taskTypes.length >= 2}
-					<section class="radar-card">
+					<section class="radar-card panel">
 						<h3>Strengths at a glance</h3>
 						<PlotlyChart
 							data={radarSpec.data}
@@ -935,14 +935,11 @@
 
 	/* Picker bar ------------------------------------------------------------- */
 	.picker-bar {
+		--panel-radius: 12px;
 		display: flex;
 		align-items: center;
 		gap: 14px;
 		padding: 12px 14px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		box-shadow: var(--shadow-sm);
 		margin-bottom: 20px;
 	}
 	.picks {
@@ -994,7 +991,7 @@
 	}
 	.pick-x:hover {
 		background: var(--c);
-		color: #fff;
+		color: var(--surface);
 	}
 
 	.picker {
@@ -1015,19 +1012,16 @@
 		color: var(--text);
 		background: var(--surface);
 	}
+	/* `width: min(…)` caps at the viewport on mobile so the panel
+	   never overflows the screen. */
 	.picker-panel {
+		--panel-radius: 12px;
+		--panel-shadow: 0 16px 36px rgb(var(--shadow-tint) / 0.16);
 		position: absolute;
 		top: calc(100% + 6px);
 		left: 0;
-		/* Cap at the viewport width (minus a small margin) so the
-		   panel never overflows the screen on mobile. The 16 px
-		   subtracts a hair of breathing room on each side. */
 		width: min(360px, calc(100vw - 24px));
 		max-height: 420px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		box-shadow: 0 16px 36px rgb(var(--shadow-tint) / 0.16);
 		z-index: 30;
 		display: flex;
 		flex-direction: column;
@@ -1036,16 +1030,9 @@
 	.picker-search {
 		margin: 10px 12px;
 		padding: 7px 12px;
-		border: 1px solid var(--border);
 		border-radius: 8px;
 		font-size: 12.5px;
-		font-family: inherit;
-		background: var(--surface);
-	}
-	.picker-search:focus {
-		outline: none;
-		border-color: var(--primary);
-		box-shadow: 0 0 0 3px var(--primary-soft);
+		width: auto;
 	}
 	.picker-list {
 		flex: 1;
@@ -1294,12 +1281,10 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	/* 10 px (vs the canonical eyebrow 11 px) so the secondary row
+	   reads as smaller than the bench label above it. */
 	.bench-sub {
 		font-size: 10px;
-		color: var(--text-subtle);
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
 	}
 	.bench-cell .score {
 		font-size: 14px;
@@ -1323,12 +1308,9 @@
 	}
 
 	.radar-card {
+		--panel-shadow: var(--shadow-sm);
 		margin-top: 20px;
 		padding: 18px 20px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: var(--shadow-sm);
 	}
 	.radar-card h3 {
 		font-size: 14px;

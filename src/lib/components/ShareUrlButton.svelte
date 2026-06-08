@@ -25,7 +25,7 @@
 
 <button
 	type="button"
-	class="share-btn"
+	class="share-btn floating-pill"
 	class:copied
 	title="Copy share link — includes the active filters, sort, and tab"
 	aria-label="Copy share link"
@@ -67,10 +67,12 @@
 </button>
 
 <style>
+	/* `env(safe-area-inset-*)` keeps the pill clear of the iOS
+	   on-screen keyboard / home indicator. */
 	.share-btn {
 		position: fixed;
-		right: 22px;
-		bottom: 22px;
+		right: max(22px, env(safe-area-inset-right));
+		bottom: max(22px, env(safe-area-inset-bottom));
 		z-index: 60;
 		transition:
 			background 0.14s,
@@ -80,46 +82,14 @@
 			transform 0.14s,
 			right 0.18s ease,
 			opacity 0.18s ease;
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		height: 38px;
-		padding: 0 14px;
-		font-size: 13px;
-		font-weight: 600;
-		font-family: inherit;
-		color: var(--primary-strong);
-		background: var(--surface);
-		border: 1.5px solid var(--primary);
-		border-radius: 999px;
-		box-shadow:
-			0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
-			0 6px 18px rgb(var(--shadow-tint) / 0.12);
-		cursor: pointer;
 	}
 	.share-btn:hover {
-		background: color-mix(in srgb, var(--primary) 12%, var(--surface));
-		border-color: var(--primary-strong);
-		box-shadow:
-			0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent),
-			0 10px 22px rgb(var(--shadow-tint) / 0.16);
 		transform: translateY(-1px);
-	}
-	.share-btn:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 2px;
 	}
 	.share-btn.copied {
 		background: color-mix(in srgb, var(--primary) 16%, var(--surface));
 		border-color: var(--primary);
 		color: var(--primary-strong);
-	}
-	/* Avoid colliding with the on-screen keyboard / safe area on iOS. */
-	@supports (padding: env(safe-area-inset-bottom)) {
-		.share-btn {
-			bottom: max(22px, env(safe-area-inset-bottom));
-			right: max(22px, env(safe-area-inset-right));
-		}
 	}
 	/* On narrow viewports, shrink to icon-only so we don't crowd the
 	   page footer + content. */

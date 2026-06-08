@@ -119,22 +119,18 @@
 	text-transform: uppercase;
 	color: var(--text-subtle);
 }
+.muted-inline {
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-subtle);
+	font-variant-numeric: tabular-nums;
+}
 
+/* Cap width + tighter padding so the in-block search doesn't fill
+   the whole sidebar. */
 .type-search {
-	width: 100%;
 	max-width: 320px;
 	padding: 5px 9px;
-	font-size: 12px;
-	font-family: inherit;
-	background: var(--surface);
-	color: var(--text);
-	border: 1px solid var(--border);
-	border-radius: 6px;
-}
-.type-search:focus {
-	outline: none;
-	border-color: var(--primary);
-	box-shadow: 0 0 0 3px var(--primary-soft);
 }
 .no-match {
 	margin: 0;
@@ -157,6 +153,10 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
+	padding: 8px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface-muted);
 }
 /* `contain: layout` isolates the inner flex-wrap layout from the ancestor
    sidebar's scroll calculation — without it Chromium leaks each
@@ -165,7 +165,6 @@
 .pills.scroll {
 	max-height: 380px;
 	overflow-y: auto;
-	padding-right: 4px;
 	contain: layout;
 }
 /* Marker for the facet that absorbs leftover sidebar height (Language).
@@ -262,6 +261,28 @@
 .modality-fill[data-modality]:has(input:checked):hover {
 	filter: brightness(0.97);
 	background: var(--modality-tint);
+}
+
+/* Per-stype tint when checked — same shape as the modality tint
+   above, used on /tasks for the Task group facet. */
+.type-pill[data-stype]:not([data-stype='']):has(input:checked) {
+	background: var(--category-tint);
+	border-color: color-mix(in srgb, var(--category-tint-fg) 35%, transparent);
+	color: var(--category-tint-fg);
+}
+/* Same pattern for model-type pills inside FilterContent — `data-type`
+   drives the per-category tint via app.css. */
+.model-type-pill[data-type]:not([data-type='']):has(input:checked) {
+	background: var(--category-tint);
+	border-color: color-mix(in srgb, var(--category-tint-fg) 35%, transparent);
+	color: var(--category-tint-fg);
+}
+
+/* Long unbroken names (e.g. `XM3600T2IRetrieval`) wrap inside the
+   pill instead of overflowing. */
+.pill-label {
+	overflow-wrap: anywhere;
+	min-width: 0;
 }
 
 @media (max-width: 640px) {

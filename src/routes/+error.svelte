@@ -10,7 +10,7 @@
 </script>
 
 <div class="error-page">
-	<section class="card">
+	<section class="card panel">
 		<p class="status">{page.status}</p>
 		<h1>
 			{#if page.status === 404}
@@ -50,14 +50,12 @@
 		padding: 48px 24px;
 	}
 	.card {
+		--panel-radius: 16px;
+		--panel-shadow: 0 10px 30px rgb(var(--shadow-tint) / 0.06);
 		max-width: 520px;
 		width: 100%;
 		text-align: center;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 16px;
 		padding: 44px 32px;
-		box-shadow: 0 10px 30px rgb(var(--shadow-tint) / 0.06);
 	}
 	.status {
 		margin: 0 0 8px;
