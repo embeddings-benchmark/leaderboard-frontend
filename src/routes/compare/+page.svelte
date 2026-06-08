@@ -51,7 +51,7 @@
 	const MAX_PICKED = 4;
 	const MAX_BENCHMARKS = 6;
 	const MAX_TASKS = 12;
-	const RADAR_COLORS = ['#EE4266', '#00a6ed', '#ECA72C', '#3CBBB1'];
+	const RADAR_COLORS = ['#9333EA', '#00a6ed', '#ECA72C', '#3CBBB1'];
 
 	let ALL_BENCHMARKS = $state<Benchmark[]>([]);
 	// Local derived lookup, not held in $state — plain Map is correct.
@@ -724,7 +724,7 @@
 								{r.model.displayName}
 							</a>
 							<div class="model-meta">
-								<span class="chip type">{fmtType(r.model.modelType)}</span>
+								<span class="chip type" data-type={r.model.modelType}>{fmtType(r.model.modelType)}</span>
 								{#if r.model.openWeights}
 									<span class="chip open">Open</span>
 								{:else}
@@ -1216,8 +1216,8 @@
 		color: var(--text-muted);
 	}
 	.chip.type {
-		background: color-mix(in srgb, var(--c) 18%, var(--surface));
-		color: var(--c);
+		background: color-mix(in srgb, var(--category-tint-fg, var(--text-muted)) 18%, var(--surface));
+		color: var(--category-tint-fg, var(--text-muted));
 	}
 	.chip.open {
 		background: var(--tint-green);
