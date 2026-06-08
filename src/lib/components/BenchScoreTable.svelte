@@ -133,9 +133,6 @@
 	tbody tr:nth-child(even) th.sticky {
 		background: var(--row-alt);
 	}
-	tbody tr:hover th.sticky {
-		background: var(--row-hover);
-	}
 	/* Mobile: drop the sticky column so every score reaches the viewport. */
 	@media (max-width: 640px) {
 		.sticky,

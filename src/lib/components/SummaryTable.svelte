@@ -843,14 +843,22 @@
 		gap: 8px;
 		padding: 4px 8px;
 	}
-	/* Combined pin + rank column. */
+	/* Combined pin + rank column. Single source of truth for the
+	   column width — `.sticky-model` reads the same token for its
+	   `left` offset so the two columns butt cleanly regardless of
+	   how wide the rank pill ends up. Bumped from 72px so 4-digit
+	   ranks (#1234) don't get clipped under the sticky model column. */
+	.summary-table {
+		--rank-col-w: 88px;
+	}
 	.sticky-left {
 		position: sticky;
 		left: 0;
 		background: var(--surface);
 		z-index: 2;
-		width: 72px;
-		min-width: 72px;
+		width: var(--rank-col-w);
+		min-width: var(--rank-col-w);
+		max-width: var(--rank-col-w);
 	}
 	.sticky-left .sort-btn {
 		justify-content: flex-start;
@@ -866,12 +874,9 @@
 	tbody tr:nth-child(even) td.sticky-left {
 		background: var(--row-alt);
 	}
-	tbody tr:hover td.sticky-left {
-		background: var(--row-hover);
-	}
 	.sticky-model {
 		position: sticky;
-		left: 72px;
+		left: var(--rank-col-w);
 		background: var(--surface);
 		z-index: 2;
 		/* Hold the column to a fixed width window. Long model names wrap
@@ -882,7 +887,7 @@
 		max-width: 260px;
 		white-space: normal;
 		overflow-wrap: anywhere;
-		vertical-align: top;
+		vertical-align: middle;
 	}
 	thead th.sticky-model {
 		background: var(--surface-muted);
@@ -890,9 +895,6 @@
 	}
 	tbody tr:nth-child(even) th.sticky-model {
 		background: var(--row-alt);
-	}
-	tbody tr:hover th.sticky-model {
-		background: var(--row-hover);
 	}
 
 	/* Mobile: 72 px (rank) + 260 px (model) of sticky pane eats almost

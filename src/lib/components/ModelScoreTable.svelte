@@ -159,6 +159,10 @@
 		z-index: 2;
 		min-width: var(--rank-w);
 		width: var(--rank-w);
+		/* Hard cap so a 4-digit rank pill can't push the cell wider than
+		   `--rank-w` and slip under the Model column anchored at the
+		   same offset. */
+		max-width: var(--rank-w);
 	}
 	thead th.sticky-rank {
 		background: var(--surface-muted);
@@ -166,9 +170,6 @@
 	}
 	tbody tr:nth-child(even) td.sticky-rank {
 		background: var(--row-alt);
-	}
-	tbody tr:hover td.sticky-rank {
-		background: var(--row-hover);
 	}
 	.sticky {
 		position: sticky;
@@ -183,9 +184,6 @@
 	}
 	tbody tr:nth-child(even) th.sticky {
 		background: var(--row-alt);
-	}
-	tbody tr:hover th.sticky {
-		background: var(--row-hover);
 	}
 	/* Mobile: the sticky pair hides almost every score column behind it
 	   on a 375 px viewport. Drop the stickyness so columns scroll

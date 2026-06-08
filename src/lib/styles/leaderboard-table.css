@@ -89,10 +89,10 @@
    the chained selector beats `.heat-N` 0,0,2,3 vs 0,0,1,0 and every even
    row paints `--row-alt` over its heat shade. Pinned rows below keep their
    full specificity so they stay visually distinct over heat. */
-:where(.tbl tbody tr:nth-child(even)) td {
+:where(.tbl tbody tr:nth-child(even)) :is(td, th) {
 	background: var(--row-alt);
 }
-.tbl tbody tr:hover td {
+.tbl tbody tr:hover :is(td, th) {
 	/* Layer a translucent dark over the cell instead of swapping
 	   the background. Heat-shaded score cells set their own
 	   `background-color: color-mix(...)`, which has higher
@@ -175,11 +175,21 @@
 	padding: 0;
 	text-align: center;
 }
+/* Pin column width — single source of truth so `.tbl-sticky-col` anchors
+   at the same offset and the model column can't slip under the pin cell
+   if a future change adds content. 44px gives the 22px pin button ~11px
+   of breathing room on each side. */
+.tbl {
+	--pin-col-w: 44px;
+}
 .tbl-sticky-pin {
 	position: sticky;
 	left: 0;
 	background: var(--surface);
 	z-index: 2;
+	width: var(--pin-col-w);
+	min-width: var(--pin-col-w);
+	max-width: var(--pin-col-w);
 }
 .tbl thead th.tbl-sticky-pin {
 	background: var(--surface-muted);
@@ -187,9 +197,6 @@
 }
 .tbl tbody tr:nth-child(even) td.tbl-sticky-pin {
 	background: var(--row-alt);
-}
-.tbl tbody tr:hover td.tbl-sticky-pin {
-	background: var(--row-hover);
 }
 .tbl tbody tr.pinned td.tbl-sticky-pin {
 	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
@@ -231,7 +238,7 @@
    SummaryTable overrides per-model-type tints in its own \3c style>). */
 .tbl-sticky-col {
 	position: sticky;
-	left: 32px;
+	left: var(--pin-col-w);
 	background: var(--surface);
 	z-index: 2;
 	min-width: 220px;
@@ -252,9 +259,6 @@
 }
 .tbl tbody tr:nth-child(even) th.tbl-sticky-col {
 	background: var(--row-alt);
-}
-.tbl tbody tr:hover th.tbl-sticky-col {
-	background: var(--row-hover);
 }
 .tbl tbody tr.pinned th.tbl-sticky-col {
 	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
