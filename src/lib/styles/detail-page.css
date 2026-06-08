@@ -57,10 +57,23 @@
 		gap: 16px;
 		margin-block-end: 12px;
 	}
+	/* Narrow-hero kpi polish — used to live under its own `@container
+	   kpis` query, but `container-type: inline-size` on `.kpis` made
+	   its grid-item width collapse to 0 wherever a parent grid used an
+	   `auto` track (the benchmark hero), so the container is gone and
+	   the rules ride the hero breakpoint instead. */
+	.kpis {
+		gap: 8px;
+	}
+	.kpi {
+		padding: 8px 10px;
+	}
+	.kpi-value {
+		font-size: 17px;
+	}
 }
 
 .kpis {
-	container: kpis / inline-size;
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 10px;
@@ -87,17 +100,6 @@
 	font-weight: 700;
 	color: var(--text);
 	font-variant-numeric: tabular-nums;
-}
-@container kpis (max-width: 360px) {
-	.kpis {
-		gap: 8px;
-	}
-	.kpi {
-		padding: 8px 10px;
-	}
-	.kpi-value {
-		font-size: 17px;
-	}
 }
 
 /* `.row` is `display: contents` so each <dt>/<dd> pair participates
