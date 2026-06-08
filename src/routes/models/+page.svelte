@@ -7,17 +7,26 @@
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { sortModalities } from '$lib/format';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { ModelMeta } from '$lib/types';
-	import { modelPath, fmtInt } from '$lib/format';
+	import {
+		COLLATOR,
+		fmtInt,
+		fmtParamsCompact,
+		modelPath,
+		modelSearchKey,
+		sortModalities
+	} from '$lib/format';
+	import { getParam, updateUrl } from '$lib/url-state';
 
 	let ALL_MODELS = $state<ModelMeta[]>([]);
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
+
 
 	// Local language filter state. Lives in the page (not the shared
 	// `filters` store) because /models is the only place that uses it.
@@ -43,12 +52,14 @@
 				// `ModelMeta.languages` may be missing (older backends, models
 				// with no declared language scope) — those rows pass the
 				// filter trivially via the "everything checked" default.
-				// Plain Set is correct here — used as a throwaway local
-				// accumulator, never read reactively.
+				// Count per language so the filter pills sort by popularity.
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langSet = new Set<string>();
-				for (const x of m) for (const l of x.languages ?? []) langSet.add(l);
-				LANGUAGES = [...langSet].sort();
+				const langCount = new Map<string, number>();
+				for (const x of m)
+					for (const l of x.languages ?? []) langCount.set(l, (langCount.get(l) ?? 0) + 1);
+				LANGUAGES = [...langCount.entries()]
+					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+					.map(([l]) => l);
 				languagesPicked.clear();
 				for (const l of LANGUAGES) languagesPicked.add(l);
 				loadingData = false;
@@ -75,9 +86,28 @@
 		released: 'desc'
 	};
 	// Default sort: newest release first. Surfaces just-shipped models at
-	// the top so visitors see what's current without scrolling.
-	let sort = $state<SortId>('released');
-	let sortDir = $state<SortDir>(NATURAL_DIR.released);
+	// the top so visitors see what's current without scrolling. State is
+	// URL-backed (`?s.models=…&d.models=…`) so navigating to a model detail
+	// page and back via the browser restores the user's sort choice.
+	const SORT_IDS = new Set(SORTS.map((s) => s.id));
+	const DEFAULT_SORT: SortId = 'released';
+	const _urlSort = getParam('s.models');
+	const _urlDir = getParam('d.models');
+	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
+		? (_urlSort as SortId)
+		: DEFAULT_SORT;
+	let sort = $state<SortId>(initialSort);
+	let sortDir = $state<SortDir>(
+		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
+	);
+	$effect(() => {
+		// Omit defaults from the URL so the canonical "fresh visit" link is clean.
+		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
+		updateUrl({
+			's.models': isDefault ? null : sort,
+			'd.models': isDefault ? null : sortDir
+		});
+	});
 
 	function onSortKeyChange(next: SortId) {
 		sort = next;
@@ -91,37 +121,45 @@
 	// list. Same logic as applyFilters() in filters.svelte.ts, just minus the
 	// benchmark-scope / sort / re-rank parts that only make sense for a
 	// summary's rows.
-	function passes(m: ModelMeta): boolean {
+	function buildPasses(): (m: ModelMeta) => boolean {
+		// All cross-row inputs read once at the top so the per-row predicate
+		// doesn't re-read them 800x per keystroke.
 		const q = filters.nameQuery.trim().toLowerCase();
-		if (
-			q &&
-			!m.name.toLowerCase().includes(q) &&
-			!m.displayName.toLowerCase().includes(q) &&
-			!m.org.toLowerCase().includes(q)
-		)
-			return false;
-		if (filters.availability === 'open' && !m.openWeights) return false;
-		if (filters.availability === 'proprietary' && m.openWeights) return false;
-		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
-		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
-		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
-		// Empty pick set = "deselect everything" → nothing matches.
-		if (!filters.modelTypes.has(m.modelType)) return false;
-		if (m.totalParamsB > 0) {
-			const paramsM = m.totalParamsB * 1000;
-			if (paramsM < filters.minModelSizeM) return false;
-			if (paramsM > filters.maxModelSizeM) return false;
-		}
-		// Language predicate: "all on" = filter off; otherwise require
-		// at least one declared language to be in the picked set.
-		// Models with no declared languages (`undefined`/`[]`) get a
-		// pass — language metadata is optional upstream and we don't
-		// want to silently drop pre-tagged models.
-		if (LANGUAGES.length > 0 && languagesPicked.size !== LANGUAGES.length) {
-			const mlangs = m.languages ?? [];
-			if (mlangs.length > 0 && !mlangs.some((l) => languagesPicked.has(l))) return false;
-		}
-		return true;
+		const availability = filters.availability;
+		const instructions = filters.instructions;
+		const stOnly = filters.sentenceTransformersOnly;
+		const modelTypes = filters.modelTypes;
+		const modelTypesSize = modelTypes.size;
+		const sizeMin = filters.minModelSizeM;
+		const sizeMax = filters.maxModelSizeM;
+		const langPicked = languagesPicked;
+		const langCount = LANGUAGES.length;
+		const langActive = langCount > 0 && langPicked.size !== langCount;
+		return (m: ModelMeta) => {
+			if (q && !modelSearchKey(m).includes(q)) return false;
+			if (availability === 'open' && !m.openWeights) return false;
+			if (availability === 'proprietary' && m.openWeights) return false;
+			if (instructions === 'only_instruction' && !m.instructionTuned) return false;
+			if (instructions === 'only_non_instruction' && m.instructionTuned) return false;
+			if (stOnly && !m.sentenceTransformersCompatible) return false;
+			// Empty pick set = "deselect everything" → nothing matches.
+			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
+			if (m.totalParamsB > 0) {
+				const paramsM = m.totalParamsB * 1000;
+				if (paramsM < sizeMin) return false;
+				if (paramsM > sizeMax) return false;
+			}
+			// Language predicate: "all on" = filter off; otherwise require
+			// at least one declared language to be in the picked set.
+			// Models with no declared languages (`undefined`/`[]`) get a
+			// pass — language metadata is optional upstream and we don't
+			// want to silently drop pre-tagged models.
+			if (langActive) {
+				const mlangs = m.languages;
+				if (mlangs && mlangs.length > 0 && !mlangs.some((l) => langPicked.has(l))) return false;
+			}
+			return true;
+		};
 	}
 
 	function toggleLanguage(l: string) {
@@ -136,19 +174,19 @@
 	// Split filter / sort so name-query keystrokes (which only narrow rows)
 	// don't trigger a full re-sort. The sort only re-runs when its inputs
 	// (`sort`, `sortDir`, or the filtered list identity) change.
-	let matched = $derived(ALL_MODELS.filter(passes));
+	let matched = $derived.by(() => ALL_MODELS.filter(buildPasses()));
 	let filtered = $derived.by(() => {
 		const list = [...matched];
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
-				cmp = a.name.localeCompare(b.name);
+				cmp = COLLATOR.compare(a.name, b.name);
 			} else if (sort === 'params') {
 				const aP = a.totalParamsB || -1;
 				const bP = b.totalParamsB || -1;
 				cmp = aP - bP;
 			} else if (sort === 'released') {
-				cmp = (a.releaseDate ?? '').localeCompare(b.releaseDate ?? '');
+				cmp = COLLATOR.compare(a.releaseDate ?? '', b.releaseDate ?? '');
 			} else {
 				cmp = 0;
 			}
@@ -189,11 +227,6 @@
 		}, 80);
 	});
 	let visibleModels = $derived(filtered.slice(0, visibleCount));
-
-	function fmtParams(b: number): string {
-		if (!b) return '—';
-		return b >= 1 ? `${b.toFixed(1)}B` : `${(b * 1000).toFixed(0)}M`;
-	}
 </script>
 
 <ShareMeta
@@ -253,7 +286,7 @@
 		</div>
 
 		{#if loadingData}
-			<p class="empty">Loading models…</p>
+			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load models: {loadError}</p>
 		{:else if filtered.length === 0}
@@ -280,7 +313,7 @@
 						<dl class="stats">
 							<div>
 								<dt>Params</dt>
-								<dd>{fmtParams(m.totalParamsB)}</dd>
+								<dd>{fmtParamsCompact(m.totalParamsB)}</dd>
 							</div>
 							<div>
 								<dt>Embed dim</dt>
@@ -371,8 +404,8 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding clears the rail. */
-		padding: 16px 16px 16px 18px;
+		/* Extra left padding for the 3 px accent strip. */
+		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
@@ -385,11 +418,13 @@
 		text-decoration: none;
 		color: inherit;
 		transition:
-			transform 0.15s ease,
-			border-color 0.15s ease,
-			box-shadow 0.15s ease;
-		/* Skip render/paint for off-screen cards (the registry is long); the
-		   `min-height` above doubles as the intrinsic-size placeholder. */
+			transform 0.12s ease,
+			border-color 0.12s ease,
+			box-shadow 0.12s ease;
+		/* Skip render/paint for off-screen cards (the registry is long).
+		   `content-visibility: auto` already implies `contain: size layout
+		   paint style`; an explicit `contain:` would replace that set and
+		   break `contain-intrinsic-size`. */
 		content-visibility: auto;
 		contain-intrinsic-size: 220px;
 	}
@@ -420,25 +455,39 @@
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
 		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
+	.card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 3px;
+		background: var(--card-accent, var(--border));
+	}
+	/* Per-type accent — mapping documented in CLAUDE.md. */
 	.card[data-type='dense'] {
-		--card-accent: var(--tint-blue-fg);
 		--card-tint: var(--tint-blue);
+		--card-accent: var(--tint-blue-fg);
 	}
 	.card[data-type='cross-encoder'] {
-		--card-accent: var(--tint-orange-fg);
 		--card-tint: var(--tint-orange);
+		--card-accent: var(--tint-orange-fg);
 	}
 	.card[data-type='late-interaction'] {
-		--card-accent: var(--tint-green-fg);
 		--card-tint: var(--tint-green);
+		--card-accent: var(--tint-green-fg);
 	}
 	.card[data-type='sparse'] {
-		--card-accent: var(--tint-amber-fg);
 		--card-tint: var(--tint-amber);
+		--card-accent: var(--tint-amber-fg);
 	}
 	.card[data-type='router'] {
-		--card-accent: var(--tint-purple-fg);
 		--card-tint: var(--tint-purple);
+		--card-accent: var(--tint-purple-fg);
+	}
+	.card:hover {
+		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
 	}
 
 	.card-head {

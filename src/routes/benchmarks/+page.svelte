@@ -8,6 +8,7 @@
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 
@@ -31,12 +32,15 @@
 		models: 'desc'
 	};
 	const SORT_IDS = SORTS.map((s) => s.id) as readonly SortId[];
+	// Default to "Model count" desc — popularity is the most useful first
+	// impression when browsing the benchmark catalogue.
+	const DEFAULT_SORT: SortId = 'models';
 	const initialSort = getParam('sort');
 	const initialDir = getParam('dir');
 	const seedSort: SortId =
 		initialSort && (SORT_IDS as readonly string[]).includes(initialSort)
 			? (initialSort as SortId)
-			: 'name';
+			: DEFAULT_SORT;
 	let sort = $state<SortId>(seedSort);
 	let sortDir = $state<SortDir>(
 		initialDir === 'asc' || initialDir === 'desc' ? initialDir : NATURAL_DIR[seedSort]
@@ -51,7 +55,7 @@
 	$effect(() => {
 		updateUrl({
 			q: query.trim() || null,
-			sort: sort === 'name' ? null : sort,
+			sort: sort === DEFAULT_SORT ? null : sort,
 			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir
 		});
 	});
@@ -72,8 +76,6 @@
 	);
 	let domainQuery = $state('');
 	let languageQuery = $state('');
-	let languagesExpanded = $state(false);
-	const LANGUAGE_CAP = 40;
 	let visibleDomains = $derived.by(() => {
 		const q = domainQuery.trim().toLowerCase();
 		return q ? DOMAINS.filter((d) => d.toLowerCase().includes(q)) : DOMAINS;
@@ -82,11 +84,6 @@
 		const q = languageQuery.trim().toLowerCase();
 		return q ? LANGUAGES.filter((l) => l.toLowerCase().includes(q)) : LANGUAGES;
 	});
-	let visibleLanguages = $derived(
-		languagesExpanded || filteredLanguages.length <= LANGUAGE_CAP
-			? filteredLanguages
-			: filteredLanguages.slice(0, LANGUAGE_CAP)
-	);
 
 	function toggleModality(m: string) {
 		if (modalityFilter.has(m)) modalityFilter.delete(m);
@@ -136,13 +133,15 @@
 				const mods = new Set<string>();
 				const simpTypes = new Set<string>();
 				const doms = new Set<string>();
-				const langs = new Set<string>();
+				// Count per language so the filter pills sort by popularity.
+				const langCount = new Map<string, number>();
 				/* eslint-enable svelte/prefer-svelte-reactivity */
 				for (const b of list) {
 					if (b.modalities) for (const m of b.modalities) mods.add(m);
 					if (b.simplifiedTaskTypes) for (const t of b.simplifiedTaskTypes) simpTypes.add(t);
 					if (b.domains) for (const d of b.domains) doms.add(d);
-					if (b.languages) for (const l of b.languages) langs.add(l);
+					if (b.languages)
+						for (const l of b.languages) langCount.set(l, (langCount.get(l) ?? 0) + 1);
 				}
 				MODALITIES = [...mods].sort();
 				// Order the simplified buckets the same way /tasks does (curated
@@ -160,7 +159,10 @@
 					...[...simpTypes].filter((t) => !CURATED.includes(t)).sort()
 				];
 				DOMAINS = [...doms].sort();
-				LANGUAGES = [...langs].sort();
+				// Descending by usage count, alphabetical tie-break.
+				LANGUAGES = [...langCount.entries()]
+					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+					.map(([l]) => l);
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
@@ -173,7 +175,8 @@
 			});
 	});
 
-	// Featured (on the curated menu) come first, then off-menu benchmarks.
+	// Off-menu benchmarks sort alongside the featured ones — the per-card
+	// "newer version available" hint already distinguishes them.
 	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		// "All on" = filter off; partial = intersection check; empty =
@@ -202,21 +205,10 @@
 			if (c === 0) c = a.displayName.localeCompare(b.displayName);
 			return dir * c;
 		};
-		// Single pass: partition into featured / other while filtering.
-		// "Featured" = `displayOnLeaderboard !== false` (the curated menu
-		// set the backend returns when `include_hidden=true` flips the
-		// flag for off-menu entries) — saves a second `/menu` round-trip
-		// since this info is already on every Benchmark.
-		const featured: Benchmark[] = [];
-		const other: Benchmark[] = [];
-		for (const b of allBenchmarks) {
-			if (!matches(b)) continue;
-			if (b.displayOnLeaderboard !== false) featured.push(b);
-			else other.push(b);
-		}
-		featured.sort(cmp);
-		other.sort(cmp);
-		return [...featured, ...other];
+		const matched: Benchmark[] = [];
+		for (const b of allBenchmarks) if (matches(b)) matched.push(b);
+		matched.sort(cmp);
+		return matched;
 	});
 </script>
 
@@ -278,7 +270,7 @@
 		</div>
 
 		{#if loading}
-			<p class="muted">Loading benchmarks…</p>
+			<SkeletonGrid />
 		{:else if error}
 			<p class="muted">Failed to load: {error}</p>
 		{:else if filteredAll.length === 0}
@@ -393,7 +385,7 @@
 					</div>
 				</div>
 
-				<div class="group">
+				<div class="group grow">
 					<div class="group-head">
 						<span class="group-label">Language</span>
 						<button type="button" class="link-btn" onclick={toggleAllLanguages}>
@@ -406,15 +398,8 @@
 						placeholder="Search languages…"
 						bind:value={languageQuery}
 					/>
-					<!-- Cap collapsed; on expand we drop the .scroll wrapper so
-					     the full language list flows in the sidebar and the
-					     page scroll handles overflow. Same pattern as /tasks. -->
-					<div
-						class="pills"
-						class:scroll={!languagesExpanded}
-						class:scroll-thin={!languagesExpanded}
-					>
-						{#each visibleLanguages as l (l)}
+					<div class="pills scroll scroll-thin">
+						{#each filteredLanguages as l (l)}
 							<label class="pill type-fill">
 								<input
 									type="checkbox"
@@ -424,19 +409,10 @@
 								<span>{l}</span>
 							</label>
 						{/each}
-						{#if visibleLanguages.length === 0}
+						{#if filteredLanguages.length === 0}
 							<p class="muted no-match">No languages match.</p>
 						{/if}
 					</div>
-					{#if filteredLanguages.length > LANGUAGE_CAP}
-						<button
-							type="button"
-							class="link-btn show-more-btn"
-							onclick={() => (languagesExpanded = !languagesExpanded)}
-						>
-							{languagesExpanded ? 'Show fewer' : `Show all ${filteredLanguages.length}`}
-						</button>
-					{/if}
 				</div>
 			</div>
 		{/if}

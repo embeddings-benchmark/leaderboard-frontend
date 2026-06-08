@@ -1,11 +1,11 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
-	import { isBoundaryCross } from '$lib/cell-hover';
+	import { clampTooltipX, isBoundaryCross } from '$lib/cell-hover';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { resolve } from '$app/paths';
-	import { bestWorstPerColumn, heat, humanizeType, slug } from '$lib/format';
+	import { bestWorstPerColumn, floatPinnedToTop, heat, humanizeType, slug } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { safeIdle } from '$lib/idle';
 	import MarkdownText from './MarkdownText.svelte';
@@ -32,8 +32,13 @@
 
 	interface Props {
 		summary: BenchmarkSummary;
+		// See `SummaryTable.svelte` — `false` when the pane is mounted but
+		// hidden behind another tab. Inactive panes skip the pin-state
+		// subscription so pin clicks elsewhere don't invalidate this
+		// derived.
+		active?: boolean;
 	}
-	let { summary }: Props = $props();
+	let { summary, active = true }: Props = $props();
 
 	type SortKey = 'model' | `task:${string}`;
 	const sort = createSortState<SortKey>({
@@ -50,18 +55,10 @@
 	// across every cell. 200 ms hide delay so the user can cross
 	// onto the bubble.
 	const TRAIN_TIP_MAX_WIDTH = 260;
-	const TRAIN_TIP_EDGE = 8;
 	type TrainTipState = { visible: boolean; text: string; x: number; y: number };
 	let trainTip = $state<TrainTipState>({ visible: false, text: '', x: 0, y: 0 });
 	let trainTipHideTimer: ReturnType<typeof setTimeout> | null = null;
-	function clampX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = TRAIN_TIP_MAX_WIDTH / 2;
-		const min = TRAIN_TIP_EDGE + half;
-		const max = window.innerWidth - TRAIN_TIP_EDGE - half;
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampX = (x: number) => clampTooltipX(x, TRAIN_TIP_MAX_WIDTH);
 	function cancelTrainTipHide() {
 		if (trainTipHideTimer !== null) {
 			clearTimeout(trainTipHideTimer);
@@ -93,7 +90,6 @@
 	// sticky <th>'s clipping + stacking context (same pattern as
 	// SummaryTable). One element reused across every column.
 	const TASK_TIP_MAX_WIDTH = 320;
-	const TASK_TIP_EDGE = 8;
 	type TaskTipState = {
 		visible: boolean;
 		title: string;
@@ -113,14 +109,7 @@
 		y: 0
 	});
 	let taskTipHideTimer: ReturnType<typeof setTimeout> | null = null;
-	function clampTaskTipX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = TASK_TIP_MAX_WIDTH / 2;
-		const min = TASK_TIP_EDGE + half;
-		const max = window.innerWidth - TASK_TIP_EDGE - half;
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampTaskTipX = (x: number) => clampTooltipX(x, TASK_TIP_MAX_WIDTH);
 	function cancelTaskTipHide() {
 		if (taskTipHideTimer !== null) {
 			clearTimeout(taskTipHideTimer);
@@ -213,9 +202,8 @@
 				return (va - vb) * dir;
 			});
 		}
-		if (pinnedModels.size === 0) return rows;
-		const isPinned = (r: SummaryRow) => pinnedModels.has(r.model.name);
-		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
+		if (!active) return rows;
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name), pinnedModels.size);
 	});
 
 	// Heaviest table on the page (~100k cells). Stream rows in idle

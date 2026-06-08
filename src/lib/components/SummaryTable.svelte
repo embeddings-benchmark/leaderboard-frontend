@@ -45,9 +45,8 @@
 		}
 	} as const;
 
-	// Short explanations for the per-task-type columns. Surfaced on
-	// column-header hover so users skimming the table know what each
-	// score is measuring without leaving the page.
+	// Per-column hover descriptions. Keyed by `tasksMeta[i].type` (not the
+	// `summary.taskTypes` form the backend strips) — see `realTaskType` below.
 	const TASK_TYPE_INFO: Record<string, string> = {
 		Classification: 'Classify text into pre-defined labels (sentiment, topic, intent, …).',
 		Clustering:
@@ -63,7 +62,22 @@
 		BitextMining:
 			'Pair sentences across two languages that carry the same meaning (translation alignment).',
 		Summarization:
-			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.'
+			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.',
+		// Vision / image-modality task types — surfaced on MIEB / MVEB / Image*.
+		ImageClassification: 'Classify images into pre-defined labels.',
+		ImageClustering: 'Group similar images together without supervision.',
+		ZeroShotClassification:
+			'Classify images / text into labels without per-task supervision; scored on held-out labels.',
+		DocumentUnderstanding:
+			'Parse document layouts (text, tables, figures) and answer questions over them.',
+		MultilingualRetrieval: 'Find relevant documents in a multilingual corpus.',
+		VisionCentricQA: 'Answer questions that require visual understanding of an image.',
+		Compositionality:
+			'Test compositional understanding (objects, attributes, and relations) in vision-language models.',
+		'VisualSTS(eng)':
+			'Rate semantic similarity between English sentence pairs rendered as images.',
+		'VisualSTS(multi)':
+			'Rate semantic similarity between multilingual sentence pairs rendered as images.'
 	};
 </script>
 
@@ -72,6 +86,7 @@
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import {
 		bestWorstPerColumn,
+		floatPinnedToTop,
 		fmtParamsUnit,
 		fmtParamsValue,
 		fmtPct,
@@ -85,7 +100,7 @@
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { safeIdle } from '$lib/idle';
-	import { isBoundaryCross } from '$lib/cell-hover';
+	import { clampTooltipX, isBoundaryCross } from '$lib/cell-hover';
 	import ModelCellName from './ModelCellName.svelte';
 	import PinButton from './PinButton.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
@@ -95,8 +110,15 @@
 
 	interface Props {
 		summary: BenchmarkSummary;
+		// `false` when this pane is mounted but hidden behind another tab. We
+		// then skip subscribing `sortedRows` to `pinnedModels` so pin clicks
+		// in the visible pane don't invalidate the hidden one's derived.
+		// Defaults to `true` so callers that don't use the prewarm pattern
+		// (e.g. /benchmark/[name] only mounts the active tab when prerender
+		// is off) keep the live-pin behaviour.
+		active?: boolean;
 	}
-	let { summary }: Props = $props();
+	let { summary, active = true }: Props = $props();
 
 	type SortKey =
 		| 'rank'
@@ -175,15 +197,11 @@
 				return ((va.v as number) - (vb.v as number)) * dir;
 			});
 		}
-		// Float pinned rows to the top in a single partition pass.
-		if (pinnedModels.size === 0) return rows;
-		const pinned: SummaryRow[] = [];
-		const unpinned: SummaryRow[] = [];
-		for (const r of rows) {
-			if (pinnedModels.has(r.model.name)) pinned.push(r);
-			else unpinned.push(r);
-		}
-		return [...pinned, ...unpinned];
+		// Inactive panes don't subscribe to `pinnedModels` — pin clicks
+		// elsewhere don't invalidate this derived. Reactivates on tab switch
+		// (the `active` prop change re-fires the derived).
+		if (!active) return rows;
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name), pinnedModels.size);
 	});
 
 	// Progressive row render — Firefox benefits a lot (cold first-paint
@@ -244,6 +262,21 @@
 	// regardless of locale, etc.
 	// `summary.taskTypes` is pre-sorted at the service boundary.
 	let sortedTaskTypes = $derived(summary.taskTypes);
+
+	// `summary.taskTypes` carries the backend's stripped form (no parens,
+	// and a stray `S` next to them — `VisualSTS(eng)` → `VisualSTeng`).
+	// `tasksMeta[i].type` keeps the real form, so reverse the strip to
+	// recover human labels + hit `TASK_TYPE_INFO` keys that contain parens.
+	let realTaskType = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<string, string>();
+		for (const t of summary.tasksMeta) {
+			if (!t.type) continue;
+			const stripped = t.type.replace(/S?\(|\)S?/g, '');
+			if (!m.has(stripped)) m.set(stripped, t.type);
+		}
+		return m;
+	});
 	let typeBests = $derived(
 		bestWorstPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
 	);
@@ -389,16 +422,7 @@
 	// rightmost task-type columns on narrow screens.
 	const TIP_MAX_WIDTH = 340;
 	const TIP_EDGE = 8;
-	function clampTipX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = TIP_MAX_WIDTH / 2;
-		const min = TIP_EDGE + half;
-		const max = window.innerWidth - TIP_EDGE - half;
-		// On very narrow viewports (< TIP_MAX_WIDTH) min > max; centre on the
-		// viewport in that case rather than letting min clobber max.
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampTipX = (x: number) => clampTooltipX(x, TIP_MAX_WIDTH, TIP_EDGE);
 
 	function showTip(e: PointerEvent | FocusEvent) {
 		cancelHide();
@@ -602,11 +626,13 @@
 					{#if showTaskTypes}
 						{#each sortedTaskTypes as tt (tt)}
 							{@const k = `tt:${tt}` as SortKey}
-							{@const desc = TASK_TYPE_INFO[tt]}
+							{@const real = realTaskType.get(tt) ?? tt}
+							{@const desc = TASK_TYPE_INFO[real] ?? TASK_TYPE_INFO[tt]}
+							{@const label = humanizeType(real)}
 							<th
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
-								data-tip-title={desc ? humanizeType(tt) : ''}
+								data-tip-title={desc ? label : ''}
 								data-tip={desc ?? ''}
 								onpointerenter={desc ? showTip : undefined}
 								onpointerleave={desc ? hideTip : undefined}
@@ -614,8 +640,8 @@
 								onfocusout={desc ? hideTip : undefined}
 							>
 								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
-									<span>{humanizeType(tt)}</span>
-									{#if desc}<InfoDot ariaLabel="What is {humanizeType(tt)}?" />{/if}
+									<span>{label}</span>
+									{#if desc}<InfoDot ariaLabel="What is {label}?" />{/if}
 									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
 								</button>
 							</th>

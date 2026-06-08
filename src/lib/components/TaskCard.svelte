@@ -81,8 +81,8 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding clears the rail. */
-		padding: 16px 16px 16px 18px;
+		/* Extra left padding for the 3 px accent strip. */
+		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
@@ -91,12 +91,14 @@
 		text-decoration: none;
 		color: inherit;
 		transition:
-			transform 0.15s ease,
-			border-color 0.15s ease,
-			box-shadow 0.15s ease;
-		/* `content-visibility: auto` lets the browser skip rendering off-screen
-		   cards (1759 entries on the full registry). `contain-intrinsic-size`
-		   reserves placeholder space so the scrollbar geometry stays stable. */
+			transform 0.12s ease,
+			border-color 0.12s ease,
+			box-shadow 0.12s ease;
+		/* `content-visibility: auto` skips render/paint for off-screen cards
+		   (1700+ entries on the full registry). It implicitly applies
+		   `contain: size layout paint style`, so an explicit `contain:` here
+		   would *replace* (not augment) that set — dropping size containment
+		   and breaking `contain-intrinsic-size`. */
 		content-visibility: auto;
 		contain-intrinsic-size: 280px;
 	}
@@ -130,8 +132,17 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
-	/* Per-stype accent — mirrors the `.group-chip` colour map (CLAUDE.md).
-	   All chip-coloured stypes set an accent so the rail matches the chip. */
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
+	.card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 3px;
+		background: var(--card-accent, var(--border));
+	}
+	/* Per-stype accent — mapping documented in CLAUDE.md. */
 	.card[data-stype='retrieval'] {
 		--card-accent: var(--tint-purple-fg);
 	}
@@ -146,18 +157,6 @@
 	}
 	.card[data-stype='semantic-similarity'] {
 		--card-accent: var(--tint-pink-fg);
-	}
-	.card[data-stype='reranking'] {
-		--card-accent: var(--tint-amber-fg);
-	}
-	.card[data-stype='instruction-reranking'] {
-		--card-accent: var(--tint-orange-fg);
-	}
-	.card[data-stype='bitext-mining'] {
-		--card-accent: var(--tint-azure-fg);
-	}
-	.card[data-stype='summarization'] {
-		--card-accent: var(--tint-teal-fg);
 	}
 	.card-head {
 		display: flex;

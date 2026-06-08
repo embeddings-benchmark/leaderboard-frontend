@@ -1,4 +1,5 @@
 import { PUBLIC_API_URL } from '$env/static/public';
+import type { ModelMeta } from './types';
 
 /**
  * Insert a space before each new capitalized word so CamelCase task type
@@ -103,6 +104,30 @@ export function fmtCompact(n: number | null | undefined): string {
 }
 
 /**
+ * Shared `Intl.Collator` — ~2x the throughput of `String.prototype.localeCompare`
+ * because it avoids the per-call options-parsing cost. Use for any non-trivial
+ * (>50 items) sort and for hot per-keystroke comparators.
+ */
+export const COLLATOR = new Intl.Collator(undefined, { sensitivity: 'base' });
+
+/**
+ * Lowercased "name\ndisplayName\norg" key for a model — substring search in
+ * the name-query filter hits this single string instead of three separate
+ * `.toLowerCase()` calls per row per keystroke. Memoised by `ModelMeta`
+ * identity so a row that survives multiple keystrokes pays the cost once.
+ */
+// eslint-disable-next-line svelte/prefer-svelte-reactivity
+const _modelSearchKeyCache = new WeakMap<ModelMeta, string>();
+export function modelSearchKey(m: ModelMeta): string {
+	let v = _modelSearchKeyCache.get(m);
+	if (v === undefined) {
+		v = `${m.name}\n${m.displayName}\n${m.org}`.toLowerCase();
+		_modelSearchKeyCache.set(m, v);
+	}
+	return v;
+}
+
+/**
  * Split a parameter count (in billions) into a value + unit pair, so
  * tables can right-align the number and left-align the unit. ``0`` →
  * ``("—", "")``; ``≥1`` keeps billions; ``<1`` switches to millions.
@@ -115,6 +140,16 @@ export function fmtParamsValue(b: number): string {
 export function fmtParamsUnit(b: number): string {
 	if (b === 0) return '';
 	return b >= 1 ? 'B' : 'M';
+}
+
+/**
+ * One-string formatter for billion-scale params. `sep` lets callers pick
+ * tight (`"1.5B"`, default) or spaced (`"1.5 B"`) units; the spaced form
+ * suits the hover-card layout. Returns `"—"` for null/0.
+ */
+export function fmtParamsCompact(b: number | null | undefined, sep = ''): string {
+	if (!b) return '—';
+	return b >= 1 ? `${b.toFixed(1)}${sep}B` : `${(b * 1000).toFixed(0)}${sep}M`;
 }
 
 /** Direction of a sortable column. */
@@ -341,4 +376,24 @@ export function nextSort<K extends string>(
 		return { key: clickedKey, dir: currentDir === 'asc' ? 'desc' : 'asc' };
 	}
 	return { key: null, dir: currentDir };
+}
+
+/**
+ * Partition `rows` so pinned ones come first, others keep their order.
+ * Returns the input array unchanged when nothing is pinned. Callers should
+ * pass `pinnedCount` (typically `pinnedModels.size`) so the helper can
+ * short-circuit before walking every row — the common-case state is zero
+ * pins, where the partition pass would be pure waste.
+ */
+export function floatPinnedToTop<T>(
+	rows: readonly T[],
+	isPinned: (r: T) => boolean,
+	pinnedCount?: number
+): T[] {
+	if (rows.length === 0 || pinnedCount === 0) return rows as T[];
+	const pinned: T[] = [];
+	const unpinned: T[] = [];
+	for (const r of rows) (isPinned(r) ? pinned : unpinned).push(r);
+	if (pinned.length === 0) return rows as T[];
+	return [...pinned, ...unpinned];
 }

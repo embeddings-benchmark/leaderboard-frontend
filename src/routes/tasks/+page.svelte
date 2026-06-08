@@ -8,11 +8,18 @@
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import TaskCard from '$lib/components/TaskCard.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
+	import { COLLATOR } from '$lib/format';
+	import { getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 
 	interface TaskEntry {
 		name: string;
+		// Lowercased name cached at load — the name-search keystroke filter
+		// runs 1700x per recompute, so a per-entry `.toLowerCase()` would
+		// allocate 1700 strings per stroke. Memoised once here.
+		nameLower: string;
 		type: string;
 		simplifiedType: string;
 		languages: string[];
@@ -21,6 +28,9 @@
 		description: string;
 		benchmarks: string[];
 		mainScore: string;
+		// Distinct models evaluated on this task — backend overlay from the
+		// unified results frame. `0` for tasks the cache hasn't filled in.
+		numModels: number;
 	}
 
 	// Curated order — matches the `.type-pill[data-stype=…]` palette below.
@@ -56,34 +66,62 @@
 						occurrences.set(t, list);
 					}
 				}
-				const entries: TaskEntry[] = tasks.map((m) => ({
-					name: m.name,
-					type: m.type,
-					simplifiedType: m.simplifiedType ?? m.type?.toLowerCase() ?? '',
-					languages: m.languages ?? [],
-					domains: m.domains ?? [],
-					// Fallback for the old `modality: str` payload shape.
-					modalities:
+				// Build entries + extract every facet in one pass over the
+				// 1700+ task registry. The original code ran four separate
+				// `flatMap()` passes (one per facet), each allocating a fresh
+				// intermediate array; this fuses them into a single walk.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const modSet = new Set<string>();
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const domSet = new Set<string>();
+				// Count per language so the filter pills sort by popularity.
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const langCount = new Map<string, number>();
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const presentSet = new Set<string>();
+				const entries: TaskEntry[] = new Array(tasks.length);
+				for (let i = 0; i < tasks.length; i++) {
+					const m = tasks[i];
+					const simplifiedType = m.simplifiedType ?? m.type?.toLowerCase() ?? '';
+					const modalities =
 						m.modalities ??
 						((m as unknown as { modality?: string }).modality
 							? [(m as unknown as { modality: string }).modality]
-							: []),
-					description: m.description ?? '',
-					benchmarks: occurrences.get(m.name) ?? [],
-					mainScore: m.mainScore ?? ''
-				}));
-				entries.sort((a, b) => a.name.localeCompare(b.name));
+							: []);
+					const languages = m.languages ?? [];
+					const domains = m.domains ?? [];
+					entries[i] = {
+						name: m.name,
+						nameLower: m.name.toLowerCase(),
+						type: m.type,
+						simplifiedType,
+						languages,
+						domains,
+						modalities,
+						description: m.description ?? '',
+						benchmarks: occurrences.get(m.name) ?? [],
+						mainScore: m.mainScore ?? '',
+						numModels: m.numModels ?? 0
+					};
+					presentSet.add(simplifiedType);
+					for (const x of modalities) modSet.add(x);
+					for (const x of domains) domSet.add(x);
+					for (const x of languages) langCount.set(x, (langCount.get(x) ?? 0) + 1);
+				}
+				entries.sort((a, b) => COLLATOR.compare(a.name, b.name));
 				ALL_TASKS = entries;
-				const presentSet = new Set(entries.map((t) => t.simplifiedType));
 				// Curated order first, then any extras alphabetised.
 				SIMPLIFIED_PRESENT = [
 					...SIMPLIFIED_TYPES.filter((t) => presentSet.has(t)),
 					...[...presentSet].filter((t) => !SIMPLIFIED_TYPES.includes(t as never)).sort()
 				];
 
-				MODALITIES = Array.from(new Set(entries.flatMap((t) => t.modalities))).sort();
-				DOMAINS = Array.from(new Set(entries.flatMap((t) => t.domains))).sort();
-				LANGUAGES = Array.from(new Set(entries.flatMap((t) => t.languages))).sort();
+				MODALITIES = [...modSet].sort();
+				DOMAINS = [...domSet].sort();
+				// Descending by usage count, alphabetical tie-break.
+				LANGUAGES = [...langCount.entries()]
+					.sort((a, b) => b[1] - a[1] || COLLATOR.compare(a[0], b[0]))
+					.map(([l]) => l);
 				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
@@ -97,6 +135,7 @@
 	});
 
 	const SORTS = [
+		{ id: 'models', label: 'Model count' },
 		{ id: 'name', label: 'Name' },
 		{ id: 'type', label: 'Type' },
 		{ id: 'benchmarks', label: 'Benchmark count' },
@@ -106,6 +145,7 @@
 	type SortId = (typeof SORTS)[number]['id'];
 	type SortDir = 'asc' | 'desc';
 	const NATURAL_DIR: Record<SortId, SortDir> = {
+		models: 'desc',
 		name: 'asc',
 		type: 'asc',
 		benchmarks: 'desc',
@@ -123,8 +163,26 @@
 	let sidebarCollapsed = $state(
 		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 	);
-	let sort = $state<SortId>('name');
-	let sortDir = $state<SortDir>(NATURAL_DIR.name);
+	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
+	// page and back via the browser restores the user's sort choice.
+	const SORT_IDS = new Set(SORTS.map((s) => s.id));
+	const DEFAULT_SORT: SortId = 'models';
+	const _urlSort = getParam('s.tasks');
+	const _urlDir = getParam('d.tasks');
+	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
+		? (_urlSort as SortId)
+		: DEFAULT_SORT;
+	let sort = $state<SortId>(initialSort);
+	let sortDir = $state<SortDir>(
+		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
+	);
+	$effect(() => {
+		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
+		updateUrl({
+			's.tasks': isDefault ? null : sort,
+			'd.tasks': isDefault ? null : sortDir
+		});
+	});
 
 	function onSortKeyChange(next: SortId) {
 		sort = next;
@@ -179,23 +237,11 @@
 	});
 
 	let languageQuery = $state('');
-	let languagesExpanded = $state(false);
-	const LANGUAGE_CAP = 40;
 	let filteredLanguages = $derived.by(() => {
 		const q = languageQuery.trim().toLowerCase();
 		if (!q) return LANGUAGES;
 		return LANGUAGES.filter((l) => l.toLowerCase().includes(q));
 	});
-	// Show only the first ``LANGUAGE_CAP`` matches by default — the full
-	// registry holds ~1100 entries and a 21k-px scroll port is unusable.
-	// `languagesExpanded` flips on "Show all" and stays on for the rest
-	// of the session; the search input narrows the list and bypasses the
-	// cap when matches fit comfortably.
-	let visibleLanguages = $derived(
-		languagesExpanded || filteredLanguages.length <= LANGUAGE_CAP
-			? filteredLanguages
-			: filteredLanguages.slice(0, LANGUAGE_CAP)
-	);
 
 	const SIMPLIFIED_RANK: Record<string, number> = Object.fromEntries(
 		SIMPLIFIED_TYPES.map((t, i) => [t, i])
@@ -218,11 +264,11 @@
 		const domainOff = domainFilter.size === DOMAINS.length;
 		const languageOff = languageFilter.size === LANGUAGES.length;
 		return ALL_TASKS.filter((t) => {
-			if (q && !t.name.toLowerCase().includes(q)) return false;
+			if (q && !t.nameLower.includes(q)) return false;
 			if (!typeOff && !typeFilter.has(t.simplifiedType)) return false;
-			if (!modalityOff && !(t.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
-			if (!domainOff && !(t.domains ?? []).some((d) => domainFilter.has(d))) return false;
-			if (!languageOff && !(t.languages ?? []).some((l) => languageFilter.has(l))) return false;
+			if (!modalityOff && !t.modalities.some((m) => modalityFilter.has(m))) return false;
+			if (!domainOff && !t.domains.some((d) => domainFilter.has(d))) return false;
+			if (!languageOff && !t.languages.some((l) => languageFilter.has(l))) return false;
 			return true;
 		});
 	});
@@ -233,20 +279,22 @@
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
-				cmp = a.name.localeCompare(b.name);
+				cmp = COLLATOR.compare(a.name, b.name);
 			} else if (sort === 'type') {
 				const r = typeRank(a.simplifiedType) - typeRank(b.simplifiedType);
-				cmp = r !== 0 ? r : a.simplifiedType.localeCompare(b.simplifiedType);
+				cmp = r !== 0 ? r : COLLATOR.compare(a.simplifiedType, b.simplifiedType);
 			} else if (sort === 'benchmarks') {
 				cmp = a.benchmarks.length - b.benchmarks.length;
 			} else if (sort === 'languages') {
 				cmp = a.languages.length - b.languages.length;
+			} else if (sort === 'models') {
+				cmp = a.numModels - b.numModels;
 			} else if (sort === 'metric') {
-				cmp = a.mainScore.localeCompare(b.mainScore);
+				cmp = COLLATOR.compare(a.mainScore, b.mainScore);
 			} else {
 				cmp = 0;
 			}
-			if (cmp === 0) return a.name.localeCompare(b.name);
+			if (cmp === 0) return COLLATOR.compare(a.name, b.name);
 			return sortDir === 'asc' ? cmp : -cmp;
 		});
 		return list;
@@ -320,65 +368,69 @@
 			</p>
 		</header>
 
+		<!-- Toolbar stays outside the loading branch so the search input +
+		     sort widget are interactive immediately and the cards land in
+		     the same position they'd be without the skeleton. The match
+		     count hides while data loads to avoid the misleading "0/0". -->
+		<div class="toolbar">
+			<SearchInput
+				bind:value={query}
+				placeholder="Search tasks by name…"
+				ariaLabel="Search tasks"
+			/>
+			<div class="sort">
+				<label for="sort-select">Sort by</label>
+				<select
+					id="sort-select"
+					value={sort}
+					onchange={(e) =>
+						onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
+				>
+					{#each SORTS as s (s.id)}
+						<option value={s.id}>{s.label}</option>
+					{/each}
+				</select>
+				<button
+					type="button"
+					class="dir-btn"
+					onclick={toggleSortDir}
+					aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+					title={sortDir === 'asc'
+						? 'Ascending (click for descending)'
+						: 'Descending (click for ascending)'}
+				>
+					<SortDirIcon dir={sortDir} />
+				</button>
+			</div>
+			{#if !loadingData && !loadError}
+				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
+			{/if}
+		</div>
+
 		{#if loadingData}
-			<p class="empty">Loading tasks…</p>
+			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load tasks: {loadError}</p>
+		{:else if filtered.length === 0}
+			<p class="empty">No tasks match those filters.</p>
 		{:else}
-			<div class="toolbar">
-				<SearchInput
-					bind:value={query}
-					placeholder="Search tasks by name…"
-					ariaLabel="Search tasks"
-				/>
-				<div class="sort">
-					<label for="sort-select">Sort by</label>
-					<select
-						id="sort-select"
-						value={sort}
-						onchange={(e) =>
-							onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
-					>
-						{#each SORTS as s (s.id)}
-							<option value={s.id}>{s.label}</option>
-						{/each}
-					</select>
-					<button
-						type="button"
-						class="dir-btn"
-						onclick={toggleSortDir}
-						aria-label={sortDir === 'asc' ? 'Ascending' : 'Descending'}
-						title={sortDir === 'asc'
-							? 'Ascending (click for descending)'
-							: 'Descending (click for ascending)'}
-					>
-						<SortDirIcon dir={sortDir} />
-					</button>
-				</div>
-				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
+			<div class="grid" data-loaded>
+				{#each visibleTasks as t (t.name)}
+					<TaskCard
+						name={t.name}
+						type={t.type}
+						simplifiedType={t.simplifiedType}
+						description={t.description}
+						modalities={t.modalities}
+						stats={[
+							{ label: 'Benchmarks', value: t.benchmarks.length },
+							{ label: 'Languages', value: t.languages.length },
+							{ label: 'Models', value: t.numModels },
+							{ label: 'Main metric', value: t.mainScore || '—', variant: 'metric' }
+						]}
+					/>
+				{/each}
 			</div>
-
-			{#if filtered.length === 0}
-				<p class="empty">No tasks match those filters.</p>
-			{:else}
-				<div class="grid" data-loaded>
-					{#each visibleTasks as t (t.name)}
-						<TaskCard
-							name={t.name}
-							type={t.type}
-							simplifiedType={t.simplifiedType}
-							description={t.description}
-							modalities={t.modalities}
-							stats={[
-								{ label: 'Benchmarks', value: t.benchmarks.length },
-								{ label: 'Languages', value: t.languages.length },
-								{ label: 'Domains', value: t.domains.length },
-								{ label: 'Main metric', value: t.mainScore || '—', variant: 'metric' }
-							]}
-						/>
-					{/each}
-				</div>
-			{/if}
 		{/if}
 	</main>
 
@@ -467,7 +519,7 @@
 					</div>
 				</div>
 
-				<div class="group">
+				<div class="group grow">
 					<div class="group-head">
 						<span class="group-label">Language</span>
 						<button type="button" class="link-btn" onclick={toggleAllLanguages}>
@@ -480,17 +532,8 @@
 						placeholder="Search languages…"
 						bind:value={languageQuery}
 					/>
-					<!-- Cap collapsed; on expand we drop the .scroll wrapper so the
-					     full list flows in the sidebar (and the page scroll handles
-					     overflow). Keeping the inner 320 px scrollport on expand
-					     was the bug — visually nothing changed at the top, so
-					     "Show all" looked like it added empty space below. -->
-					<div
-						class="pills"
-						class:scroll={!languagesExpanded}
-						class:scroll-thin={!languagesExpanded}
-					>
-						{#each visibleLanguages as l (l)}
+					<div class="pills scroll scroll-thin">
+						{#each filteredLanguages as l (l)}
 							<label class="pill type-fill">
 								<input
 									type="checkbox"
@@ -500,19 +543,10 @@
 								<span>{l}</span>
 							</label>
 						{/each}
-						{#if visibleLanguages.length === 0}
+						{#if filteredLanguages.length === 0}
 							<p class="muted no-match">No languages match.</p>
 						{/if}
 					</div>
-					{#if filteredLanguages.length > LANGUAGE_CAP}
-						<button
-							type="button"
-							class="link-btn show-more-btn"
-							onclick={() => (languagesExpanded = !languagesExpanded)}
-						>
-							{languagesExpanded ? 'Show fewer' : `Show all ${filteredLanguages.length}`}
-						</button>
-					{/if}
 				</div>
 			</div>
 		{/if}

@@ -1,7 +1,8 @@
 import { untrack } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 
-import type { BenchmarkSummary, ModelType, TaskMeta } from '$lib/types';
+import type { BenchmarkSummary, ModelType, SummaryRow, TaskMeta } from '$lib/types';
+import { modelSearchKey } from '$lib/format';
 import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
 
 export type ZeroShotMode = 'allow_all' | 'remove_unknown' | 'only_zero_shot';
@@ -24,6 +25,10 @@ export const MODEL_TYPES: ModelType[] = [
 
 export const MODEL_MODALITIES = ['text', 'image', 'audio', 'video'] as const;
 export type ModelModality = (typeof MODEL_MODALITIES)[number];
+
+// Shared default for models whose `modalities` field is missing — avoids
+// allocating a fresh `['text']` array per row in the hot filter pass.
+const TEXT_ONLY: readonly string[] = ['text'];
 
 interface FiltersState {
 	// model filters
@@ -110,16 +115,19 @@ function createFilters() {
 		/* eslint-disable svelte/prefer-svelte-reactivity */
 		const domains = new Set<string>();
 		const modalities = new Set<string>();
-		const languages = new Set<string>();
+		// Count per language so the filter pills sort by popularity.
+		const languageCount = new Map<string, number>();
 		/* eslint-enable svelte/prefer-svelte-reactivity */
 		for (const t of summary.tasksMeta) {
 			for (const d of t.domains ?? []) domains.add(d);
 			for (const m of t.modalities ?? []) modalities.add(m);
-			for (const l of t.languages ?? []) languages.add(l);
+			for (const l of t.languages ?? []) languageCount.set(l, (languageCount.get(l) ?? 0) + 1);
 		}
 		const sortedDomains = [...domains].sort();
 		const sortedModalities = [...modalities].sort();
-		const sortedLanguages = [...languages].sort();
+		const sortedLanguages = [...languageCount.entries()]
+			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+			.map(([l]) => l);
 
 		// Bracket the size slider to this benchmark's actual models. We ignore
 		// proprietary/unknown-size models (totalParamsB === 0) when computing
@@ -509,24 +517,48 @@ function isFullSet(selected: Set<string>, available: string[]): boolean {
 	return available.every((x) => selected.has(x));
 }
 
-export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
-	// Visible tasks: pass type / domain / modality / explicit task selection.
-	// Language is intentionally NOT in this list — the backend already
-	// returns a language-scoped summary (via `?languages=` on /scores),
-	// so re-filtering tasks client-side by language would either be a
-	// no-op (server-trimmed lists already match) or drift wrong while
-	// the debounced refetch is in flight (showing the previous summary's
-	// task slots with current-filter narrowing produces invented values).
+// Cached per `summary` + task-filter signature so name-search keystrokes
+// reuse the previous visibleTasks / Sets / per-row aggregate cache.
+interface NarrowingResult {
+	signature: string;
+	fullView: boolean;
+	visibleTasks: TaskMeta[];
+	taskTypesOut: string[];
+	taskNamesOut: string[];
+	tasksByType: Map<string, string[]>;
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	perRowAgg: WeakMap<
+		SummaryRow,
+		{ meanTask: number | null; meanTaskType: number | null; scoresByTaskType: Record<string, number> }
+	>;
+	// Per-task sorted (name, score) lists — backs the Borda cache,
+	// independent of the row filter (intersected at compute time).
+	sortedByTask: Map<string, readonly { name: string; v: number }[]>;
+}
+// eslint-disable-next-line svelte/prefer-svelte-reactivity
+const _narrowingCache = new WeakMap<BenchmarkSummary, NarrowingResult>();
+
+function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResult {
+	// Signature of every input that flips `fullView` or changes
+	// `visibleTasks`; sets sorted so iteration order is stable.
+	const sig = [
+		lenient ? 'L' : 'S',
+		[...filters.taskTypes].sort().join('|'),
+		[...filters.domains].sort().join('|'),
+		[...filters.modalities].sort().join('|'),
+		[...filters.tasks].sort().join('|'),
+		filters.availableDomains.length,
+		filters.availableModalities.length
+	].join('§');
+	const cached = _narrowingCache.get(summary);
+	if (cached && cached.signature === sig) return cached;
+
 	const fullTypes = isFullSet(filters.taskTypes, summary.taskTypes);
 	const fullDomains = isFullSet(filters.domains, filters.availableDomains);
 	const fullModalities = isFullSet(filters.modalities, filters.availableModalities);
 	const fullTasks = isFullSet(filters.tasks, summary.tasks);
 	const fullView = fullTypes && fullDomains && fullModalities && fullTasks;
 
-	// Skip the `.filter()` allocation when no task-affecting filter is active —
-	// `visibleTasks === summary.tasksMeta`, `taskTypesOut === summary.taskTypes`,
-	// `taskNamesOut === summary.tasks`. Saves the alloc + Set creation on the
-	// common "user is only typing in the name search box" path.
 	let visibleTasks: TaskMeta[];
 	let taskTypesOut: string[];
 	let taskNamesOut: string[];
@@ -562,6 +594,35 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		}
 	}
 
+	const result: NarrowingResult = {
+		signature: sig,
+		fullView,
+		visibleTasks,
+		taskTypesOut,
+		taskNamesOut,
+		tasksByType,
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		perRowAgg: new WeakMap(),
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		sortedByTask: new Map()
+	};
+	_narrowingCache.set(summary, result);
+	return result;
+}
+
+export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
+	// Visible tasks: pass type / domain / modality / explicit task selection.
+	// Language is intentionally NOT in this list — the backend already
+	// returns a language-scoped summary (via `?languages=` on /scores),
+	// so re-filtering tasks client-side by language would either be a
+	// no-op (server-trimmed lists already match) or drift wrong while
+	// the debounced refetch is in flight (showing the previous summary's
+	// task slots with current-filter narrowing produces invented values).
+	const lenient =
+		filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
+	const narrow = narrowTasks(summary, lenient);
+	const { fullView, visibleTasks, taskTypesOut, taskNamesOut, tasksByType, perRowAgg } = narrow;
+
 	const q = filters.nameQuery.trim().toLowerCase();
 	// "Did the user pick something that narrows the row set, other than
 	// typing in the name search?" — name search is a find-in-table
@@ -577,123 +638,131 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		filters.modelModalities.size !== MODEL_MODALITIES.length ||
 		filters.sizeActive ||
 		filters.zeroShot !== 'allow_all';
-	const rows = summary.rows
-		.filter((row) => {
-			const m = row.model;
-			if (
-				q &&
-				!m.name.toLowerCase().includes(q) &&
-				!m.displayName.toLowerCase().includes(q) &&
-				!m.org.toLowerCase().includes(q)
-			) {
-				return false;
+	const passesRowFilter = (row: SummaryRow): boolean => {
+		const m = row.model;
+		if (q && !modelSearchKey(m).includes(q)) return false;
+		if (filters.availability === 'open' && !m.openWeights) return false;
+		if (filters.availability === 'proprietary' && m.openWeights) return false;
+
+		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
+		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
+
+		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
+
+		// Empty pick set = "deselect everything" = nothing matches.
+		// Full pick set = filter off. Partial = intersection check.
+		if (!filters.modelTypes.has(m.modelType)) return false;
+
+		if (filters.modelModalities.size < MODEL_MODALITIES.length) {
+			const mm = m.modalities ?? TEXT_ONLY;
+			let any = false;
+			for (const x of mm) {
+				if (filters.modelModalities.has(x)) {
+					any = true;
+					break;
+				}
 			}
-			if (filters.availability === 'open' && !m.openWeights) return false;
-			if (filters.availability === 'proprietary' && m.openWeights) return false;
+			if (!any) return false;
+		}
 
-			if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
-			if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
+		// Size filter is inactive until the user actually moves the slider.
+		// Once active, it both applies the [min, max] bracket AND drops
+		// unsized (proprietary) models — a deliberate "you opted in to
+		// filtering by size, so rows that can't satisfy it shouldn't pass".
+		if (filters.sizeActive) {
+			if (m.totalParamsB <= 0) return false;
+			const paramsM = m.totalParamsB * 1000;
+			if (paramsM < filters.minModelSizeM) return false;
+			if (paramsM > filters.maxModelSizeM) return false;
+		}
 
-			if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
+		if (filters.zeroShot === 'only_zero_shot' && row.zeroShotPct !== 100) return false;
+		if (filters.zeroShot === 'remove_unknown' && row.zeroShotPct === -1) return false;
 
-			// Empty pick set = "deselect everything" = nothing matches.
-			// Full pick set = filter off. Partial = intersection check.
-			if (!filters.modelTypes.has(m.modelType)) return false;
+		return true;
+	};
 
-			if (filters.modelModalities.size < MODEL_MODALITIES.length) {
-				const mm = m.modalities ?? ['text'];
-				if (!mm.some((x) => filters.modelModalities.has(x))) return false;
+	// fullView: aggregates are unchanged from the API, so skip the per-row
+	// `{...row, ...}` spread + recompute. Big win for the common case where
+	// the user is just typing in name search or toggling a row facet.
+	let rows: SummaryRow[];
+	if (fullView) {
+		rows = summary.rows.filter(passesRowFilter);
+	} else {
+		// Under task narrowing: recompute every aggregate from the visible
+		// per-task scalars. Aggregation policy mirrors the backend:
+		//   • No language filter  → strict (`_skipna_false_mean`): null on
+		//     any missing task in the visible slice, so partial-coverage
+		//     models can't outrank full-coverage peers.
+		//   • Language filter ON  → lenient: the backend already switched
+		//     to lenient means for the language-scoped summary.
+		// Memoised by `(row identity, narrow signature)` — a name-search
+		// keystroke under a fixed task filter reuses every survivor's cache.
+		// Lenient: any present value contributes. Strict: all values must be
+		// present for a non-null mean — matches the backend's
+		// `_skipna_false_mean` policy.
+		const meanOrNull = (sum: number, n: number, total: number): number | null => {
+			if (lenient) return n > 0 ? sum / n : null;
+			return total > 0 && n === total ? sum / total : null;
+		};
+		const computeAgg = (row: SummaryRow) => {
+			let taskSum = 0;
+			let taskN = 0;
+			for (const t of taskNamesOut) {
+				const v = row.scoresByTask[t];
+				if (v !== undefined) {
+					taskSum += v;
+					taskN++;
+				}
 			}
+			const meanTask = meanOrNull(taskSum, taskN, taskNamesOut.length);
 
-			// Size filter is inactive until the user actually moves the slider.
-			// Once active, it both applies the [min, max] bracket AND drops
-			// unsized (proprietary) models — a deliberate "you opted in to
-			// filtering by size, so rows that can't satisfy it shouldn't pass".
-			if (filters.sizeActive) {
-				if (m.totalParamsB <= 0) return false;
-				const paramsM = m.totalParamsB * 1000;
-				if (paramsM < filters.minModelSizeM) return false;
-				if (paramsM > filters.maxModelSizeM) return false;
-			}
-
-			if (filters.zeroShot === 'only_zero_shot' && row.zeroShotPct !== 100) return false;
-			if (filters.zeroShot === 'remove_unknown' && row.zeroShotPct === -1) return false;
-
-			return true;
-		})
-		.map((row) => {
-			// Under filter: recompute every aggregate from the visible per-task
-			// scalars. Aggregation policy mirrors the backend:
-			//   • No language filter  → strict (`_skipna_false_mean`): null on
-			//     any missing task in the visible slice, so partial-coverage
-			//     models can't outrank full-coverage peers.
-			//   • Language filter ON  → lenient: the backend already switched
-			//     to lenient means for the language-scoped summary (most
-			//     models don't run every task in every language, so strict
-			//     would null nearly every cell). Mirror it here so layering
-			//     a task-type or domain filter on top of a language pick
-			//     doesn't suddenly empty the table again.
-			// `fullView` excludes languages by design, so a pure language
-			// narrowing keeps `fullView === true` and skips this branch.
-			let meanTask: number | null = row.meanTask;
-			let meanTaskType: number | null = row.meanTaskType;
-			let scoresByTaskType: Record<string, number> = row.scoresByTaskType;
-			if (!fullView) {
-				const lenient =
-					filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
-				let taskSum = 0;
-				let taskN = 0;
-				for (const t of taskNamesOut) {
-					const v = row.scoresByTask[t];
+			const scoresByTaskType: Record<string, number> = {};
+			for (const tt of taskTypesOut) {
+				const typeTasks = tasksByType.get(tt);
+				if (!typeTasks || typeTasks.length === 0) continue;
+				let typeSum = 0;
+				let typeN = 0;
+				for (const name of typeTasks) {
+					const v = row.scoresByTask[name];
 					if (v !== undefined) {
-						taskSum += v;
-						taskN++;
+						typeSum += v;
+						typeN++;
 					}
 				}
-				if (lenient) {
-					meanTask = taskN > 0 ? taskSum / taskN : null;
-				} else {
-					meanTask =
-						taskNamesOut.length > 0 && taskN === taskNamesOut.length ? taskSum / taskN : null;
-				}
-
-				scoresByTaskType = {};
-				for (const tt of taskTypesOut) {
-					const typeTasks = tasksByType.get(tt);
-					if (!typeTasks || typeTasks.length === 0) continue;
-					let typeSum = 0;
-					let typeN = 0;
-					for (const name of typeTasks) {
-						const v = row.scoresByTask[name];
-						if (v !== undefined) {
-							typeSum += v;
-							typeN++;
-						}
-					}
-					if (lenient ? typeN > 0 : typeN === typeTasks.length) {
-						scoresByTaskType[tt] = typeSum / typeN;
-					}
-				}
-
-				let mttSum = 0;
-				let mttN = 0;
-				for (const tt of taskTypesOut) {
-					const v = scoresByTaskType[tt];
-					if (v !== undefined) {
-						mttSum += v;
-						mttN++;
-					}
-				}
-				if (lenient) {
-					meanTaskType = mttN > 0 ? mttSum / mttN : null;
-				} else {
-					meanTaskType =
-						taskTypesOut.length > 0 && mttN === taskTypesOut.length ? mttSum / mttN : null;
-				}
+				const typeMean = meanOrNull(typeSum, typeN, typeTasks.length);
+				if (typeMean !== null) scoresByTaskType[tt] = typeMean;
 			}
 
-			return { ...row, meanTask, meanTaskType, scoresByTaskType };
-		});
+			let mttSum = 0;
+			let mttN = 0;
+			for (const tt of taskTypesOut) {
+				const v = scoresByTaskType[tt];
+				if (v !== undefined) {
+					mttSum += v;
+					mttN++;
+				}
+			}
+			const meanTaskType = meanOrNull(mttSum, mttN, taskTypesOut.length);
+			return { meanTask, meanTaskType, scoresByTaskType };
+		};
+
+		rows = [];
+		for (const row of summary.rows) {
+			if (!passesRowFilter(row)) continue;
+			let agg = perRowAgg.get(row);
+			if (!agg) {
+				agg = computeAgg(row);
+				perRowAgg.set(row, agg);
+			}
+			rows.push({
+				...row,
+				meanTask: agg.meanTask,
+				meanTaskType: agg.meanTaskType,
+				scoresByTaskType: agg.scoresByTaskType
+			});
+		}
+	}
 
 	// Re-rank to match what the user is actually looking at:
 	//   • Task set narrowed (`!fullView`) → fresh Borda over the visible
@@ -716,23 +785,46 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			rankedRows = rows;
 		}
 	} else {
+		// Per-task sorted (name, score) lists, cached once per (summary,
+		// taskNamesOut). Borda for the visible set walks each list and
+		// skips names not in `visibleNames`.
+		const { sortedByTask } = narrow;
+		if (sortedByTask.size === 0) {
+			for (const taskName of taskNamesOut) {
+				const ranked: { name: string; v: number }[] = [];
+				for (const r of summary.rows) {
+					const v = r.scoresByTask[taskName];
+					if (v !== undefined) ranked.push({ name: r.model.name, v });
+				}
+				// Stable tie-break by name so tied scores award deterministic
+				// points regardless of `summary.rows` order.
+				ranked.sort((a, b) => b.v - a.v || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+				sortedByTask.set(taskName, ranked);
+			}
+		}
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const visibleNames = new Set<string>();
+		for (const r of rows) visibleNames.add(r.model.name);
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const bordaPoints = new Map<string, number>();
 		for (const taskName of taskNamesOut) {
-			const ranked = rows
-				.map((r) => ({ name: r.model.name, v: r.scoresByTask[taskName] }))
-				.filter((r): r is { name: string; v: number } => r.v !== undefined)
-				.sort((a, b) => b.v - a.v);
-			ranked.forEach((r, i) => {
-				bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (ranked.length - i));
-			});
+			const ranked = sortedByTask.get(taskName);
+			if (!ranked) continue;
+			// Visible count per task — Borda awards `visibleCount - rank`.
+			let visibleCount = 0;
+			for (const r of ranked) if (visibleNames.has(r.name)) visibleCount++;
+			let i = 0;
+			for (const r of ranked) {
+				if (!visibleNames.has(r.name)) continue;
+				bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (visibleCount - i));
+				i++;
+			}
 		}
 		rankedRows = rows
 			.map((row) => ({ row, borda: bordaPoints.get(row.model.name) ?? 0 }))
 			.sort((a, b) => {
 				if (a.borda !== b.borda) return b.borda - a.borda;
-				// Tiebreak: higher Mean(Task) first; nulls (incomplete coverage)
-				// land at the bottom of any tie.
+				// Tiebreak: higher Mean(Task) first; nulls to bottom.
 				const am = a.row.meanTask ?? -Infinity;
 				const bm = b.row.meanTask ?? -Infinity;
 				return bm - am;

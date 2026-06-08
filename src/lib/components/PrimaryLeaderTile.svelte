@@ -1,11 +1,7 @@
 <script lang="ts">
-	// Primary leaderboard tile — big featured card with a top-per-size-
-	// bucket leader list. Whole card is clickable via a stretched-link
-	// pattern on `.prim-title::after`.
-
 	import { resolve } from '$app/paths';
 	import type { Benchmark, BenchmarkLeaders } from '$lib/types';
-	import { apiUrl, isIconUrl, splitModelName } from '$lib/format';
+	import { apiUrl, isIconUrl, slug, splitModelName } from '$lib/format';
 
 	type TintKey = 'multilingual' | 'retrieval' | 'english';
 
@@ -38,12 +34,16 @@
 	);
 </script>
 
-<article class="prim" data-key={tintKey}>
+<a
+	class="prim"
+	data-key={tintKey}
+	href={resolve('/benchmark/[name]', { name: slug(benchmark.name) })}
+	aria-label={`Open ${benchmark.displayName} leaderboard`}
+>
 	<header class="prim-head">
 		<span class="prim-label">{label}</span>
-		<span class="prim-open" aria-hidden="true">Open →</span>
 	</header>
-	<a class="prim-title" href={resolve('/benchmark/[name]', { name: benchmark.name })}>
+	<div class="prim-title">
 		{#if benchmark.icon}
 			{#if isIconUrl(benchmark.icon)}
 				<img
@@ -60,10 +60,18 @@
 			{/if}
 		{/if}
 		<span class="prim-title-text">{benchmark.displayName}</span>
-	</a>
+	</div>
 	<span class="prim-sub">{benchmark.numModels ?? 0} models · {benchmark.tasks.length} tasks</span>
 	{#if leaders === 'loading' || leaders === undefined}
-		<div class="prim-state">Loading…</div>
+		<div class="prim-list-head">Top models</div>
+		<ul class="prim-buckets" aria-busy="true" aria-label="Loading leaders">
+			{#each [0, 1, 2, 3] as i (i)}
+				<li class="bucket">
+					<span class="skel bk-chip-skel"></span>
+					<span class="skel bk-name-skel"></span>
+				</li>
+			{/each}
+		</ul>
 	{:else if leaders === 'error'}
 		<div class="prim-state error">Couldn't load.</div>
 	{:else if orderedBuckets.every((bk) => !bk.leader)}
@@ -82,7 +90,7 @@
 			{/each}
 		</ul>
 	{/if}
-</article>
+</a>
 
 <style>
 	/* Accent-rail treatment, matching the benchmark/task/model cards: flat
@@ -94,16 +102,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		/* Extra left padding clears the rail. */
 		padding: 18px 18px 14px 22px;
-		/* Faint FLAT category wash over the whole tile (not a gradient band) —
-		   lifts the featured hero off the pure-white grid cards below without
-		   reintroducing the vibe-coded header gradient. Theme-aware via the
-		   tint token, so it stays subtle in both light and dark. */
-		background: color-mix(in srgb, var(--tint) 8%, var(--surface));
-		border: 1px solid color-mix(in srgb, var(--tint-fg) 18%, var(--border));
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 14px;
 		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
+		text-decoration: none;
+		color: inherit;
 		position: relative;
 		overflow: hidden;
 		transition:
@@ -111,37 +116,25 @@
 			border-color 0.14s,
 			box-shadow 0.14s;
 	}
-	/* Inset rounded marker rail — grows toward the edges on hover. No
-	   z-index, so the later-painted stretched-link `.prim-title::after`
-	   (transparent) stays on top and clicks still open the benchmark; the
-	   rail shows through it. */
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
 	.prim::before {
 		content: '';
 		position: absolute;
+		top: 0;
+		bottom: 0;
 		left: 0;
-		top: 16px;
-		bottom: 16px;
-		width: 4px;
-		border-radius: 0 4px 4px 0;
+		width: 3px;
 		background: var(--tint-fg);
-		transition:
-			top 0.14s ease,
-			bottom 0.14s ease;
-	}
-	.prim:hover::before {
-		top: 11px;
-		bottom: 11px;
 	}
 	.prim:hover {
 		transform: translateY(-1px);
 		border-color: color-mix(in srgb, var(--tint-fg) 45%, var(--border));
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.08);
 	}
-	.prim:hover .prim-title,
-	.prim:hover .prim-open {
+	.prim:hover .prim-title {
 		color: var(--tint-fg);
 	}
-	.prim:focus-within {
+	.prim:focus-visible {
 		outline: 2px solid var(--tint-fg);
 		outline-offset: 2px;
 	}
@@ -160,7 +153,6 @@
 	.prim-head {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 	}
 	.prim-label {
 		font-size: 11px;
@@ -169,19 +161,11 @@
 		letter-spacing: 0.08em;
 		color: var(--tint-fg);
 	}
-	.prim-open {
-		font-size: 12px;
-		font-weight: 700;
-		color: var(--tint-fg);
-		text-decoration: none;
-	}
 	.prim-title {
 		font-size: 19px;
 		font-weight: 700;
 		color: var(--ink-strong);
-		text-decoration: none;
 		margin-top: 2px;
-		position: static;
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
@@ -208,15 +192,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	.prim-title::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-	}
-	.prim-title:focus-visible {
-		outline: none;
 	}
 	.prim-sub {
 		font-size: 12px;
@@ -282,5 +257,16 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		min-width: 0;
+	}
+	/* Skeleton shapes for the loading state — sized to match the real
+	   chip + name row so the layer doesn't reflow when data lands. */
+	.bk-chip-skel {
+		justify-self: stretch;
+		height: 18px;
+		border-radius: 999px;
+	}
+	.bk-name-skel {
+		height: 14px;
+		width: 70%;
 	}
 </style>

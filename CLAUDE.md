@@ -9,7 +9,7 @@ SvelteKit + TypeScript + Svelte 5 (runes mode) port of the MTEB Gradio leaderboa
 - **Hugging Face Space** — `Dockerfile` at the repo root clones this branch, builds the static bundle, and serves it via nginx-unprivileged on port 7860. The bundle calls the mteb FastAPI backend (separate Space) over CORS.
 - **GitHub Pages** — `make deploy-build` produces a prerendered static site under `/leaderboardv2/`.
 
-The runtime data source is the **mteb FastAPI service** (`https://github.com/embeddings-benchmark/mteb`, branch `api`, source under `mteb/api/`). Mock data in `src/lib/data/mock*.ts` still exists for offline development but is gated behind `PUBLIC_USE_MOCK=1`.
+The runtime data source is the **mteb FastAPI service** (`https://github.com/embeddings-benchmark/mteb`, branch `api`, source under `mteb/api/`). `PUBLIC_API_URL` is required — there is no mock fallback.
 
 ## Commands
 
@@ -39,12 +39,12 @@ Playwright's webServer in `playwright.config.ts` runs `npm run build && npm run 
 
 ### Env
 
-`src/lib/data/service.ts` reads two `PUBLIC_*` env vars at build time (statically inlined by SvelteKit):
+Two `PUBLIC_*` env vars are read at build time (statically inlined by SvelteKit):
 
-- `PUBLIC_API_URL` — base URL of the mteb FastAPI service. **Required** unless `PUBLIC_USE_MOCK=1`. Set in `.env.local` for dev (`http://localhost:8000`) and as a `Dockerfile` `ENV` for the Space build.
-- `PUBLIC_USE_MOCK=1` — opt-in fallback to the deterministic mock generators when no backend is reachable.
+- `PUBLIC_API_URL` — base URL of the mteb FastAPI service. **Required.** Read by `src/lib/data/service.ts` (loaders), `src/lib/format.ts` (icon URL helper), and `src/lib/components/ShareMeta.svelte` (OG image URL). Set in `.env.local` for dev (`http://localhost:8000`) and as a `Dockerfile` `ENV` for the Space build. Loaders throw a descriptive error when unset so misconfiguration surfaces immediately instead of silently rendering empty tables.
+- `PUBLIC_SITE_URL` — canonical origin used by `svelte.config.js`'s `prerender.origin` and `ShareMeta` for canonical / OG URLs. Without it, prerendered HTML bakes in `http://sveltekit-prerender` origins. Baked into the Dockerfile and `deploy.yml`.
 
-Loaders throw a descriptive error if neither is set so misconfiguration surfaces immediately instead of silently rendering empty tables.
+`BASE_PATH` is the build-time path prefix (empty for the Space, `/leaderboardv2` for GitHub Pages). Mock fixtures and `PUBLIC_USE_MOCK` are gone — backend is required.
 
 ## High-level architecture
 
@@ -52,21 +52,23 @@ Loaders throw a descriptive error if neither is set so misconfiguration surfaces
 
 The `/explorer` prefix is gone — every route lives at the site root.
 
-| Route                        | Purpose                                                                                                                                 |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                          | Home: nested category menu of benchmark cards (shared card shell with `/benchmarks`)                                                    |
-| `/benchmarks`                | Full benchmark catalog + right-side sticky sidebar (Modality / Task type / Domain filters)                                              |
-| `/benchmark/[name]`          | Per-benchmark detail page: hero + tabs (Summary / Performance × Size / Performance × Time / Per task / Per language / Task information) |
-| `/models` + `/models/[name]` | Model index + detail (cards on the index, hero + per-benchmark score table on the detail)                                               |
-| `/tasks` + `/tasks/[name]`   | Task index + detail (same shape as models, sidebar mirrors `/benchmarks`)                                                               |
-| `/compare`                   | Pick up to 4 models, side-by-side metric cards with per-metric winners + radar                                                          |
+| Route                           | Purpose                                                                                                                                 |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                             | Home: three featured `PrimaryLeaderTile`s (Multilingual / Retrieval / English) + flat `MenuSection`s of secondary benchmarks            |
+| `/benchmarks`                   | Full benchmark catalog + right-side sticky sidebar (Modality / Task type / Domain filters)                                              |
+| `/benchmark/[name]`             | Per-benchmark detail page: hero + tabs (Summary / Performance × Size / Performance × Time / Per task / Per language / Task information) |
+| `/models` + `/models/[...name]` | Model index + detail. The rest-param accepts `org/name` (e.g. `Qwen/Qwen3-Embedding-8B`)                                                |
+| `/tasks` + `/tasks/[name]`      | Task index + detail (same shape as models, sidebar mirrors `/benchmarks`)                                                               |
+| `/compare`                      | Pick up to 4 models, side-by-side metric cards with per-metric winners + radar                                                          |
 
 Reusable building blocks under `src/lib/components/`:
 
-- **Tables / charts:** `SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `ModelScoreTable`, `PlotlyChart`, `TaskInfoTab`, `BenchmarkOverview`.
-- **Filters / picking:** `FilterSidebar`, `FilterContent`, `BenchmarkPicker`, `ModelSearchBar`, `MenuGroup`, `RangeSlider`.
-- **Shared toolbar widgets** (used by every overview's `.toolbar`): `SearchInput` (icon + clear button), `SortDirIcon` (lucide `arrow-up-narrow-wide` / `arrow-down-wide-narrow`), and `DownloadButton`.
+- **Tables / charts:** `SummaryTable`, `PerTaskTab`, `PerLanguageTab`, `ModelScoreTable`, `BenchScoreTable`, `PerfSizeTab`, `PerfTimeTab`, `PlotlyChart`, `TaskInfoTab`.
+- **Filters / picking:** `FilterSidebar`, `FilterContent`, `ModelSearchBar`, `RangeSlider`.
+- **Shared toolbar widgets** (used by every overview's `.toolbar`): `SearchInput` (icon + clear button), `SortDirIcon` (lucide `arrow-up-narrow-wide` / `arrow-down-wide-narrow`), and `DownloadButton`. `SortHeader` wraps a `<th>` with a sort button + ARIA, used by every model-row table.
 - **Floating actions** (rendered once per page, fixed positioning): `ShareUrlButton` (bottom-right, primary-accent pill) copies `window.location.href` with every filter param baked in. `ScrollToTopButton` (bottom-left, same accent treatment) fades in once `window.scrollY > 320`. They bookend the viewport — don't introduce a third floating affordance on either edge.
+- **Home tiles:** `PrimaryLeaderTile` (featured size-bucket leaderboards), `MenuSection` (secondary benchmark sections).
+- **Hover portals / popovers:** `HoverPortal`, `ModelHoverPortal`, `InfoDot` (the canonical hover-info dot — `InfoTip` was removed).
 - **Theming + misc:** `ThemeToggle`, `MarkdownText`, `CopyableId`, `ModalityIcon`, `ModelTypeIcon`, `Tabs`, `CiteBlock`.
 
 The top bar (root `+layout.svelte`) is a 3-column grid: MTEB brand · Benchmarks/Models/Tasks/Compare nav · GitHub + Documentation + Leaderboard external links + `ThemeToggle`.
@@ -74,28 +76,32 @@ The top bar (root `+layout.svelte`) is a 3-column grid: MTEB brand · Benchmarks
 ### Data flow
 
 ```
-mteb FastAPI                    src/lib/data/mock*.ts (fallback only)
-     │                                       │
-     └────────────┬──────────────────────────┘
-                  ↓
-        src/lib/data/service.ts   ← loadBenchmarkMenu / loadBenchmark / loadSummary / loadTasks / loadModelScores
-                  ↓
+mteb FastAPI (PUBLIC_API_URL + /v1)
+     │
+     ↓
+src/lib/data/service.ts   ← loadBenchmarkMenu / loadBenchmark(s) / loadSummary / loadPerLanguage
+                            loadLeaders / loadTasks / loadTask / loadTaskScores
+                            loadModels / loadModel / loadModelScores
+     │                      + session-scoped LRU `cachedHttp` (64 entries) + inflight dedupe
+     ↓
 src/lib/stores/leaderboard.svelte.ts  ← reactive selected/benchmark/summary, with inflight cancellation
 src/lib/stores/filters.svelte.ts      ← all filter state + applyFilters(summary)
 src/lib/stores/pinned.svelte.ts       ← Set<string> of pinned model names, shared across every table
-                  ↓
-       filteredSummary = applyFilters(leaderboard.summary)
+src/lib/stores/sort.svelte.ts         ← createSortState<K>() factory; URL-backed per-table sort
+     ↓
+filteredSummary = applyFilters(leaderboard.summary)
 ```
 
-`service.ts` is the only place that branches between live API and mocks — swap backends, change auth, change cache strategy here without touching anything downstream. `loadSummary` hits the canonical `/benchmarks/{name}/scores` route on the backend (the older `/summary` path is kept as a hidden alias until every deployed bundle is on the new one — don't introduce new callers of it).
+`service.ts` is the **only** place that calls `fetch()` — swap backends, change auth, change cache strategy here without touching anything downstream. All loaders hit `${API}/v1/...`. `loadSummary` hits `/benchmarks/{name}/scores`. Every response goes through `cachedHttp`, a bounded LRU keyed by URL with in-flight dedupe — re-opening a previously-visited page is a synchronous cache hit. Most route loaders are tiny pre-warmers that just call `loadFoo()` so the data is cached by the time the page renders; SvelteKit's `data-sveltekit-preload-data="hover"` hint pre-warms on link hover too. `PUBLIC_API_URL` is also read by `src/lib/format.ts` (`apiUrl()` for benchmark/task icon URLs) and `ShareMeta.svelte` (OG image URL), but neither fetches — both are URL builders, so the "only branch point" guarantee still holds.
 
 ### Stores (Svelte 5 runes singletons)
 
-All three stores under `src/lib/stores/*.svelte.ts` use the same pattern: a factory function that holds `$state(...)` inside a closure, returns an object with getters and mutators. **Read these before adding new state** — they're the canonical reference for the project's runes idioms. Notable shared-state behaviors:
+All four stores under `src/lib/stores/*.svelte.ts` use the same pattern: a factory function that holds `$state(...)` inside a closure, returns an object with getters and mutators. **Read these before adding new state** — they're the canonical reference for the project's runes idioms. Notable shared-state behaviors:
 
 - `leaderboard.select(name)` uses an `inflight` counter so quickly switching benchmarks discards stale async results.
 - `filters.initFor(summary)` is **write-only** — it never reads from `state.*` inside the effect that calls it. This avoids a re-fire loop where Svelte's deep-loop guard fires `effect_update_depth_exceeded` and freezes reactivity. If you add fields to the filter state, keep `initFor` write-only.
-- `pinnedModels` is shared — pinning in any table (SummaryTable, PerTask, PerLanguage) reflects everywhere. Each model-row table sorts pinned rows to the top in its own `sortedRows = $derived.by(...)`.
+- `pinnedModels` is shared — pinning in any table (SummaryTable, PerTask, PerLanguage, ModelScoreTable, BenchScoreTable) reflects everywhere. Each model-row table sorts pinned rows to the top in its own `sortedRows = $derived.by(...)`.
+- `sort.svelte.ts` exports `createSortState<K>()` — a per-table factory used by every sortable table. State syncs to the URL so sort survives reload + shared links.
 
 ### Theme system
 
@@ -124,21 +130,24 @@ Don't move the tooltip back inside a `<th>`. If a new table needs the same behav
 
 - `svelte.config.js` uses `adapter-static` with `fallback: '404.html'` so deep links work as SPA on GitHub Pages.
 - `paths.base` reads `BASE_PATH` at build time; the GitHub Actions workflow (`.github/workflows/deploy.yml`) sets it to `/${{ github.event.repository.name }}`. The Space `Dockerfile` leaves it empty (root-served).
+- `paths.relative: false` is intentional — relative `_app/...` URLs break under the HF Spaces reverse proxy when a request hits a deep route (the relative path resolves against the wrong base and the bundle 404s with a wrong MIME type).
+- `prerender.origin` reads `PUBLIC_SITE_URL` so OG / canonical URLs in the prerendered HTML use the real production origin instead of the SvelteKit placeholder.
 - `kit.version.name` is the git short SHA (or `GITHUB_SHA` in CI), polled every 60s. The root layout watches `updated.current` from `$app/state` and forces a full reload on the next navigation (or when the tab is hidden) so a fresh deploy lands without users clearing cache.
 - `kit.prerender.handleMissingId: 'warn'` — some pages render in-page anchors only after data loads on the client, so they're absent from prerendered HTML. The warn keeps the build from failing.
+- HF Space nginx fallback chain (`$uri $uri.html $uri/ /404.html`, plus `port_in_redirect off` / `absolute_redirect off`) is what serves the prerendered `benchmark/<slug>.html` etc. behind the Spaces reverse proxy.
 
 ## Svelte 5 conventions in this codebase
 
 - Runes mode is **enforced** for project files (see `svelte.config.js`'s `compilerOptions.runes`).
 - Stores live in `*.svelte.ts` files. Inside, use `$state(...)` — do NOT use legacy `writable`/`readable`.
 - Use `$derived(expr)` for values, `$derived.by(() => { ... })` for blocks. `$derived(() => fn())` is a bug — it stores the function as the value (don't use this form).
-- `let foo = $state(prop)` produces the "captures initial value" warning; wrap with `untrack(() => prop ?? default)` when you really want a one-shot snapshot of a prop into local state. There are multiple examples (`RangeSlider`, `FilterContent`, `MenuGroup`).
+- `let foo = $state(prop)` produces the "captures initial value" warning; wrap with `untrack(() => prop ?? default)` when you really want a one-shot snapshot of a prop into local state. There are multiple examples (`RangeSlider`, `FilterContent`).
 - `$effect`s that batch state writes must not also read those same fields inside the same effect — see the `filters.initFor` note above.
 
 ## Style / interaction patterns to reuse
 
 - **`--tint-*` palette** is the single source of truth for category color (see Theme system above). Don't introduce parallel hex maps in new components — set `--card-tint` / `--card-accent` from the tint tokens on a parent and read those downstream.
-- **Per-model-type tint** (dense → blue, cross-encoder → orange, late-interaction → green, sparse → amber, router → purple) is mirrored across the model-type filter pills (`FilterContent`), model-card chips, model detail hero, compare-page strips, BenchmarkOverview type rows, and SummaryTable model + params column tints. Keep the mapping consistent.
+- **Per-model-type tint** (dense → blue, cross-encoder → orange, late-interaction → green, sparse → amber, router → purple) is mirrored across the model-type filter pills (`FilterContent`), model-card chips, model detail hero, compare-page strips, and SummaryTable model + params column tints. Keep the mapping consistent.
 - **Per-task-type tint** (Classification → blue, Clustering → orange, PairClassification/MultilabelClassification → green, Reranking/InstructionReranking → amber/orange, Retrieval → purple, STS → pink, BitextMining → azure, Summarization → teal) is mirrored across the task index pills + chips, task detail hero, and per-task-type displays. Keep the mapping consistent.
 - **Per-modality tint** (text → teal, image → blue, audio → amber, video → purple) drives the modality filter pills on `/tasks` + `/benchmarks`, the modality badges on every overview card, and the card top-accent stripe + soft gradient header band on `/` and `/benchmarks` (where each card carries `data-modality={b.modalities[0] ?? 'text'}`). The shared `.modality-tint[data-modality=…]` utility in `app.css` is the single place that maps modality → tint pair.
 - **Heat-shading on score cells** is generated by the shared `heat(score, min, max)` helper in `src/lib/format.ts`: it returns a `background:` style mixing `color-mix(in srgb, var(--heat) <pct>%, transparent)` where `<pct>` maps the score linearly across the per-column `[min, max]` range onto 0–55%. Use `minOf` / `maxOf` (also in `format.ts`) to compute the bounds per column. Don't reintroduce per-table copies of the helper.

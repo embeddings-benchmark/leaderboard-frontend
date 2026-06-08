@@ -10,10 +10,11 @@
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { sortModalities } from '$lib/format';
+	import { slug, sortModalities } from '$lib/format';
+	import { clampTooltipX } from '$lib/cell-hover';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
-	import { slug } from '$lib/format';
+	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
 
 	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
@@ -166,18 +167,10 @@
 	};
 
 	const INFO_TIP_MAX_WIDTH = 360;
-	const INFO_TIP_EDGE = 8;
 	type InfoTipState = { visible: boolean; tip: InfoTip | null; x: number; y: number };
 	let infoTip = $state<InfoTipState>({ visible: false, tip: null, x: 0, y: 0 });
 	let infoTipHideTimer: ReturnType<typeof setTimeout> | null = null;
-	function clampInfoX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = INFO_TIP_MAX_WIDTH / 2;
-		const min = INFO_TIP_EDGE + half;
-		const max = window.innerWidth - INFO_TIP_EDGE - half;
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampInfoX = (x: number) => clampTooltipX(x, INFO_TIP_MAX_WIDTH);
 	function cancelInfoTipHide() {
 		if (infoTipHideTimer !== null) {
 			clearTimeout(infoTipHideTimer);
@@ -452,7 +445,7 @@
 				{/if}
 			</header>
 			{#if loadingScores}
-				<p class="muted">Fetching scores — this can take a few seconds on cold cache…</p>
+				<SkeletonTable rows={8} cols={6} />
 			{:else if scoresError}
 				<p class="muted">Failed to load scores: {scoresError}</p>
 			{:else if scores.length === 0}
@@ -502,66 +495,47 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
 		gap: 28px;
-		padding: 26px 28px;
+		padding: 26px 28px 26px 32px;
 		margin-bottom: 18px;
 		position: relative;
 		overflow: hidden;
 	}
+	/* Left-edge accent strip — mapping mirrors the group-chip palette. */
 	.hero::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 4px;
+		width: 3px;
 		background: var(--accent, var(--border));
 	}
-	/* Hero gradient pulls its tint from the shared --tint-* palette so the
-	   dark-mode variants drop in automatically — no more white→dark wash.
-	   Keyed off `data-stype` (the simplified task group) to match the
-	   group-chip / type-badge mapping. */
 	.hero[data-stype='classification'] {
 		--accent: var(--tint-blue-fg);
-		--hero-tint: var(--tint-blue);
 	}
 	.hero[data-stype='clustering'] {
 		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
 	}
 	.hero[data-stype='pair-classification'] {
 		--accent: var(--tint-green-fg);
-		--hero-tint: var(--tint-green);
 	}
 	.hero[data-stype='reranking'] {
 		--accent: var(--tint-amber-fg);
-		--hero-tint: var(--tint-amber);
 	}
 	.hero[data-stype='retrieval'] {
 		--accent: var(--tint-purple-fg);
-		--hero-tint: var(--tint-purple);
 	}
 	.hero[data-stype='semantic-similarity'] {
 		--accent: var(--tint-pink-fg);
-		--hero-tint: var(--tint-pink);
 	}
 	.hero[data-stype='bitext-mining'] {
 		--accent: var(--tint-azure-fg);
-		--hero-tint: var(--tint-azure);
 	}
 	.hero[data-stype='instruction-reranking'] {
 		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
 	}
 	.hero[data-stype='summarization'] {
 		--accent: var(--tint-teal-fg);
-		--hero-tint: var(--tint-teal);
-	}
-	.hero[data-stype] {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	@media (max-width: 640px) {
 		.hero {

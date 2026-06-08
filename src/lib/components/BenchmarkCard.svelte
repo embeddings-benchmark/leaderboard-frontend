@@ -107,35 +107,22 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding clears the rail. */
-		padding: 16px 16px 16px 18px;
+		/* Extra left padding for the 3 px accent strip. */
+		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
 		text-decoration: none;
 		color: inherit;
 		transition:
-			transform 0.15s ease,
-			border-color 0.15s ease,
-			box-shadow 0.15s ease;
-	}
-	/* Inset rounded marker rail — grows toward the card edges on hover. */
-	.card::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 16px;
-		bottom: 16px;
-		width: 4px;
-		border-radius: 0 4px 4px 0;
-		background: var(--card-accent, var(--border-strong));
-		transition:
-			top 0.15s ease,
-			bottom 0.15s ease;
-	}
-	.card:hover::before {
-		top: 11px;
-		bottom: 11px;
+			transform 0.12s ease,
+			border-color 0.12s ease;
+		/* Skip render/paint for off-screen cards (the /benchmarks catalogue
+		   can run to 75+ cards on the home page). `content-visibility: auto`
+		   already implies `contain: size layout paint style` — an explicit
+		   `contain:` would replace that set and break `contain-intrinsic-size`. */
+		content-visibility: auto;
+		contain-intrinsic-size: 240px;
 	}
 	.card:hover {
 		transform: translateY(-1px);
@@ -149,20 +136,26 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
+	.card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 3px;
+		background: var(--card-accent, var(--border));
+	}
 	.card[data-modality='text'] {
-		--card-tint: var(--tint-teal);
 		--card-accent: var(--tint-teal-fg);
 	}
 	.card[data-modality='image'] {
-		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
 	}
 	.card[data-modality='audio'] {
-		--card-tint: var(--tint-amber);
 		--card-accent: var(--tint-amber-fg);
 	}
 	.card[data-modality='video'] {
-		--card-tint: var(--tint-purple);
 		--card-accent: var(--tint-purple-fg);
 	}
 	.card-head {

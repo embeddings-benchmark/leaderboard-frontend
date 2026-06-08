@@ -11,6 +11,7 @@
 	import { sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
 
@@ -394,9 +395,7 @@
 				{/if}
 			</header>
 			{#if loadingScores}
-				<p class="muted">
-					Walking every benchmark for this model — first hit can take a while on cold cache…
-				</p>
+				<SkeletonTable rows={8} cols={6} />
 			{:else if scoresError}
 				<p class="muted">Failed to load scores: {scoresError}</p>
 			{:else if rawRows.length === 0}
@@ -430,67 +429,35 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
 		gap: 28px;
-		padding: 26px 28px;
+		padding: 26px 28px 26px 32px;
 		margin-bottom: 18px;
 		position: relative;
 		overflow: hidden;
 	}
+	/* Left-edge accent strip. */
 	.hero::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 4px;
+		width: 3px;
 		background: var(--accent, var(--border));
 	}
-	/* Each model-type swap exposes both the accent foreground and the tint
-	   background as CSS vars; the gradient + badge then read those tokens so
-	   the dark-mode variants kick in automatically. */
 	.hero[data-type='dense'] {
 		--accent: var(--tint-blue-fg);
-		--hero-tint: var(--tint-blue);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='cross-encoder'] {
 		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='late-interaction'] {
 		--accent: var(--tint-green-fg);
-		--hero-tint: var(--tint-green);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='sparse'] {
 		--accent: var(--tint-amber-fg);
-		--hero-tint: var(--tint-amber);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='router'] {
 		--accent: var(--tint-purple-fg);
-		--hero-tint: var(--tint-purple);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	@media (max-width: 1000px) {
 		.hero {

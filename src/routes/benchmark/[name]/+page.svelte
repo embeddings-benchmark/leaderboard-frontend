@@ -2,13 +2,16 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
+	import { safeIdle, safeCancelIdle } from '$lib/idle';
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import CopyableId from '$lib/components/CopyableId.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
@@ -75,12 +78,49 @@
 	});
 
 	// Mount-and-keep: once a tab body has been rendered, leave it in the DOM
-	// `visited` set + prewarm scheduler removed: panes are now mounted only
-	// while their tab is active (see the {#if activeTab === 'X'} below).
-	// Keeping every visited tab in the DOM tripled the surface that pin
-	// clicks had to walk (419 rows × 3 panes' worth of PinButtons, all
-	// re-evaluating on the shared SvelteSet's coarse invalidation), which
-	// pushed pin click handlers to ~550 ms on MTEB(Multilingual).
+	// and just hide it on switch. The big tables (PerTaskTab in particular —
+	// hundreds of rows × dozens of task columns) take ~400ms to mount cold;
+	// flipping `class:active` + content-visibility is ~1ms, so this trades
+	// a one-time cost per tab for near-instant switches forever after.
+	const visited = new SvelteSet<TabId>();
+	$effect(() => {
+		if (!visited.has(activeTab)) visited.add(activeTab);
+	});
+
+	// Pre-mount the heavy table panes once the active tab + filteredSummary
+	// have rendered. They're created into `content-visibility: hidden` so
+	// the layout/paint cost lands during idle time rather than when the
+	// user clicks the tab. Combined with the cached-pane swap below, the
+	// per-task / per-language tabs feel instant on first click. Each table
+	// receives `active={activeTab === <id>}` so inactive panes can opt out
+	// of pin-state reactivity (see the `active` prop in SummaryTable /
+	// PerTaskTab / PerLanguageTab).
+	const PREWARM: TabId[] = ['perf_task', 'perf_language'];
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		if (!filteredSummary) return;
+		const pending = PREWARM.filter(
+			(t) => !visited.has(t) && (t !== 'perf_language' || hasLanguageView)
+		);
+		if (pending.length === 0) return;
+		let cancelled = false;
+		let handle: number | null = null;
+		function next() {
+			if (cancelled) return;
+			const tab = pending.shift();
+			if (!tab) return;
+			handle = safeIdle(() => {
+				if (cancelled) return;
+				visited.add(tab);
+				next();
+			}, 2000);
+		}
+		next();
+		return () => {
+			cancelled = true;
+			if (handle !== null) safeCancelIdle(handle);
+		};
+	});
 
 	// Bound to the live PerLanguageTab instance so the page-level toolbar
 	// can call its `buildCsv()` for the Download CSV button — keeps the
@@ -340,50 +380,54 @@
 
 			<section class="tab-body">
 				{#if !filteredSummary}
-					<p class="muted">Loading…</p>
+					<SkeletonTable />
 				{:else if filteredSummary.rows.length === 0}
 					<p class="muted">No models match the current filters.</p>
 				{:else}
-					<!-- Mount ONLY the active table tab. Previously the visited-cache
-					     pattern kept every visited pane in the DOM with `class:active`
-					     toggling visibility — but on big benchmarks (MTEB(Multilingual,
-					     v2): 419 rows × 3 tabs = 1257 PinButtons) every pin click
-					     invalidated SvelteSet subscribers across all rendered tabs,
-					     pushing the click handler to ~550 ms. Mounting only the active
-					     tab cuts the surface by 3× and pin clicks drop accordingly.
-					     Trade-off: tab switches re-render the table (no first-paint
-					     cache), but pin is the higher-frequency interaction. -->
-					{#if activeTab === 'summary'}
-						<div class="tab-pane active">
-							<SummaryTable summary={filteredSummary} />
+					<!-- Mount-and-keep: each pane is created on first activation
+					     (or earlier via the PREWARM idle scheduler) and stays in
+					     the DOM. `class:active` flips content-visibility so
+					     subsequent tab switches restore the cached layer. Each
+					     table gets `active={activeTab === <id>}` so inactive
+					     panes opt out of pin-state reactivity (pin click cost
+					     stays scoped to the visible tab). -->
+					{#if visited.has('summary')}
+						<div class="tab-pane" class:active={activeTab === 'summary'}>
+							<SummaryTable summary={filteredSummary} active={activeTab === 'summary'} />
 						</div>
 					{/if}
-					{#if activeTab === 'perf_size'}
-						<div class="tab-pane active">
+					{#if visited.has('perf_size')}
+						<div class="tab-pane" class:active={activeTab === 'perf_size'}>
 							<PerfSizeTab summary={filteredSummary} />
 						</div>
 					{/if}
-					{#if activeTab === 'perf_time'}
-						<div class="tab-pane active">
+					{#if visited.has('perf_time')}
+						<div class="tab-pane" class:active={activeTab === 'perf_time'}>
 							<PerfTimeTab summary={filteredSummary} />
 						</div>
 					{/if}
-					{#if activeTab === 'perf_task'}
-						<div class="tab-pane active">
-							<PerTaskTab summary={filteredSummary} />
+					{#if visited.has('perf_task')}
+						<!-- `data-prepaint`: keep the pane in the paint pipeline while
+						     hidden (clip-path: inset(100%) below). Browser caches the
+						     painted layer so first click after the idle pre-mount is
+						     nearly instant. Only applied to table panes — Plotly tabs
+						     need a real-size container on mount. -->
+						<div class="tab-pane" class:active={activeTab === 'perf_task'} data-prepaint>
+							<PerTaskTab summary={filteredSummary} active={activeTab === 'perf_task'} />
 						</div>
 					{/if}
-					{#if activeTab === 'perf_language' && hasLanguageView && benchmark?.languageView}
-						<div class="tab-pane active">
+					{#if visited.has('perf_language') && hasLanguageView && benchmark?.languageView}
+						<div class="tab-pane" class:active={activeTab === 'perf_language'} data-prepaint>
 							<PerLanguageTab
 								summary={filteredSummary}
 								languageView={benchmark.languageView}
+								active={activeTab === 'perf_language'}
 								bind:this={perLanguageTab}
 							/>
 						</div>
 					{/if}
-					{#if activeTab === 'task_info'}
-						<div class="tab-pane active">
+					{#if visited.has('task_info')}
+						<div class="tab-pane" class:active={activeTab === 'task_info'}>
 							<TaskInfoTab {benchmark} tasksMeta={filteredSummary.tasksMeta} />
 						</div>
 					{/if}
@@ -426,40 +470,31 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 28px;
-		/* Extra left padding clears the rail. */
 		padding: 22px 26px 22px 30px;
 		margin-bottom: 16px;
 		position: relative;
 		overflow: hidden;
 	}
-	/* Accent-rail treatment, mirrored from BenchmarkCard: an inset rounded
-	   marker on the left edge coloured by the primary modality (no top
-	   stripe, no gradient band). Modality → tint pairs are the canonical
-	   mapping (text → teal, image → blue, audio → amber, video → purple). */
+	/* Left-edge accent strip; canonical modality→tint mapping in app.css. */
 	.hero[data-modality]::before {
 		content: '';
 		position: absolute;
+		top: 0;
+		bottom: 0;
 		left: 0;
-		top: 16px;
-		bottom: 16px;
-		width: 4px;
-		border-radius: 0 4px 4px 0;
-		background: var(--card-accent, var(--border-strong));
+		width: 3px;
+		background: var(--card-accent, var(--border));
 	}
 	.hero[data-modality='text'] {
-		--card-tint: var(--tint-teal);
 		--card-accent: var(--tint-teal-fg);
 	}
 	.hero[data-modality='image'] {
-		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
 	}
 	.hero[data-modality='audio'] {
-		--card-tint: var(--tint-amber);
 		--card-accent: var(--tint-amber-fg);
 	}
 	.hero[data-modality='video'] {
-		--card-tint: var(--tint-purple);
 		--card-accent: var(--tint-purple-fg);
 	}
 	@media (max-width: 1000px) {
@@ -588,12 +623,34 @@
 		padding-top: 14px;
 		position: relative;
 	}
-	/* Only the active pane is mounted now (see the {#if activeTab === 'X'}
-	   guards above), so the `content-visibility: hidden` cache pattern is
-	   gone. Active pane just renders normally. */
+	/* Default: inactive panes are taken out of layout via
+	   `content-visibility: hidden`, which preserves the rendered state
+	   without painting or laying out. First activation pays the paint
+	   cost; subsequent switches restore from cache. */
+	.tab-pane {
+		content-visibility: hidden;
+		contain-intrinsic-size: 0;
+	}
 	.tab-pane.active {
 		content-visibility: visible;
 		contain-intrinsic-size: none;
+	}
+	/* `data-prepaint`: render the pane fully but hide it via clip-path
+	   while inactive. Unlike `content-visibility: hidden`, this keeps
+	   the painted layer in the GPU cache so the first activation is
+	   instant — but it costs paint cycles during the hidden phase, so
+	   it's reserved for the heavy table panes that the PREWARM loop
+	   pre-mounts on idle. The clip-path doesn't take the pane out of
+	   layout (it still consumes its intrinsic height), so we also pin
+	   it absolutely at the top-left when inactive to avoid pushing the
+	   page footer down by the table's height. */
+	.tab-pane[data-prepaint]:not(.active) {
+		content-visibility: visible;
+		clip-path: inset(100%);
+		position: absolute;
+		inset: 0 auto auto 0;
+		width: 100%;
+		pointer-events: none;
 	}
 	.toolbar-row {
 		display: flex;

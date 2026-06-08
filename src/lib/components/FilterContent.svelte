@@ -119,21 +119,12 @@
 		onToggleAllLanguages
 	}: Props = $props();
 
-	// Same cap-then-expand pattern the inline rail used: hide the long
-	// tail behind a "Show all N" until the user opts in.
 	let modelLangQuery = $state('');
-	let modelLangsExpanded = $state(false);
-	const MODEL_LANGUAGE_CAP = 40;
 	let filteredModelLangs = $derived.by(() => {
 		const all = languageOptions ?? [];
 		const q = modelLangQuery.trim().toLowerCase();
 		return q ? all.filter((l) => l.toLowerCase().includes(q)) : all;
 	});
-	let visibleModelLangs = $derived(
-		modelLangsExpanded || filteredModelLangs.length <= MODEL_LANGUAGE_CAP
-			? filteredModelLangs
-			: filteredModelLangs.slice(0, MODEL_LANGUAGE_CAP)
-	);
 	let allModelLangsOn = $derived(
 		!!languagesPicked && !!languageOptions && languagesPicked.size === languageOptions.length
 	);
@@ -453,7 +444,7 @@
 						(filters.sentenceTransformersOnly = (e.currentTarget as HTMLInputElement).checked)}
 				/>
 				<span class="switch-track"><span class="switch-knob"></span></span>
-				<span class="switch-label">Sentence-Transformers compatible only</span>
+				<span class="switch-label">Sentence-Transformers compatible</span>
 			</label>
 		</div>
 
@@ -525,7 +516,7 @@
 			<!-- Language facet, only rendered when the host page wires up
 			     `languageOptions` (currently /models). State lives in the
 			     parent so the sidebar stays generic. -->
-			<div class="group">
+			<div class="group grow">
 				<div class="group-header">
 					<span class="group-label">Language</span>
 					<button type="button" class="link-btn" onclick={() => onToggleAllLanguages?.()}>
@@ -538,8 +529,8 @@
 					placeholder="Search languages…"
 					bind:value={modelLangQuery}
 				/>
-				<div class="pills">
-					{#each visibleModelLangs as l (l)}
+				<div class="pills scroll-y scroll-thin">
+					{#each filteredModelLangs as l (l)}
 						<button
 							type="button"
 							class="pill"
@@ -550,16 +541,10 @@
 							<span>{l}</span>
 						</button>
 					{/each}
+					{#if filteredModelLangs.length === 0}
+						<p class="muted">No matches.</p>
+					{/if}
 				</div>
-				{#if filteredModelLangs.length > MODEL_LANGUAGE_CAP}
-					<button
-						type="button"
-						class="link-btn show-more-btn"
-						onclick={() => (modelLangsExpanded = !modelLangsExpanded)}
-					>
-						{modelLangsExpanded ? 'Show fewer' : `Show all ${filteredModelLangs.length}`}
-					</button>
-				{/if}
 			</div>
 		{/if}
 	{/snippet}
@@ -822,9 +807,16 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
+		/* Scroll container when total content overflows the sidebar; also
+		   bounds `.flat-groups` so its last facet can `flex: 1`. */
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
 	}
 
 	/* Active filter chips ----------------------------------------------------- */
+	/* `flex-shrink: 0` — sibling of `.block` inside the flex column;
+	   without it the wrap content would clip silently. */
 	.active-strip {
 		display: flex;
 		flex-wrap: wrap;
@@ -834,6 +826,7 @@
 		background: var(--primary-soft);
 		border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 		border-radius: 10px;
+		flex-shrink: 0;
 	}
 	.chips {
 		display: flex;
@@ -889,11 +882,15 @@
 	}
 
 	/* Block sections ---------------------------------------------------------- */
+	/* `flex-shrink: 0`: flex column siblings shrink by default, and our
+	   `overflow: hidden` (for rounded corners) would clip the body
+	   instead of letting `.filter-content` scroll. */
 	.block {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		overflow: hidden;
+		flex-shrink: 0;
 	}
 	.block-head {
 		display: flex;
@@ -946,12 +943,17 @@
 		gap: 16px;
 		border-top: 1px solid var(--border);
 	}
-	/* Sibling of `.block` used in flat mode — no card chrome, just the groups. */
+	/* Sibling of `.block` used in flat mode — no card chrome, just the groups.
+	   `flex: 1; min-height: 0` fills `.filter-content` so the last facet
+	   absorbs leftover height. The `> .group:last-child` rule lives in
+	   `$lib/styles/sidebar.css` (shared with `.filters`). */
 	.flat-groups {
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
 		padding: 0 2px;
+		flex: 1;
+		min-height: 0;
 	}
 
 	/* Groups ------------------------------------------------------------------ */
