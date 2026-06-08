@@ -75,17 +75,12 @@
 
 <style>
 	.card {
-		/* Gradient header band: per-stype rules below set `--card-tint` /
-		   `--card-accent` so this single declaration covers every variant.
-		   color-mix is evaluated once per element, not per paint. */
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--card-tint, transparent) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		padding: 14px 16px;
+		/* Extra left padding so the 3 px accent strip below doesn't crowd
+		   the title text. */
+		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
@@ -117,36 +112,32 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
+	/* Per-stype accent strip on the left edge. `overflow: hidden` on the
+	   card clips the strip to the rounded corner. */
 	.card::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 3px;
+		width: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	/* Per-stype accent + tint variables — the gradient + accent strip in
-	   `.card` / `.card::before` consume these via `--card-tint` /
+	/* Per-stype accent — the left strip in `.card::before` consumes
 	   `--card-accent`. Mapping documented in CLAUDE.md. */
 	.card[data-stype='retrieval'] {
-		--card-tint: var(--tint-purple);
 		--card-accent: var(--tint-purple-fg);
 	}
 	.card[data-stype='classification'] {
-		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
 	}
 	.card[data-stype='pair-classification'] {
-		--card-tint: var(--tint-green);
 		--card-accent: var(--tint-green-fg);
 	}
 	.card[data-stype='clustering'] {
-		--card-tint: var(--tint-orange);
 		--card-accent: var(--tint-orange-fg);
 	}
 	.card[data-stype='semantic-similarity'] {
-		--card-tint: var(--tint-pink);
 		--card-accent: var(--tint-pink-fg);
 	}
 	.card-head {

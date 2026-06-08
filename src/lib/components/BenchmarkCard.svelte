@@ -102,7 +102,9 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		padding: 14px 16px;
+		/* Extra left padding so the 3 px accent strip doesn't crowd
+		   the title text. */
+		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
@@ -130,37 +132,27 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
+	/* Per-modality accent strip on the left edge. `overflow: hidden` on
+	   the card clips it to the rounded corner. */
 	.card::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 3px;
+		width: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	/* Single gradient — per-modality blocks just swap the tint pair. */
-	.card[data-modality] {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--card-tint, var(--border)) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
 	.card[data-modality='text'] {
-		--card-tint: var(--tint-teal);
 		--card-accent: var(--tint-teal-fg);
 	}
 	.card[data-modality='image'] {
-		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
 	}
 	.card[data-modality='audio'] {
-		--card-tint: var(--tint-amber);
 		--card-accent: var(--tint-amber-fg);
 	}
 	.card[data-modality='video'] {
-		--card-tint: var(--tint-purple);
 		--card-accent: var(--tint-purple-fg);
 	}
 	.card-head {

@@ -133,13 +133,17 @@
 				const mods = new Set<string>();
 				const simpTypes = new Set<string>();
 				const doms = new Set<string>();
-				const langs = new Set<string>();
+				// Language count → sort the filter pills by popularity (number
+				// of benchmarks that include each language) so the long tail
+				// drops to the bottom of the list.
+				const langCount = new Map<string, number>();
 				/* eslint-enable svelte/prefer-svelte-reactivity */
 				for (const b of list) {
 					if (b.modalities) for (const m of b.modalities) mods.add(m);
 					if (b.simplifiedTaskTypes) for (const t of b.simplifiedTaskTypes) simpTypes.add(t);
 					if (b.domains) for (const d of b.domains) doms.add(d);
-					if (b.languages) for (const l of b.languages) langs.add(l);
+					if (b.languages)
+						for (const l of b.languages) langCount.set(l, (langCount.get(l) ?? 0) + 1);
 				}
 				MODALITIES = [...mods].sort();
 				// Order the simplified buckets the same way /tasks does (curated
@@ -157,7 +161,10 @@
 					...[...simpTypes].filter((t) => !CURATED.includes(t)).sort()
 				];
 				DOMAINS = [...doms].sort();
-				LANGUAGES = [...langs].sort();
+				// Descending by usage count, alphabetical tie-break.
+				LANGUAGES = [...langCount.entries()]
+					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+					.map(([l]) => l);
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);
@@ -170,7 +177,12 @@
 			});
 	});
 
-	// Featured (on the curated menu) come first, then off-menu benchmarks.
+	// All benchmarks share one sorted list. The off-menu ones
+	// (`displayOnLeaderboard === false`) still surface their "newer
+	// version available" hint on the card itself, so visually they're
+	// distinguishable without forcing them to the bottom — splitting them
+	// out made "sort by model count" look like only the featured set was
+	// shown until the user scrolled past 46 cards.
 	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		// "All on" = filter off; partial = intersection check; empty =
@@ -199,21 +211,10 @@
 			if (c === 0) c = a.displayName.localeCompare(b.displayName);
 			return dir * c;
 		};
-		// Single pass: partition into featured / other while filtering.
-		// "Featured" = `displayOnLeaderboard !== false` (the curated menu
-		// set the backend returns when `include_hidden=true` flips the
-		// flag for off-menu entries) — saves a second `/menu` round-trip
-		// since this info is already on every Benchmark.
-		const featured: Benchmark[] = [];
-		const other: Benchmark[] = [];
-		for (const b of allBenchmarks) {
-			if (!matches(b)) continue;
-			if (b.displayOnLeaderboard !== false) featured.push(b);
-			else other.push(b);
-		}
-		featured.sort(cmp);
-		other.sort(cmp);
-		return [...featured, ...other];
+		const matched: Benchmark[] = [];
+		for (const b of allBenchmarks) if (matches(b)) matched.push(b);
+		matched.sort(cmp);
+		return matched;
 	});
 </script>
 

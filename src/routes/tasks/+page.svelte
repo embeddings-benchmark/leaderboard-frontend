@@ -74,8 +74,12 @@
 				const modSet = new Set<string>();
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const domSet = new Set<string>();
+				// Languages: keep a count so we can order the filter pills by
+				// popularity (number of tasks that declare each language)
+				// rather than alphabetically — the long tail of single-task
+				// languages drops to the bottom of the list.
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langSet = new Set<string>();
+				const langCount = new Map<string, number>();
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const presentSet = new Set<string>();
 				const entries: TaskEntry[] = new Array(tasks.length);
@@ -105,7 +109,7 @@
 					presentSet.add(simplifiedType);
 					for (const x of modalities) modSet.add(x);
 					for (const x of domains) domSet.add(x);
-					for (const x of languages) langSet.add(x);
+					for (const x of languages) langCount.set(x, (langCount.get(x) ?? 0) + 1);
 				}
 				entries.sort((a, b) => COLLATOR.compare(a.name, b.name));
 				ALL_TASKS = entries;
@@ -117,7 +121,10 @@
 
 				MODALITIES = [...modSet].sort();
 				DOMAINS = [...domSet].sort();
-				LANGUAGES = [...langSet].sort();
+				// Descending by usage count, alphabetical tie-break.
+				LANGUAGES = [...langCount.entries()]
+					.sort((a, b) => b[1] - a[1] || COLLATOR.compare(a[0], b[0]))
+					.map(([l]) => l);
 				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
 				for (const v of MODALITIES) modalityFilter.add(v);
 				for (const v of DOMAINS) domainFilter.add(v);

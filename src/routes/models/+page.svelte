@@ -52,12 +52,17 @@
 				// `ModelMeta.languages` may be missing (older backends, models
 				// with no declared language scope) — those rows pass the
 				// filter trivially via the "everything checked" default.
-				// Plain Set is correct here — used as a throwaway local
-				// accumulator, never read reactively.
+				// Count occurrences so the filter pills can be ordered by
+				// popularity (number of models that declare each language).
+				// Plain Map is correct here — throwaway local accumulator,
+				// never read reactively.
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langSet = new Set<string>();
-				for (const x of m) for (const l of x.languages ?? []) langSet.add(l);
-				LANGUAGES = [...langSet].sort();
+				const langCount = new Map<string, number>();
+				for (const x of m)
+					for (const l of x.languages ?? []) langCount.set(l, (langCount.get(l) ?? 0) + 1);
+				LANGUAGES = [...langCount.entries()]
+					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+					.map(([l]) => l);
 				languagesPicked.clear();
 				for (const l of LANGUAGES) languagesPicked.add(l);
 				loadingData = false;
@@ -396,17 +401,12 @@
 		gap: 12px;
 	}
 	.card {
-		/* Per-type rules below set `--card-tint` / `--card-accent`. This
-		   single gradient declaration handles every variant — color-mix
-		   resolves once per element, not per paint. */
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--card-tint, transparent) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		padding: 14px 16px;
+		/* Extra left padding so the 3 px accent strip doesn't crowd the
+		   title text. */
+		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
@@ -437,18 +437,20 @@
 		transform: translateY(-1px);
 		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
 	}
+	/* Per-type accent strip on the left edge. `overflow: hidden` on the
+	   card clips it to the rounded corner. */
 	.card::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 3px;
+		width: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	/* Per-type tints: just set the custom properties; the gradient + accent
-	   strip in `.card` / `.card::before` consume them. Mapping documented
-	   in CLAUDE.md (dense → blue, cross-encoder → orange, …). */
+	/* Per-type tints: just set the custom property; the accent strip in
+	   `.card::before` consumes it. Mapping documented in CLAUDE.md
+	   (dense → blue, cross-encoder → orange, …). */
 	.card[data-type='dense'] {
 		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);

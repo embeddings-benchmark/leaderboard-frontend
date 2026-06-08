@@ -99,21 +99,30 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		padding: 18px 18px 14px;
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint) 50%, var(--surface)),
-			var(--surface) 60%
-		);
-		border: 1px solid color-mix(in srgb, var(--tint-fg) 22%, var(--border));
+		padding: 18px 18px 14px 22px;
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 14px;
 		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
 		text-decoration: none;
 		color: inherit;
+		position: relative;
+		overflow: hidden;
 		transition:
 			transform 0.14s,
 			border-color 0.14s,
 			box-shadow 0.14s;
+	}
+	/* Per-tile accent strip on the left edge. `overflow: hidden` on the
+	   tile clips it to the rounded corner. */
+	.prim::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 3px;
+		background: var(--tint-fg);
 	}
 	.prim:hover {
 		transform: translateY(-1px);

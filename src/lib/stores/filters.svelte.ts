@@ -115,16 +115,21 @@ function createFilters() {
 		/* eslint-disable svelte/prefer-svelte-reactivity */
 		const domains = new Set<string>();
 		const modalities = new Set<string>();
-		const languages = new Set<string>();
+		// Count tasks per language so the filter pills can be ordered by
+		// popularity (number of tasks in this benchmark that declare each
+		// language). Long-tail languages drop to the bottom.
+		const languageCount = new Map<string, number>();
 		/* eslint-enable svelte/prefer-svelte-reactivity */
 		for (const t of summary.tasksMeta) {
 			for (const d of t.domains ?? []) domains.add(d);
 			for (const m of t.modalities ?? []) modalities.add(m);
-			for (const l of t.languages ?? []) languages.add(l);
+			for (const l of t.languages ?? []) languageCount.set(l, (languageCount.get(l) ?? 0) + 1);
 		}
 		const sortedDomains = [...domains].sort();
 		const sortedModalities = [...modalities].sort();
-		const sortedLanguages = [...languages].sort();
+		const sortedLanguages = [...languageCount.entries()]
+			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+			.map(([l]) => l);
 
 		// Bracket the size slider to this benchmark's actual models. We ignore
 		// proprietary/unknown-size models (totalParamsB === 0) when computing
