@@ -6,8 +6,14 @@ import { modelSearchKey } from '$lib/format';
 import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
 
 export type ZeroShotMode = 'allow_all' | 'remove_unknown' | 'only_zero_shot';
-export type Availability = 'both' | 'open' | 'proprietary';
-export type InstructionMode = 'both' | 'only_instruction' | 'only_non_instruction';
+
+// Availability / instructions are multi-select facets: each value can be
+// toggled independently, and "all values selected" means the filter is off
+// (mirrors the modality / task-type facets). A model is 'open' when it has
+// open weights, else 'proprietary'; 'instruction-tuned' when instructionTuned,
+// else 'non-instruction'.
+export const AVAILABILITY = ['open', 'proprietary'] as const;
+export const INSTRUCTIONS = ['instruction-tuned', 'non-instruction'] as const;
 
 // Model-size slider works in log10 of millions of params: 0 → 1M, 6 → 1T.
 export const SIZE_LOG_MIN = 0;
@@ -41,8 +47,8 @@ interface FiltersState {
 	// unsized models — see applyFilters.
 	sizeActive: boolean;
 	zeroShot: ZeroShotMode;
-	availability: Availability;
-	instructions: InstructionMode;
+	availability: SvelteSet<string>;
+	instructions: SvelteSet<string>;
 	sentenceTransformersOnly: boolean;
 	modelTypes: SvelteSet<string>;
 	modelModalities: SvelteSet<string>;
@@ -71,8 +77,8 @@ function defaultState(): FiltersState {
 		maxModelSizeM: SIZE_MAX_M,
 		sizeActive: false,
 		zeroShot: 'allow_all',
-		availability: 'both',
-		instructions: 'both',
+		availability: new SvelteSet<string>(AVAILABILITY),
+		instructions: new SvelteSet<string>(INSTRUCTIONS),
 		sentenceTransformersOnly: false,
 		modelTypes: new SvelteSet<string>(MODEL_TYPES),
 		modelModalities: new SvelteSet<string>(MODEL_MODALITIES),
@@ -224,11 +230,9 @@ function createFilters() {
 			state.sizeActive = true;
 		}
 		const avail = p.get('avail');
-		if (avail === 'open' || avail === 'proprietary' || avail === 'both') state.availability = avail;
+		if (avail !== null) replaceSet(state.availability, decodeSet(avail));
 		const inst = p.get('inst');
-		if (inst === 'only_instruction' || inst === 'only_non_instruction' || inst === 'both') {
-			state.instructions = inst;
-		}
+		if (inst !== null) replaceSet(state.instructions, decodeSet(inst));
 		const zs = p.get('zs');
 		if (zs === 'allow_all' || zs === 'remove_unknown' || zs === 'only_zero_shot')
 			state.zeroShot = zs;
@@ -290,8 +294,10 @@ function createFilters() {
 				q: state.nameQuery || null,
 				minSize: state.sizeActive ? String(state.minModelSizeM) : null,
 				maxSize: state.sizeActive ? String(state.maxModelSizeM) : null,
-				avail: state.availability !== 'both' ? state.availability : null,
-				inst: state.instructions !== 'both' ? state.instructions : null,
+				avail:
+					state.availability.size === AVAILABILITY.length ? null : encodeSet(state.availability),
+				inst:
+					state.instructions.size === INSTRUCTIONS.length ? null : encodeSet(state.instructions),
 				zs: state.zeroShot !== 'allow_all' ? state.zeroShot : null,
 				st: state.sentenceTransformersOnly ? '1' : null,
 				mtypes: state.modelTypes.size === MODEL_TYPES.length ? null : encodeSet(state.modelTypes),
@@ -342,8 +348,8 @@ function createFilters() {
 		state.maxModelSizeM = state.availableMaxModelSizeM;
 		state.sizeActive = false;
 		state.zeroShot = 'allow_all';
-		state.availability = 'both';
-		state.instructions = 'both';
+		replaceSet(state.availability, AVAILABILITY);
+		replaceSet(state.instructions, INSTRUCTIONS);
 		state.sentenceTransformersOnly = false;
 		replaceSet(state.modelTypes, MODEL_TYPES);
 		replaceSet(state.modelModalities, MODEL_MODALITIES);
@@ -367,7 +373,9 @@ function createFilters() {
 		| 'languages'
 		| 'tasks'
 		| 'modelTypes'
-		| 'modelModalities';
+		| 'modelModalities'
+		| 'availability'
+		| 'instructions';
 
 	function toggleInSet(key: SetKey, name: string) {
 		const s = state[key];
@@ -420,16 +428,8 @@ function createFilters() {
 		get availability() {
 			return state.availability;
 		},
-		set availability(v: Availability) {
-			state.availability = v;
-			sync();
-		},
 		get instructions() {
 			return state.instructions;
-		},
-		set instructions(v: InstructionMode) {
-			state.instructions = v;
-			sync();
 		},
 		get sentenceTransformersOnly() {
 			return state.sentenceTransformersOnly;
@@ -629,8 +629,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// being active means the visible set is a deliberate subset and the
 	// re-rank below should renumber 1..N.
 	const rowFilterActive =
-		filters.availability !== 'both' ||
-		filters.instructions !== 'both' ||
+		filters.availability.size !== AVAILABILITY.length ||
+		filters.instructions.size !== INSTRUCTIONS.length ||
 		filters.sentenceTransformersOnly ||
 		filters.modelTypes.size !== MODEL_TYPES.length ||
 		filters.modelModalities.size !== MODEL_MODALITIES.length ||
@@ -639,11 +639,10 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	const passesRowFilter = (row: SummaryRow): boolean => {
 		const m = row.model;
 		if (q && !modelSearchKey(m).includes(q)) return false;
-		if (filters.availability === 'open' && !m.openWeights) return false;
-		if (filters.availability === 'proprietary' && m.openWeights) return false;
-
-		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
-		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
+		// Full set = filter off; partial = membership check; empty = nothing.
+		if (!filters.availability.has(m.openWeights ? 'open' : 'proprietary')) return false;
+		if (!filters.instructions.has(m.instructionTuned ? 'instruction-tuned' : 'non-instruction'))
+			return false;
 
 		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
 

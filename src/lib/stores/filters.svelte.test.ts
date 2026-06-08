@@ -167,11 +167,11 @@ describe('applyFilters: task-set narrowing', () => {
 
 describe('applyFilters: model-row narrowing', () => {
 	it('proprietary-only / open-only flip rows in/out', () => {
-		filters.availability = 'open';
+		filters.setAll('availability', ['open'], true);
 		let out = applyFilters(fixtureSummary());
 		expect(out.rows.map((r) => r.model.name).sort()).toEqual(['org/A', 'org/B', 'org/D']);
 
-		filters.availability = 'proprietary';
+		filters.setAll('availability', ['proprietary'], true);
 		out = applyFilters(fixtureSummary());
 		expect(out.rows.map((r) => r.model.name)).toEqual(['org/C']);
 	});

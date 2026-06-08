@@ -2,13 +2,13 @@
 	import { untrack } from 'svelte';
 	import {
 		filters,
+		AVAILABILITY,
+		INSTRUCTIONS,
 		MODEL_MODALITIES,
 		MODEL_TYPES,
 		SIZE_LOG_MIN,
 		SIZE_LOG_MAX,
-		type ZeroShotMode,
-		type Availability,
-		type InstructionMode
+		type ZeroShotMode
 	} from '$lib/stores/filters.svelte';
 	import FilterFacet from './FilterFacet.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
@@ -137,21 +137,18 @@
 	let langQuery = $state('');
 	let taskQuery = $state('');
 
-	const AVAILABILITY_OPTS: { label: string; value: Availability }[] = [
-		{ label: 'Both', value: 'both' },
-		{ label: 'Open', value: 'open' },
-		{ label: 'Proprietary', value: 'proprietary' }
-	];
 	const ZERO_SHOT_OPTS: { label: string; value: ZeroShotMode }[] = [
 		{ label: 'Allow all', value: 'allow_all' },
 		{ label: 'Remove unknown', value: 'remove_unknown' },
 		{ label: 'Only zero-shot', value: 'only_zero_shot' }
 	];
-	const INSTRUCTION_OPTS: { label: string; value: InstructionMode }[] = [
-		{ label: 'Both', value: 'both' },
-		{ label: 'Instruction-tuned', value: 'only_instruction' },
-		{ label: 'Non-instruction', value: 'only_non_instruction' }
-	];
+	// Display labels for the availability / instruction facet pills + chips.
+	const FACET_LABEL: Record<string, string> = {
+		open: 'Open weight',
+		proprietary: 'Proprietary',
+		'instruction-tuned': 'Instruction-tuned',
+		'non-instruction': 'Non-instruction'
+	};
 
 	// Active-filter chip strip: each non-default filter becomes a removable chip.
 	interface Chip {
@@ -171,11 +168,15 @@
 				clear: () => (filters.nameQuery = '')
 			});
 		}
-		if (filters.availability !== 'both') {
+		if (filters.availability.size !== AVAILABILITY.length) {
+			const picked = [...filters.availability];
 			list.push({
 				key: 'avail',
-				label: filters.availability === 'open' ? 'Open only' : 'Proprietary only',
-				clear: () => (filters.availability = 'both')
+				label:
+					picked.length === 1
+						? `${FACET_LABEL[picked[0]]} only`
+						: `Availability · ${picked.length}/${AVAILABILITY.length}`,
+				clear: () => filters.setAll('availability', AVAILABILITY, true)
 			});
 		}
 		if (filters.zeroShot !== 'allow_all') {
@@ -185,12 +186,15 @@
 				clear: () => (filters.zeroShot = 'allow_all')
 			});
 		}
-		if (filters.instructions !== 'both') {
+		if (filters.instructions.size !== INSTRUCTIONS.length) {
+			const picked = [...filters.instructions];
 			list.push({
 				key: 'inst',
 				label:
-					filters.instructions === 'only_instruction' ? 'Instruction-tuned' : 'Non-instruction',
-				clear: () => (filters.instructions = 'both')
+					picked.length === 1
+						? FACET_LABEL[picked[0]]
+						: `Instructions · ${picked.length}/${INSTRUCTIONS.length}`,
+				clear: () => filters.setAll('instructions', INSTRUCTIONS, true)
 			});
 		}
 		if (filters.sentenceTransformersOnly) {
@@ -282,9 +286,9 @@
 
 	let activeModelCount = $derived.by(() => {
 		let n = 0;
-		if (filters.availability !== 'both') n++;
+		if (filters.availability.size !== AVAILABILITY.length) n++;
 		if (filters.zeroShot !== 'allow_all') n++;
-		if (filters.instructions !== 'both') n++;
+		if (filters.instructions.size !== INSTRUCTIONS.length) n++;
 		if (filters.sentenceTransformersOnly) n++;
 		if (
 			filters.minModelSizeM > filters.availableMinModelSizeM ||
@@ -363,15 +367,17 @@
 	{/if}
 
 	{#snippet modelGroups()}
-		<div class="group">
-			<div class="group-label">Availability</div>
-			<Segmented
-				ariaLabel="Availability"
-				options={AVAILABILITY_OPTS}
-				value={filters.availability}
-				onChange={(v) => (filters.availability = v)}
-			/>
-		</div>
+		<FilterFacet
+			label="Availability"
+			items={AVAILABILITY}
+			picked={filters.availability}
+			onToggle={(v) => filters.toggleInSet('availability', v)}
+			onToggleAll={() =>
+				filters.setAll('availability', AVAILABILITY, filters.availability.size !== AVAILABILITY.length)}
+			allSelected={filters.availability.size === AVAILABILITY.length}
+			pillClass="type-fill"
+			pillLabel={(v) => FACET_LABEL[v] ?? v}
+		/>
 
 		<div class="group">
 			<div class="group-label">Zero-shot</div>
@@ -404,15 +410,17 @@
 			/>
 		</div>
 
-		<div class="group">
-			<div class="group-label">Instructions</div>
-			<Segmented
-				ariaLabel="Instructions"
-				options={INSTRUCTION_OPTS}
-				value={filters.instructions}
-				onChange={(v) => (filters.instructions = v)}
-			/>
-		</div>
+		<FilterFacet
+			label="Instructions"
+			items={INSTRUCTIONS}
+			picked={filters.instructions}
+			onToggle={(v) => filters.toggleInSet('instructions', v)}
+			onToggleAll={() =>
+				filters.setAll('instructions', INSTRUCTIONS, filters.instructions.size !== INSTRUCTIONS.length)}
+			allSelected={filters.instructions.size === INSTRUCTIONS.length}
+			pillClass="type-fill"
+			pillLabel={(v) => FACET_LABEL[v] ?? v}
+		/>
 
 		<div class="group">
 			<Switch

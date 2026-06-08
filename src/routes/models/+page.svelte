@@ -136,10 +136,9 @@
 		const langActive = langCount > 0 && langPicked.size !== langCount;
 		return (m: ModelMeta) => {
 			if (q && !modelSearchKey(m).includes(q)) return false;
-			if (availability === 'open' && !m.openWeights) return false;
-			if (availability === 'proprietary' && m.openWeights) return false;
-			if (instructions === 'only_instruction' && !m.instructionTuned) return false;
-			if (instructions === 'only_non_instruction' && m.instructionTuned) return false;
+			if (!availability.has(m.openWeights ? 'open' : 'proprietary')) return false;
+			if (!instructions.has(m.instructionTuned ? 'instruction-tuned' : 'non-instruction'))
+				return false;
 			if (stOnly && !m.sentenceTransformersCompatible) return false;
 			// Empty pick set = "deselect everything" → nothing matches.
 			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
