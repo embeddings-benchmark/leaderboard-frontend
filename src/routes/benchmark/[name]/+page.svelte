@@ -475,9 +475,6 @@
 		position: relative;
 		overflow: hidden;
 	}
-	/* Modality → tint pairs are the canonical mapping (text → teal,
-	   image → blue, audio → amber, video → purple); the rail itself comes
-	   from the shared `.accent-rail` utility in src/app.css. */
 	.hero[data-modality='text'] {
 		--card-accent: var(--tint-teal-fg);
 	}

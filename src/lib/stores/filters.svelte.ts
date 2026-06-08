@@ -529,7 +529,11 @@ interface NarrowingResult {
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	perRowAgg: WeakMap<
 		SummaryRow,
-		{ meanTask: number | null; meanTaskType: number | null; scoresByTaskType: Record<string, number> }
+		{
+			meanTask: number | null;
+			meanTaskType: number | null;
+			scoresByTaskType: Record<string, number>;
+		}
 	>;
 	// Per-task sorted (name, score) lists — backs the Borda cache,
 	// independent of the row filter (intersected at compute time).

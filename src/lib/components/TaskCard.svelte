@@ -60,7 +60,7 @@
 	{#if modalities.length > 0}
 		<div class="badges">
 			{#each sortModalities(modalities) as mod (mod)}
-				<span class="badge" data-modality={mod} title={mod}>
+				<span class="badge modality-tint" data-modality={mod} title={mod}>
 					<ModalityIcon modality={mod} size={12} />
 					<span>{mod}</span>
 				</span>
@@ -78,14 +78,10 @@
 </a>
 
 <style>
-	/* Accent-rail design (see BenchmarkCard for the rationale). Per-stype
-	   blocks set `--card-accent`, which colours the inset left rail, the
-	   hover border + title, and the footer group-chip. */
 	.card {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding for the 3 px accent strip. */
 		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
@@ -118,8 +114,7 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
-	/* Per-stype accent — mirrors the `.group-chip` colour map (CLAUDE.md).
-	   All chip-coloured stypes set an accent so the rail matches the chip. */
+	/* Per-stype accent — mirrors `.group-chip` (CLAUDE.md). */
 	.card[data-stype='retrieval'] {
 		--card-accent: var(--tint-purple-fg);
 	}
@@ -207,22 +202,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 5px;
-	}
-	/* Filled per-modality chip — coloured by each badge's own `data-modality`
-	   (text / image / audio / video each distinct). Matches BenchmarkCard. */
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		font-size: 10.5px;
-		padding: 3px 9px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.01em;
-		background: var(--modality-tint, var(--surface-muted));
-		border: 1px solid transparent;
-		color: var(--modality-tint-fg, var(--text-muted));
-		text-transform: lowercase;
 	}
 	.card-foot {
 		display: flex;

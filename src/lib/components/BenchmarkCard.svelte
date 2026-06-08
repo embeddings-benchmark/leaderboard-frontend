@@ -86,7 +86,7 @@
 	{#if b.modalities && b.modalities.length > 0}
 		<div class="badges">
 			{#each sortModalities(b.modalities) as mod (mod)}
-				<span class="badge" data-modality={mod} title={mod}>
+				<span class="badge modality-tint" data-modality={mod} title={mod}>
 					<ModalityIcon modality={mod} size={12} />
 					<span>{mod}</span>
 				</span>
@@ -96,11 +96,6 @@
 </a>
 
 <style>
-	/* Accent-rail design (no top stripe, no gradient band). Category colour
-	   lives in three places: the inset rail on the left edge (`::before`,
-	   coloured by `--card-accent` = the primary modality), the filled
-	   per-modality badges, and the hover state. The per-modality blocks
-	   below set `--card-accent` (rail + hover) and `--card-tint`. */
 	.card {
 		position: relative;
 		overflow: hidden;
@@ -185,26 +180,15 @@
 		word-break: normal;
 		line-height: 1.3;
 	}
-	/* Tame the copy-id pill on the card only (it stays a full chip on the
-	   benchmark detail hero): ghost at rest so it doesn't compete with the
-	   title, resolving into a bordered chip on hover/focus. Scoped to the
-	   card via the `.card-titles` prefix — the `:global()` just reaches the
-	   child component's root. */
-	.card-titles :global(.copyable-id) {
-		background: transparent;
-		border-color: transparent;
-		color: var(--text-subtle);
-	}
-	.card-titles :global(.copyable-id .copy-btn) {
-		border-left-color: transparent;
-	}
-	.card-titles :global(.copyable-id:hover) {
-		background: var(--surface-muted);
-		border-color: var(--border);
-		color: var(--text);
-	}
-	.card-titles :global(.copyable-id:hover .copy-btn) {
-		border-left-color: var(--border);
+	/* Ghost the CopyableId pill so it doesn't compete with the title;
+	   resolves on hover. */
+	.card-titles {
+		--copyable-bg: transparent;
+		--copyable-border: transparent;
+		--copyable-text: var(--text-subtle);
+		--copyable-bg-hover: var(--surface-muted);
+		--copyable-border-hover: var(--border);
+		--copyable-text-hover: var(--text);
 	}
 	.desc {
 		margin: 0;
@@ -257,24 +241,6 @@
 		flex-wrap: wrap;
 		gap: 5px;
 		margin-top: auto;
-	}
-	/* Filled per-modality chip: each badge carries its own `data-modality`,
-	   so `--modality-tint` / `--modality-tint-fg` (set by the global
-	   `[data-modality]` rules in app.css) colour it by ITS modality — text,
-	   image, audio and video each read as a distinct colour. */
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		font-size: 10.5px;
-		padding: 3px 9px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.01em;
-		background: var(--modality-tint, var(--surface-muted));
-		border: 1px solid transparent;
-		color: var(--modality-tint-fg, var(--text-muted));
-		text-transform: lowercase;
 	}
 	.newer-note {
 		display: inline-flex;

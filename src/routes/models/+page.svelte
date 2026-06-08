@@ -27,7 +27,6 @@
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
 
-
 	// Local language filter state. Lives in the page (not the shared
 	// `filters` store) because /models is the only place that uses it.
 	// Same "all on = filter off" semantic as the shared store:
@@ -342,9 +341,9 @@
 						{#if m.modalities && m.modalities.length > 0}
 							<div class="modality-row" aria-label="Supported modalities">
 								{#each sortModalities(m.modalities) as mod (mod)}
-									<span class="mod-chip" data-modality={mod} title={mod}>
+									<span class="badge modality-tint" data-modality={mod} title={mod}>
 										<ModalityIcon modality={mod} size={12} />
-										<span class="mod-label">{mod}</span>
+										<span>{mod}</span>
 									</span>
 								{/each}
 							</div>
@@ -397,9 +396,6 @@
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 12px;
 	}
-	/* Accent-rail design (see BenchmarkCard for rationale). Per-type blocks
-	   set `--card-accent` (inset left rail + hover border + title tint) and
-	   `--card-tint` (the soft-filled type chip). */
 	.card {
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -437,9 +433,7 @@
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
 		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
-	/* Per-type accent — mapping documented in CLAUDE.md. The shared
-	   `.accent-rail` in src/app.css reads `--card-accent`; the type chip
-	   reads `--card-tint` / `--card-accent`. */
+	/* Per-type accent — mapping documented in CLAUDE.md. */
 	.card[data-type='dense'] {
 		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
@@ -486,25 +480,6 @@
 		flex-wrap: wrap;
 		gap: 6px;
 		margin-top: auto;
-	}
-	/* Filled per-modality chip — coloured by each badge's own `data-modality`
-	   (text / image / audio / video each distinct). Matches the benchmark and
-	   task card badges. */
-	.mod-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		padding: 3px 9px;
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.01em;
-		border-radius: 999px;
-		background: var(--modality-tint, var(--surface-muted));
-		border: 1px solid transparent;
-		color: var(--modality-tint-fg, var(--text-muted));
-	}
-	.mod-label {
-		text-transform: lowercase;
 	}
 	.title {
 		display: block;
@@ -591,22 +566,13 @@
 		flex-wrap: wrap;
 		gap: 5px;
 	}
-	/* Calm outline chips. `.open` is the one meaningful colour moment among
-	   the capability badges — green text + a faintly green-tinted border,
-	   no fill. `.closed` / `.soft` stay fully neutral. */
-	.badge {
-		font-size: 10px;
-		padding: 3px 9px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.01em;
+	/* Outline-only on the card (overrides the global filled defaults). */
+	.badge.open,
+	.badge.soft {
 		background: transparent;
-		border: 1px solid var(--border);
-		color: var(--text-muted);
 	}
 	.badge.open {
 		color: var(--tint-green-fg);
-		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, var(--border));
 	}
 
 	/* `.empty` lives in src/app.css. */

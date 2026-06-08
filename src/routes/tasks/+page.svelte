@@ -383,8 +383,7 @@
 				<select
 					id="sort-select"
 					value={sort}
-					onchange={(e) =>
-						onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
+					onchange={(e) => onSortKeyChange((e.currentTarget as HTMLSelectElement).value as SortId)}
 				>
 					{#each SORTS as s (s.id)}
 						<option value={s.id}>{s.label}</option>

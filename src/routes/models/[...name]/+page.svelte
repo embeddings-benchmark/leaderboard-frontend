@@ -536,30 +536,6 @@
 		background: var(--tint-purple);
 		color: var(--tint-purple-fg);
 	}
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 4px 9px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
-		/* Matches the modality / open-weight badge colour via currentColor
-		   so every variant — `.open`, `.soft`, `.modality-tint` — gets a
-		   matching subtle border without per-class repetition. */
-		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-	}
-	.badge.open {
-		background: light-dark(var(--tint-green), #0d2a1c);
-		color: var(--tint-green-fg);
-	}
-	.badge.soft {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
-	/* `.modality-tint[data-modality='…']` is defined in src/app.css and
-	   shared with the /models index card. Local class kept geometry-only. */
 
 	.hero h1 {
 		font-size: 28px;

@@ -93,14 +93,10 @@
 </a>
 
 <style>
-	/* Accent-rail treatment, matching the benchmark/task/model cards: flat
-	   surface + neutral border, with an inset rounded marker rail on the
-	   left edge coloured by the per-tile tint. */
 	.prim {
 		--tint: var(--tint-blue);
 		--tint-fg: var(--tint-blue-fg);
-		/* Map to `--card-accent` so the shared `.accent-rail::before`
-		   (src/app.css) reads this tile's per-key tint. */
+		/* Feed the shared `.accent-rail` the per-tile tint. */
 		--card-accent: var(--tint-fg);
 		display: flex;
 		flex-direction: column;

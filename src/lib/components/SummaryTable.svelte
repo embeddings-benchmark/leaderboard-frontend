@@ -74,8 +74,7 @@
 		VisionCentricQA: 'Answer questions that require visual understanding of an image.',
 		Compositionality:
 			'Test compositional understanding (objects, attributes, and relations) in vision-language models.',
-		'VisualSTS(eng)':
-			'Rate semantic similarity between English sentence pairs rendered as images.',
+		'VisualSTS(eng)': 'Rate semantic similarity between English sentence pairs rendered as images.',
 		'VisualSTS(multi)':
 			'Rate semantic similarity between multilingual sentence pairs rendered as images.'
 	};
