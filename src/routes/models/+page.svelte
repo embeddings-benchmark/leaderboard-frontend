@@ -357,6 +357,7 @@
 	<FilterSidebar
 		hideScope
 		flatModel
+		hideZeroShot
 		languageOptions={LANGUAGES}
 		languagesPicked={languagesPicked as unknown as Set<string>}
 		onToggleLanguage={toggleLanguage}

@@ -896,6 +896,19 @@
 	tbody tr:nth-child(even) th.sticky-model {
 		background: var(--row-alt);
 	}
+	/* Per-component pinned overrides — the generic `tr.pinned :is(td, th)`
+	   rules in leaderboard-table.css (specificity 0,2,3 / 0,3,3) lose to
+	   the Svelte-scoped even-row rule above (0,4,3 once the scoping class
+	   is added), so pinned rows would otherwise show the zebra tint on
+	   the sticky columns. */
+	tbody tr.pinned td.sticky-left,
+	tbody tr.pinned th.sticky-model {
+		background: var(--row-pinned-bg);
+	}
+	tbody tr.pinned:nth-child(even) td.sticky-left,
+	tbody tr.pinned:nth-child(even) th.sticky-model {
+		background: var(--row-pinned-bg-alt);
+	}
 
 	/* Mobile: 72 px (rank) + 260 px (model) of sticky pane eats almost
 	   the whole 375 px viewport, leaving the score columns unreachable.

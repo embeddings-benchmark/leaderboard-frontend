@@ -312,7 +312,10 @@ body:has(.sidebar:not(.collapsed)) {
 		min-width: 0;
 		max-width: none;
 		margin-inline-start: 0;
-		z-index: 30;
+		/* Above the sticky table-head overlay (z-index 50) — when the
+		   drawer is open on mobile, the overlay would otherwise paint
+		   over the drawer's own toggle row at the top. */
+		z-index: 60;
 		box-shadow: -8px 0 24px rgb(var(--shadow-tint) / 0.18);
 	}
 	.sidebar.collapsed {

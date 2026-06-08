@@ -105,7 +105,10 @@
 	box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 7%, transparent);
 }
 .tbl tbody tr.pinned :is(td, th) {
-	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+	background: var(--row-pinned-bg);
+}
+.tbl tbody tr.pinned:nth-child(even) :is(td, th) {
+	background: var(--row-pinned-bg-alt);
 }
 .tbl tbody tr.pinned + tr:not(.pinned) :is(td, th) {
 	border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
@@ -181,6 +184,12 @@
    of breathing room on each side. */
 .tbl {
 	--pin-col-w: 44px;
+	/* Pinned-row tints — a base for odd rows and a slightly darker
+	   alt for even rows so pinned rows keep their own zebra rhythm.
+	   `--row-pinned-bg-alt` mixes the pinned tint with `--row-alt`
+	   so the difference scales with the theme automatically. */
+	--row-pinned-bg: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+	--row-pinned-bg-alt: color-mix(in srgb, var(--primary-soft) 65%, var(--row-alt));
 }
 .tbl-sticky-pin {
 	position: sticky;
@@ -199,7 +208,10 @@
 	background: var(--row-alt);
 }
 .tbl tbody tr.pinned td.tbl-sticky-pin {
-	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+	background: var(--row-pinned-bg);
+}
+.tbl tbody tr.pinned:nth-child(even) td.tbl-sticky-pin {
+	background: var(--row-pinned-bg-alt);
 }
 
 .tbl-pin-btn {
@@ -261,7 +273,10 @@
 	background: var(--row-alt);
 }
 .tbl tbody tr.pinned th.tbl-sticky-col {
-	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+	background: var(--row-pinned-bg);
+}
+.tbl tbody tr.pinned:nth-child(even) th.tbl-sticky-col {
+	background: var(--row-pinned-bg-alt);
 }
 
 /* Mobile: a 220 px sticky Model column behind a 32 px pin column

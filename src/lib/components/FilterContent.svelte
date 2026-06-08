@@ -11,10 +11,13 @@
 		type InstructionMode
 	} from '$lib/stores/filters.svelte';
 	import FilterFacet from './FilterFacet.svelte';
+	import HoverPortal from './HoverPortal.svelte';
+	import InfoDot from './InfoDot.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
 	import RangeSlider from './RangeSlider.svelte';
 	import Segmented from './Segmented.svelte';
 	import Switch from './Switch.svelte';
+	import { clampTooltipX } from '$lib/cell-hover';
 	import { humanizeType } from '$lib/format';
 
 	// Size slider works in log10(M-of-params). Bounds are derived per benchmark
@@ -100,6 +103,9 @@
 		// directory), drop the collapsible "Model filters" card chrome so the
 		// controls read as the section itself instead of a card-in-a-sidebar.
 		flatModel?: boolean;
+		// /models is benchmark-agnostic, so the per-benchmark "Zero-shot"
+		// segmented control doesn't apply there — hide it entirely.
+		hideZeroShot?: boolean;
 		// Optional inline "Language" facet shown inside the model-filters
 		// block. Wired up only by /models, which holds the picked/available
 		// state locally (it's the only page that filters models by language
@@ -116,6 +122,7 @@
 		defaultScopeOpen = false,
 		hideScope = false,
 		flatModel = false,
+		hideZeroShot = false,
 		languageOptions,
 		languagesPicked,
 		onToggleLanguage,
@@ -345,6 +352,30 @@
 		filters.resetModelFilters();
 		filters.nameQuery = '';
 	}
+
+	// Tip portal for filter group-labels (mirrors the SummaryTable pattern
+	// so the bubble carries real styling instead of relying on the slow,
+	// unstyled native `title=` lag). Trigger nodes set `data-tip-title` /
+	// `data-tip` and wire up the pointer handlers below.
+	let tipState = $state({ visible: false, title: '', text: '', x: 0, y: 0 });
+	const TIP_MAX_WIDTH = 320;
+	function showTip(e: PointerEvent | FocusEvent) {
+		const el = e.currentTarget as HTMLElement;
+		const title = el.dataset.tipTitle ?? '';
+		const text = el.dataset.tip ?? '';
+		if (!text) return;
+		const r = el.getBoundingClientRect();
+		tipState = {
+			visible: true,
+			title,
+			text,
+			x: clampTooltipX(r.left + r.width / 2, TIP_MAX_WIDTH),
+			y: r.bottom
+		};
+	}
+	function hideTip() {
+		tipState = { ...tipState, visible: false };
+	}
 </script>
 
 <div class="filter-content">
@@ -373,15 +404,33 @@
 			/>
 		</div>
 
-		<div class="group">
-			<div class="group-label">Zero-shot</div>
-			<Segmented
-				ariaLabel="Zero-shot"
-				options={ZERO_SHOT_OPTS}
-				value={filters.zeroShot}
-				onChange={(v) => (filters.zeroShot = v)}
-			/>
-		</div>
+		{#if !hideZeroShot}
+			<div class="group">
+				<div class="group-label">
+					Zero-shot
+					<button
+						type="button"
+						class="tip-anchor"
+						aria-label="Zero-shot info"
+						data-tip-title="Zero-shot"
+						data-tip="Zero-shot indicates the portion of the benchmark a model has not been trained on. 'Only zero-shot' keeps fully out-of-distribution models; 'Hide unknown zero-shot' drops models whose training overlap is unknown."
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						onclick={(e) => e.stopPropagation()}
+					>
+						<InfoDot ariaLabel="Zero-shot info" />
+					</button>
+				</div>
+				<Segmented
+					ariaLabel="Zero-shot"
+					options={ZERO_SHOT_OPTS}
+					value={filters.zeroShot}
+					onChange={(v) => (filters.zeroShot = v)}
+				/>
+			</div>
+		{/if}
 
 		<div class="group">
 			<div class="group-label">
@@ -620,6 +669,10 @@
 	{/if}
 </div>
 
+<HoverPortal visible={tipState.visible} title={tipState.title} x={tipState.x} y={tipState.y}>
+	{tipState.text}
+</HoverPortal>
+
 <style>
 	.filter-content {
 		padding: 12px 14px 28px;
@@ -791,6 +844,23 @@
 		font-weight: 600;
 		letter-spacing: 0.02em;
 		color: var(--text);
+	}
+	/* Inline trigger for the HoverPortal — wrapper button owns the
+	   data-tip attrs + pointer/focus listeners, so the bubble can render
+	   real markup (vs the slow, unstyled native `title=` lag). Keyboard
+	   focus also fires the tip via onfocusin/onfocusout. */
+	.tip-anchor {
+		display: inline-flex;
+		align-items: center;
+		padding: 0;
+		background: none;
+		border: none;
+		cursor: help;
+	}
+	.tip-anchor:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+		border-radius: 999px;
 	}
 	.muted-inline {
 		font-size: 11px;

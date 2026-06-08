@@ -5,6 +5,10 @@
 	interface Props {
 		hideScope?: boolean;
 		flatModel?: boolean;
+		// /models filters models by capability, not by per-benchmark
+		// training overlap — the Zero-shot segmented control is
+		// benchmark-scoped, so it's hidden there.
+		hideZeroShot?: boolean;
 		// Optional inline Language facet — forwarded to FilterContent.
 		// Only /models passes these; on every other page the block is
 		// omitted because there's no language data to bind to.
@@ -21,6 +25,7 @@
 	let {
 		hideScope = false,
 		flatModel = false,
+		hideZeroShot = false,
 		languageOptions,
 		languagesPicked,
 		onToggleLanguage,
@@ -70,6 +75,7 @@
 			<FilterContent
 				{hideScope}
 				{flatModel}
+				{hideZeroShot}
 				{languageOptions}
 				{languagesPicked}
 				{onToggleLanguage}
