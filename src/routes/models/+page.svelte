@@ -234,7 +234,7 @@
 />
 
 <div class="layout-sidebar">
-	<main class="layout-main">
+	<main id="main-content" tabindex="-1" class="layout-main">
 		<header class="hero index-hero">
 			<h1>Models</h1>
 			<p class="lead">

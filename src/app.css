@@ -141,7 +141,7 @@ html,
 body {
 	margin: 0;
 	padding: 0;
-	min-height: 100vh;
+	min-height: 100dvh;
 	background: var(--bg);
 	color: var(--text);
 	font-family: var(--font-sans);
@@ -180,57 +180,59 @@ code {
 }
 
 /* Per-modality colour pair via `.modality-tint[data-modality=text|image|audio|video]`.
-   Each variant sets the tint-pair custom properties; one paint rule below
-   reads them, collapsing 4 declaration blocks into 4 var-only blocks + 1
-   shared paint rule. */
-[data-modality='text'] {
+   `:where()` keeps these at zero specificity so consumer classes always win. */
+:where([data-modality='text']) {
 	--modality-tint: var(--tint-teal);
 	--modality-tint-fg: var(--tint-teal-fg);
 }
-[data-modality='image'] {
+:where([data-modality='image']) {
 	--modality-tint: var(--tint-blue);
 	--modality-tint-fg: var(--tint-blue-fg);
 }
-[data-modality='audio'] {
+:where([data-modality='audio']) {
 	--modality-tint: var(--tint-amber);
 	--modality-tint-fg: var(--tint-amber-fg);
 }
-[data-modality='video'] {
+:where([data-modality='video']) {
 	--modality-tint: var(--tint-purple);
 	--modality-tint-fg: var(--tint-purple-fg);
 }
+/* `utilities` always wins over `components`, so `.modality-tint` paints
+   over `.badge` regardless of source order. */
+@layer components, utilities;
+
 /* Chip shell — pair with `.modality-tint`, `.open`, or `.soft` for a
    fill. The border tracks `currentColor` so each variant's `color:`
    colours the border too. */
-.badge {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	padding: 3px 9px;
-	font-size: 10.5px;
-	border-radius: 999px;
-	font-weight: 600;
-	letter-spacing: 0.01em;
-	color: var(--text-muted);
-	border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+@layer components {
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 3px 9px;
+		font-size: 10.5px;
+		border-radius: 999px;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		color: var(--text-muted);
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+	}
+	.badge.open {
+		background: light-dark(var(--tint-green), #0d2a1c);
+		color: var(--tint-green-fg);
+	}
+	.badge.soft {
+		background: var(--surface-muted);
+		color: var(--text-muted);
+	}
 }
-/* Filled defaults; outline-only contexts clear `background` locally.
-   `.modality-tint` is defined AFTER `.badge` so its color wins the
-   cascade when both classes are applied — otherwise the badge's
-   text-muted color would override the per-modality fg and the chip
-   border (driven by currentColor) would read grey instead of tinted. */
-.badge.open {
-	background: light-dark(var(--tint-green), #0d2a1c);
-	color: var(--tint-green-fg);
-}
-.badge.soft {
-	background: var(--surface-muted);
-	color: var(--text-muted);
-}
-.modality-tint {
-	background: var(--modality-tint, var(--surface-muted));
-	color: var(--modality-tint-fg, var(--text-muted));
-	text-transform: lowercase;
+
+@layer utilities {
+	.modality-tint {
+		background: var(--modality-tint, var(--surface-muted));
+		color: var(--modality-tint-fg, var(--text-muted));
+		text-transform: lowercase;
+	}
 }
 
 /* Consumers must be `position: relative` and leave ~18 px of left
@@ -253,79 +255,81 @@ code {
 	bottom: 11px;
 }
 
-/* Per-task-group tints — `data-stype` exposes `--category-tint(-fg)`
-   to descendants. Mapping documented in CLAUDE.md. */
-[data-stype='classification'] {
+/* Per-task-group tints — `data-stype` exposes `--category-tint(-fg)`.
+   Mapping documented in CLAUDE.md. */
+:where([data-stype='classification']) {
 	--category-tint: var(--tint-blue);
 	--category-tint-fg: var(--tint-blue-fg);
 }
-[data-stype='clustering'] {
+:where([data-stype='clustering']) {
 	--category-tint: var(--tint-orange);
 	--category-tint-fg: var(--tint-orange-fg);
 }
-[data-stype='pair-classification'] {
+:where([data-stype='pair-classification']) {
 	--category-tint: var(--tint-green);
 	--category-tint-fg: var(--tint-green-fg);
 }
-[data-stype='reranking'] {
+:where([data-stype='reranking']) {
 	--category-tint: var(--tint-amber);
 	--category-tint-fg: var(--tint-amber-fg);
 }
-[data-stype='retrieval'] {
+:where([data-stype='retrieval']) {
 	--category-tint: var(--tint-purple);
 	--category-tint-fg: var(--tint-purple-fg);
 }
-[data-stype='semantic-similarity'] {
+:where([data-stype='semantic-similarity']) {
 	--category-tint: var(--tint-pink);
 	--category-tint-fg: var(--tint-pink-fg);
 }
-[data-stype='bitext-mining'] {
+:where([data-stype='bitext-mining']) {
 	--category-tint: var(--tint-azure);
 	--category-tint-fg: var(--tint-azure-fg);
 }
-[data-stype='instruction-reranking'] {
+:where([data-stype='instruction-reranking']) {
 	--category-tint: var(--tint-orange);
 	--category-tint-fg: var(--tint-orange-fg);
 }
-[data-stype='summarization'] {
+:where([data-stype='summarization']) {
 	--category-tint: var(--tint-teal);
 	--category-tint-fg: var(--tint-teal-fg);
 }
 
 /* Per-model-type tints — `data-type` exposes `--category-tint(-fg)`.
-   The separate `[data-model-type]` block in leaderboard-table.css
-   covers SummaryTable row-cell tints (independent). */
-[data-type='dense'] {
+   `[data-model-type]` in leaderboard-table.css covers row-cell tints. */
+:where([data-type='dense']) {
 	--category-tint: var(--tint-blue);
 	--category-tint-fg: var(--tint-blue-fg);
 }
-[data-type='cross-encoder'] {
+:where([data-type='cross-encoder']) {
 	--category-tint: var(--tint-orange);
 	--category-tint-fg: var(--tint-orange-fg);
 }
-[data-type='late-interaction'] {
+:where([data-type='late-interaction']) {
 	--category-tint: var(--tint-green);
 	--category-tint-fg: var(--tint-green-fg);
 }
-[data-type='sparse'] {
+:where([data-type='sparse']) {
 	--category-tint: var(--tint-amber);
 	--category-tint-fg: var(--tint-amber-fg);
 }
-[data-type='router'] {
+:where([data-type='router']) {
 	--category-tint: var(--tint-purple);
 	--category-tint-fg: var(--tint-purple-fg);
 }
 
-/* currentColor border so the fg colour also tints the outline. */
-.category-tint {
-	background: var(--category-tint, var(--surface-muted));
-	color: var(--category-tint-fg, var(--text-muted));
-	border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+/* `utilities` layer so this shell wins over `components` like `.badge`. */
+@layer utilities {
+	.category-tint {
+		background: var(--category-tint, var(--surface-muted));
+		color: var(--category-tint-fg, var(--text-muted));
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+	}
 }
 
 .lead {
 	margin: 0;
 	color: var(--text-muted);
+	text-wrap: pretty;
 }
 
 .index-hero {
@@ -335,6 +339,7 @@ code {
 	font-size: 32px;
 	margin: 0 0 10px;
 	letter-spacing: -0.01em;
+	text-wrap: balance;
 }
 
 .card-grid {
@@ -345,7 +350,7 @@ code {
 
 .layout-sidebar {
 	display: flex;
-	min-height: 100vh;
+	min-height: 100dvh;
 }
 .layout-main {
 	flex: 1;
@@ -384,7 +389,7 @@ code {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 5px;
-	margin-top: auto;
+	margin-block-start: auto;
 }
 
 .chip-neutral {
@@ -452,7 +457,7 @@ code {
 	flex-direction: column;
 	gap: var(--card-gap, 12px);
 	position: relative;
-	overflow: hidden;
+	overflow: clip;
 	text-decoration: none;
 	color: inherit;
 	transition:
@@ -460,9 +465,8 @@ code {
 		border-color 0.12s ease,
 		box-shadow 0.12s ease;
 }
-/* Re-assert `text-decoration: none` here so the global
-   `a:hover { text-decoration: underline; }` doesn't underline every
-   line of card text on hover. */
+/* `text-decoration: none` re-asserted so the global `a:hover` underline
+   doesn't underline every line of card text. */
 .card-link:hover {
 	transform: translateY(-1px);
 	box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
@@ -476,9 +480,8 @@ code {
 	outline: 2px solid var(--card-accent, var(--primary));
 	outline-offset: 2px;
 }
-/* `content-visibility: auto` already implies `contain: size layout
-   paint style`; an explicit `contain:` would replace (not augment)
-   that set, breaking `contain-intrinsic-size`. */
+/* No explicit `contain:` — `content-visibility: auto` already implies the
+   right set, and overriding it would break `contain-intrinsic-size`. */
 .card-link-vis {
 	content-visibility: auto;
 	contain-intrinsic-size: var(--card-intrinsic, 240px);
@@ -490,7 +493,7 @@ code {
 .tip-portal {
 	position: fixed;
 	transform: translate(-50%, 6px);
-	max-width: min(360px, calc(100vw - 24px));
+	max-width: min(360px, calc(100dvw - 24px));
 	padding: 10px 12px;
 	background: var(--tip-bg);
 	color: var(--tip-fg);
@@ -519,10 +522,39 @@ code {
 	background: var(--surface);
 	color: var(--text);
 }
-.input-text:focus {
+.input-text:focus-visible {
 	outline: none;
 	border-color: var(--primary);
 	box-shadow: 0 0 0 3px var(--primary-soft);
+}
+/* `box-shadow` halos are stripped in HCM — restore a visible focus ring. */
+@media (forced-colors: active) {
+	.input-text:focus-visible {
+		outline: 2px solid Highlight;
+		outline-offset: 1px;
+	}
+}
+
+/* Off-screen until focused (WCAG 2.4.1). */
+.skip-link {
+	position: fixed;
+	top: -100px;
+	left: 12px;
+	z-index: 100;
+	padding: 8px 14px;
+	background: var(--primary);
+	color: var(--surface);
+	border-radius: 8px;
+	font-weight: 600;
+	font-size: 13px;
+	text-decoration: none;
+	box-shadow: 0 4px 12px rgb(var(--shadow-tint) / 0.2);
+	transition: top 0.18s ease;
+}
+.skip-link:focus-visible {
+	top: 12px;
+	outline: 2px solid var(--primary-strong);
+	outline-offset: 2px;
 }
 
 /* Visually-hidden text for screen readers. `clip-path: inset(50%)`
@@ -597,17 +629,18 @@ code {
 		gap: 8px 10px;
 	}
 	.toolbar .sort {
-		margin-left: 0;
+		margin-inline-start: 0;
 	}
 }
 
 /* Sort + direction-toggle widget shared by the /models and /tasks
-   index toolbars. */
+   index toolbars. FUTURE: migrate `<select>` to `appearance: base-select`
+   when it leaves Chrome-only — branded-select-styling in modern-web-guidance. */
 .sort {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	margin-left: auto;
+	margin-inline-start: auto;
 	font-size: 12px;
 	color: var(--text-muted);
 }
@@ -645,7 +678,7 @@ code {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	margin-bottom: 14px;
+	margin-block-end: 14px;
 	font-size: 12px;
 	color: var(--text-muted);
 }
@@ -681,19 +714,31 @@ code {
 	color: var(--text-muted);
 }
 
-/* Shared thin scrollbar — applied to internally-scrolling regions
-   (filter pill lists, tab strips, task-info tables) so they don't
-   each redeclare the same `::-webkit-scrollbar` rules. */
-.scroll-thin {
-	scrollbar-width: thin;
+/* Shared title + clamped description used by BenchmarkCard and TaskCard. */
+.card-title {
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--text);
+	overflow-wrap: anywhere;
+	word-break: normal;
+	line-height: 1.3;
 }
-.scroll-thin::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+.card-desc {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--text-muted);
+	overflow: clip;
+	text-wrap: pretty;
+	line-clamp: 2;
 }
-.scroll-thin::-webkit-scrollbar-thumb {
-	background: var(--border-strong);
-	border-radius: 3px;
+@supports not (line-clamp: 2) {
+	.card-desc {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+	}
 }
 
 /* Heat-shading classes for leaderboard table cells. ~1500 cells per

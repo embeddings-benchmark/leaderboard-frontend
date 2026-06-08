@@ -42,11 +42,11 @@
 			{/if}
 		{/if}
 		<div class="card-titles">
-			<span class="title" title={b.displayName}>{b.displayName}</span>
+			<span class="title card-title" title={b.displayName}>{b.displayName}</span>
 			<CopyableId value={b.name} ariaLabel="Copy benchmark id" />
 		</div>
 	</div>
-	<p class="desc"><MarkdownText text={b.description} /></p>
+	<p class="card-desc"><MarkdownText text={b.description} /></p>
 	<dl class="card-stats">
 		<div>
 			<dt>Models</dt>
@@ -120,14 +120,6 @@
 		min-width: 0;
 		flex: 1;
 	}
-	.title {
-		font-size: 14px;
-		font-weight: 700;
-		color: var(--text);
-		overflow-wrap: anywhere;
-		word-break: normal;
-		line-height: 1.3;
-	}
 	/* Ghost the CopyableId pill until hover so it doesn't compete with
 	   the title. */
 	.card-titles {
@@ -137,28 +129,6 @@
 		--copyable-bg-hover: var(--surface-muted);
 		--copyable-border-hover: var(--border);
 		--copyable-text-hover: var(--text);
-	}
-	.desc {
-		margin: 0;
-		font-size: 12.5px;
-		line-height: 1.45;
-		color: var(--text-muted);
-		overflow: hidden;
-		/* Standard CSS Overflow 4 shorthand: clamps without the deprecated
-		   `-webkit-box-orient`. Chromium 124+, Safari 18.2+, Firefox 136+. */
-		line-clamp: 2;
-	}
-	/* Fallback for browsers that haven't shipped the standard `line-clamp`
-	   yet — they get the legacy WebKit triplet (with `-webkit-box-orient`
-	   only inside this branch, so the deprecation warning doesn't fire
-	   for browsers that don't need it). */
-	@supports not (line-clamp: 2) {
-		.desc {
-			display: -webkit-box;
-			-webkit-line-clamp: 2;
-			line-clamp: 2;
-			-webkit-box-orient: vertical;
-		}
 	}
 	.newer-note {
 		display: inline-flex;

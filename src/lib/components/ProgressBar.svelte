@@ -18,7 +18,7 @@
 		position: relative;
 		height: 3px;
 		width: 100%;
-		overflow: hidden;
+		overflow: clip;
 		background: color-mix(in srgb, var(--primary) 14%, transparent);
 	}
 	/* Indeterminate progress: a solid bar that grows from the left edge,

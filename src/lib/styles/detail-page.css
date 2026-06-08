@@ -4,7 +4,7 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	margin-bottom: 12px;
+	margin-block-end: 12px;
 }
 
 /* currentColor border so the per-category fg tints the outline. */
@@ -24,31 +24,43 @@
 }
 
 /* `minmax(0, 1fr)` (not bare `1fr`) lets the left column shrink below
-   its intrinsic content width — without it a wide BibTeX block or
-   long URL blows the card past the viewport on mobile. */
+   its intrinsic content — without it a wide BibTeX block blows the card
+   past the viewport on mobile. Layout queried via container, not viewport,
+   so the shell adapts inside narrower main columns. Consumers override
+   the `--hero-*` props per page. */
 .hero-grid {
+	--hero-cols: minmax(0, 1.4fr) minmax(0, 1fr);
+	--hero-gap: 28px;
+	--hero-padding-block: 26px;
+	--hero-padding-inline: 32px 28px;
+	--hero-margin-block-end: 18px;
+
+	container: hero / inline-size;
 	display: grid;
-	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-	gap: 28px;
-	padding: 26px 28px 26px 32px;
-	margin-bottom: 18px;
+	grid-template-columns: var(--hero-cols);
+	gap: var(--hero-gap);
+	padding-block: var(--hero-padding-block);
+	padding-inline: var(--hero-padding-inline);
+	margin-block-end: var(--hero-margin-block-end);
 	position: relative;
-	overflow: hidden;
+	overflow: clip;
 }
-@media (max-width: 1000px) {
+@container hero (max-width: 1000px) {
 	.hero-grid {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
-@media (max-width: 640px) {
+@container hero (max-width: 640px) {
 	.hero-grid {
-		padding: 18px 16px;
+		padding-block: 18px;
+		padding-inline: 16px;
 		gap: 16px;
-		margin-bottom: 12px;
+		margin-block-end: 12px;
 	}
 }
 
 .kpis {
+	container: kpis / inline-size;
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 10px;
@@ -76,7 +88,7 @@
 	color: var(--text);
 	font-variant-numeric: tabular-nums;
 }
-@media (max-width: 640px) {
+@container kpis (max-width: 360px) {
 	.kpis {
 		gap: 8px;
 	}
@@ -105,7 +117,7 @@
 	font-weight: 500;
 	color: var(--text-subtle);
 	letter-spacing: 0.02em;
-	padding-top: 3px;
+	padding-block-start: 3px;
 }
 .spec-list dd {
 	font-size: 13px;

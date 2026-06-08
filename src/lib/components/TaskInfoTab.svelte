@@ -99,9 +99,15 @@
 		font-size: 13px;
 		font-family: inherit;
 	}
-	.filter input:focus {
+	.filter input:focus-visible {
 		outline: none;
 		border-color: var(--primary);
+	}
+	@media (forced-colors: active) {
+		.filter input:focus-visible {
+			outline: 2px solid Highlight;
+			outline-offset: 1px;
+		}
 	}
 	.count {
 		color: var(--text-muted);

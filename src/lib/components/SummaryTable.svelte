@@ -478,9 +478,11 @@
 <div class="summary">
 	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl summary-table" use:stickyHead>
+			<caption class="sr-only">Model leaderboard</caption>
 			<thead>
 				<tr>
 					<th
+						scope="col"
 						class="sticky-left rank-head"
 						data-tip-title={INFO.rank.title}
 						data-tip={INFO.rank.text}
@@ -497,6 +499,7 @@
 						</button>
 					</th>
 					<th
+						scope="col"
 						class="sticky-model"
 						aria-sort={sort.aria('model')}
 						data-tip-title={INFO.model.title}
@@ -513,6 +516,7 @@
 						</button>
 					</th>
 					<th
+						scope="col"
 						class="tbl-num"
 						data-tip-title={INFO.totalParams.title}
 						data-tip={INFO.totalParams.text}
@@ -531,6 +535,7 @@
 						</button>
 					</th>
 					<th
+						scope="col"
 						class="tbl-num"
 						data-tip-title={INFO.zeroShot.title}
 						data-tip={INFO.zeroShot.text}
@@ -629,6 +634,7 @@
 							{@const desc = TASK_TYPE_INFO[real] ?? TASK_TYPE_INFO[tt]}
 							{@const label = humanizeType(real)}
 							<th
+								scope="col"
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
 								data-tip-title={desc ? label : ''}
@@ -657,7 +663,8 @@
 								<span class="rank-pill">#{row.rank}</span>
 							</div>
 						</td>
-						<td
+						<th
+							scope="row"
 							class="sticky-model has-tip"
 							data-model-type={row.model.modelType}
 							onpointerover={(e) => showModelTip(e, row)}
@@ -666,7 +673,7 @@
 							onfocusout={hideModelTip}
 						>
 							<ModelCellName model={row.model} />
-						</td>
+						</th>
 						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
 							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
 									class="unit">{fmtParamsUnit(row.totalParamsB)}</span
@@ -881,10 +888,10 @@
 		background: var(--surface-muted);
 		z-index: 3;
 	}
-	tbody tr:nth-child(even) td.sticky-model {
+	tbody tr:nth-child(even) th.sticky-model {
 		background: var(--row-alt);
 	}
-	tbody tr:hover td.sticky-model {
+	tbody tr:hover th.sticky-model {
 		background: var(--row-hover);
 	}
 

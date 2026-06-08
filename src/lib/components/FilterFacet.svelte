@@ -73,7 +73,7 @@
 			bind:value={searchValue}
 		/>
 	{/if}
-	<div class="pills" class:scroll={scrollable} class:scroll-thin={scrollable}>
+	<div class="pills" class:scroll={scrollable}>
 		{#each items as item (item)}
 			<label class={['pill', pillClass]} {...pillAttrs?.(item) ?? {}}>
 				<input type="checkbox" checked={picked.has(item)} onchange={() => onToggle(item)} />

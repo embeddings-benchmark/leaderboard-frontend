@@ -223,6 +223,10 @@
 		});
 	});
 
+	// FUTURE: migrate to native `popover="auto"` once anchor positioning
+	// is Baseline — top-layer popovers anchor to the viewport, so JS or
+	// anchor-positioning is needed to dock to the trigger. Until then,
+	// manual click-outside + Escape is simpler.
 	function onDocClick(e: MouseEvent) {
 		const target = e.target as Node;
 		if (pickerOpen && pickerRoot && !pickerRoot.contains(target)) pickerOpen = false;
@@ -617,9 +621,9 @@
 		<span class="bench-meta">{pickedTasks.length} / {MAX_TASKS} tasks</span>
 	</div>
 
-	<main class="page">
+	<main id="main-content" tabindex="-1" class="page">
 		{#if !primarySummary}
-			<p class="loading">Loading…</p>
+			<p class="loading" role="status">Loading…</p>
 		{:else}
 			<section class="picker-bar panel">
 				<div class="picks">
@@ -871,7 +875,7 @@
 
 <style>
 	.app {
-		min-height: 100vh;
+		min-height: 100dvh;
 	}
 	.bar {
 		display: flex;
@@ -922,7 +926,7 @@
 	}
 	.picker-panel.bench-panel {
 		left: 0;
-		width: min(420px, calc(100vw - 24px));
+		width: min(420px, calc(100dvw - 24px));
 	}
 	.picker-row.bench-row {
 		grid-template-columns: 1fr auto 16px;
@@ -1020,7 +1024,7 @@
 		position: absolute;
 		top: calc(100% + 6px);
 		left: 0;
-		width: min(360px, calc(100vw - 24px));
+		width: min(360px, calc(100dvw - 24px));
 		max-height: 420px;
 		z-index: 30;
 		display: flex;
@@ -1138,7 +1142,6 @@
 		   left-most label column anchors against this scrollport. */
 		overflow-x: auto;
 		overflow-y: hidden;
-		-webkit-overflow-scrolling: touch;
 		overscroll-behavior-x: contain;
 		box-shadow: var(--shadow-sm);
 	}

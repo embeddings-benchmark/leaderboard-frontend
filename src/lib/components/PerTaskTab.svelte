@@ -279,15 +279,17 @@
 		</p>
 		<div class="tbl-scroll" use:stickyHScroll>
 			<table class="tbl" use:stickyHead>
+				<caption class="sr-only">Per-task scores</caption>
 				<thead>
 					<tr>
-						<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
-						<th class="tbl-sticky-col" aria-sort={sort.aria('model')}>
+						<th scope="col" class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
+						<th scope="col" class="tbl-sticky-col" aria-sort={sort.aria('model')}>
 							<SortHeader {sort} field="model" label="Model" align="left" />
 						</th>
 						{#each sortedTasks as task (task)}
 							{@const k = `task:${task}` as SortKey}
 							<th
+								scope="col"
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
 								onpointerenter={(e) => showTaskTip(e, task)}
@@ -311,7 +313,8 @@
 							<td class="tbl-pin-col tbl-sticky-pin">
 								<PinButton name={row.model.name} />
 							</td>
-							<td
+							<th
+								scope="row"
 								class="tbl-sticky-col"
 								data-model-type={row.model.modelType}
 								onpointerover={(e) => onCellEnter(e, row)}
@@ -320,7 +323,7 @@
 								onfocusout={onCellLeave}
 							>
 								<ModelCellName model={row.model} />
-							</td>
+							</th>
 							{#each sortedTasks as task (task)}
 								{@const trained = rowTrained?.has(task) ?? false}
 								{@const v = scoreFor(row, task)}

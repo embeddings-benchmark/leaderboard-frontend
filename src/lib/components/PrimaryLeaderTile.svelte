@@ -54,6 +54,7 @@
 					height="22"
 					loading="lazy"
 					decoding="async"
+					fetchpriority="low"
 				/>
 			{:else}
 				<span class="prim-icon icon-tile icon-tile-text" aria-hidden="true">{benchmark.icon}</span>

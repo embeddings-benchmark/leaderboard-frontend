@@ -1,20 +1,27 @@
-<!-- Bottom-left floating "back to top" pill; bookends `ShareUrlButton`. -->
+<!-- Bottom-left floating "back to top" pill; bookends `ShareUrlButton`.
+     IntersectionObserver on a sentinel at top: 320px replaces a per-scroll
+     listener. FUTURE: `@container scroll-state(scrollable: top)` on the root
+     would drop the JS once it leaves Chrome-only. -->
 <script lang="ts">
 	let visible = $state(false);
+	let sentinel: HTMLDivElement | undefined = $state();
 
 	$effect(() => {
-		const onScroll = () => {
-			visible = window.scrollY > 320;
-		};
-		onScroll();
-		window.addEventListener('scroll', onScroll, { passive: true });
-		return () => window.removeEventListener('scroll', onScroll);
+		if (!sentinel) return;
+		const io = new IntersectionObserver(([entry]) => {
+			// Sentinel sits at 320px; out of view = user has scrolled past it.
+			visible = !entry.isIntersecting;
+		});
+		io.observe(sentinel);
+		return () => io.disconnect();
 	});
 
 	function scrollTop() {
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 </script>
+
+<div bind:this={sentinel} class="scroll-sentinel" aria-hidden="true"></div>
 
 <button
 	type="button"
@@ -44,6 +51,17 @@
 </button>
 
 <style>
+	/* `position: absolute` (not `fixed`) so the sentinel sits at a fixed
+	   document position rather than scrolling with the viewport. */
+	.scroll-sentinel {
+		position: absolute;
+		top: 320px;
+		left: 0;
+		width: 1px;
+		height: 1px;
+		pointer-events: none;
+		visibility: hidden;
+	}
 	.top-btn {
 		position: fixed;
 		left: max(22px, env(safe-area-inset-left));

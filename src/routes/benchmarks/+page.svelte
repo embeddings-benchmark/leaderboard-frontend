@@ -217,7 +217,7 @@
 />
 
 <div class="layout-sidebar">
-	<main class="layout-main main">
+	<main id="main-content" tabindex="-1" class="layout-main main">
 		<header class="hero">
 			<h1>All benchmarks</h1>
 			<p class="lead">

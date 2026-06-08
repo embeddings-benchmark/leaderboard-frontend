@@ -268,7 +268,7 @@
 />
 
 <div class="layout-sidebar">
-	<main class="main">
+	<main id="main-content" tabindex="-1" class="main">
 		<nav class="breadcrumb" aria-label="Breadcrumb">
 			<a href={resolve('/')}>Home</a>
 			<span class="sep">/</span>
@@ -292,7 +292,7 @@
 				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else}
-			<section class="hero panel accent-rail" data-modality={accentModality}>
+			<section class="hero panel hero-grid accent-rail" data-modality={accentModality}>
 				<div class="hero-left">
 					<div class="title-block">
 						{#if benchmark.icon}
@@ -453,28 +453,15 @@
 		padding: 18px 12px 40px 28px;
 	}
 
-	/* `1fr auto` ratio differs from the shared `.hero-grid`'s
-	   `1.4fr 1fr`. */
+	/* `.hero-grid` shell from detail-page.css; overrides hug KPIs to content. */
 	.hero {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		gap: 28px;
-		padding: 22px 26px 22px 30px;
-		margin-bottom: 16px;
-		position: relative;
-		overflow: hidden;
+		--hero-cols: minmax(0, 1fr) auto;
+		--hero-padding-block: 22px;
+		--hero-padding-inline: 30px 26px;
+		--hero-margin-block-end: 16px;
 	}
 	.hero[data-modality] {
 		--card-accent: var(--modality-tint-fg);
-	}
-	@media (max-width: 1000px) {
-		.hero {
-			/* `minmax(0, 1fr)` (not bare `1fr`) lets the column shrink
-			   below its intrinsic content width — without it, the
-			   CiteBlock's <pre> claims its full bibtex width and
-			   blows the card past the viewport on mobile. */
-			grid-template-columns: minmax(0, 1fr);
-		}
 	}
 	.title-block {
 		display: flex;

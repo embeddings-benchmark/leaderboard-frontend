@@ -9,7 +9,7 @@
 	// shell can adapt copy per 404 / 500 / etc.
 </script>
 
-<div class="error-page">
+<main id="main-content" tabindex="-1" class="error-page">
 	<section class="card panel">
 		<p class="status">{page.status}</p>
 		<h1>
@@ -39,14 +39,14 @@
 			<a href={resolve('/compare')}>Compare</a>
 		</nav>
 	</section>
-</div>
+</main>
 
 <style>
 	.error-page {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		min-height: calc(100vh - 220px);
+		min-height: calc(100dvh - 220px);
 		padding: 48px 24px;
 	}
 	.card {

@@ -186,18 +186,19 @@
 	</p>
 	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl lang-table" use:stickyHead>
+			<caption class="sr-only">Per-language scores</caption>
 			<thead>
 				<tr>
-					<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
-					<th class="tbl-sticky-col" aria-sort={sort.aria('model')}>
+					<th scope="col" class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
+					<th scope="col" class="tbl-sticky-col" aria-sort={sort.aria('model')}>
 						<SortHeader {sort} field="model" label="Model" align="left" />
 					</th>
-					<th class="tbl-num" aria-sort={sort.aria('mean')}>
+					<th scope="col" class="tbl-num" aria-sort={sort.aria('mean')}>
 						<SortHeader {sort} field="mean" label="Mean" />
 					</th>
 					{#each LANGUAGES as lang (lang)}
 						{@const k = `lang:${lang}` as SortKey}
-						<th class="tbl-num" aria-sort={sort.aria(k)}>
+						<th scope="col" class="tbl-num" aria-sort={sort.aria(k)}>
 							<SortHeader {sort} field={k} label={lang} />
 						</th>
 					{/each}
@@ -210,7 +211,8 @@
 						<td class="tbl-pin-col tbl-sticky-pin">
 							<PinButton name={row.model.name} />
 						</td>
-						<td
+						<th
+							scope="row"
 							class="tbl-sticky-col"
 							data-model-type={row.model.modelType}
 							onpointerover={(e) => onCellEnter(e, row)}
@@ -219,7 +221,7 @@
 							onfocusout={onCellLeave}
 						>
 							<ModelCellName model={row.model} />
-						</td>
+						</th>
 						<td
 							class="tbl-num {heat(mean, worstMean, bestMean)}"
 							class:tbl-best={mean != null && mean === bestMean}

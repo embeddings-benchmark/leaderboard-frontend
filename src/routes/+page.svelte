@@ -122,7 +122,7 @@
 	description="MTEB Leaderboard home — primary General / Retrieval / English benchmark winners plus curated sections for language, modality, retrieval, and domain-specific evaluations."
 />
 
-<div class="page">
+<main id="main-content" tabindex="-1" class="page">
 	<header class="hero">
 		<h1>Benchmark Overview</h1>
 		<a class="all-link" href={resolve('/benchmarks')}>See all benchmarks →</a>
@@ -174,7 +174,7 @@
 			{/each}
 		</div>
 	{/if}
-</div>
+</main>
 
 <style>
 	.page {

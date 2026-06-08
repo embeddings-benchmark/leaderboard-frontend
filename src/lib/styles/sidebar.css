@@ -6,16 +6,21 @@
    instead of being covered, so wide tables don't clip under the panel.
    `overflow: hidden` + `display: flex` so `.filters` can `flex: 1` and
    the last facet (Language) absorbs leftover height. */
+/* Open-sidebar width — ShareUrlButton reads this for its right offset. */
+body:has(.sidebar:not(.collapsed)) {
+	--sidebar-active-width: min(340px, 100dvw);
+}
+
 .sidebar {
 	--header-offset: 64px;
 
 	flex: 0 0 340px;
 	min-width: 320px;
 	max-width: 380px;
-	margin-left: auto;
-	border-left: 1px solid var(--border);
+	margin-inline-start: auto;
+	border-inline-start: 1px solid var(--border);
 	background: var(--surface);
-	height: calc(100vh - var(--header-offset));
+	height: calc(100dvh - var(--header-offset));
 	position: sticky;
 	top: var(--header-offset);
 	display: flex;
@@ -32,7 +37,7 @@
 	min-width: 0;
 	max-width: none;
 	width: 0;
-	border-left: none;
+	border-inline-start: none;
 	background: none;
 	overflow: visible;
 }
@@ -97,6 +102,8 @@
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
+	/* Reserve scrollbar space so pills don't jitter when the thumb appears. */
+	scrollbar-gutter: stable;
 }
 .group {
 	display: flex;
@@ -166,6 +173,7 @@
 	max-height: 380px;
 	overflow-y: auto;
 	contain: layout;
+	scrollbar-gutter: stable;
 }
 /* Marker for the facet that absorbs leftover sidebar height (Language).
    `flex-basis: 0` so growth comes from leftover space, not the natural
@@ -294,10 +302,10 @@
 		top: var(--header-offset);
 		right: 0;
 		flex: 0 0 auto;
-		width: min(340px, 100vw);
+		width: var(--sidebar-active-width);
 		min-width: 0;
 		max-width: none;
-		margin-left: 0;
+		margin-inline-start: 0;
 		z-index: 30;
 		box-shadow: -8px 0 24px rgb(var(--shadow-tint) / 0.18);
 	}

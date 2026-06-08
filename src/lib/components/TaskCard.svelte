@@ -42,10 +42,10 @@
 	data-stype={simplifiedType}
 >
 	<div class="card-head">
-		<span class="title" title={name}>{name}</span>
+		<span class="title card-title" title={name}>{name}</span>
 	</div>
 	{#if description}
-		<p class="desc"><MarkdownText text={description} /></p>
+		<p class="card-desc"><MarkdownText text={description} /></p>
 	{/if}
 	{#if stats.length > 0}
 		<dl class="card-stats">
@@ -91,35 +91,11 @@
 		justify-content: space-between;
 		gap: 10px;
 	}
+	/* `flex: 1; min-width: 0` so the title shrinks instead of pushing the
+	   neighbouring chip out of `.card-head`'s justify-between row. */
 	.title {
-		font-size: 14px;
-		font-weight: 700;
-		color: var(--text);
-		/* Long unbroken task names (e.g. XM3600T2IRetrieval) need a break
-		   point in mid-camel-case — anywhere lets the browser do it. */
-		overflow-wrap: anywhere;
-		word-break: normal;
 		flex: 1;
 		min-width: 0;
-		line-height: 1.3;
-	}
-	.desc {
-		margin: 0;
-		font-size: 12.5px;
-		line-height: 1.45;
-		color: var(--text-muted);
-		overflow: hidden;
-		/* Standard CSS Overflow 4 shorthand — drops the deprecated
-		   `-webkit-box-orient`. Chromium 124+, Safari 18.2+, Firefox 136+. */
-		line-clamp: 2;
-	}
-	@supports not (line-clamp: 2) {
-		.desc {
-			display: -webkit-box;
-			-webkit-line-clamp: 2;
-			line-clamp: 2;
-			-webkit-box-orient: vertical;
-		}
 	}
 	.card-stats dd.metric {
 		font-family: var(--font-mono);

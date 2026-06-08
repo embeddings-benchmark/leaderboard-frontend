@@ -220,7 +220,7 @@
 	entity={{ kind: 'task', name: taskName }}
 />
 
-<div class="page">
+<main id="main-content" tabindex="-1" class="page">
 	<nav class="breadcrumb" aria-label="Breadcrumb">
 		<a href={resolve('/')}>Home</a>
 		<span class="sep">/</span>
@@ -454,7 +454,7 @@
 			{/if}
 		</section>
 	{/if}
-</div>
+</main>
 
 {#if infoTip.visible && infoTip.tip}
 	<div

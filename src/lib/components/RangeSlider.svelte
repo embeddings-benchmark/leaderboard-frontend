@@ -311,10 +311,16 @@
 		background: var(--surface-muted);
 		border-color: var(--border);
 	}
-	.val-edit:focus {
+	.val-edit:focus-visible {
 		outline: none;
 		background: var(--surface);
 		border-color: var(--primary);
+	}
+	@media (forced-colors: active) {
+		.val-edit:focus-visible {
+			outline: 2px solid Highlight;
+			outline-offset: 1px;
+		}
 	}
 	.labels > .val-edit:last-child {
 		text-align: right;
@@ -402,8 +408,17 @@
 		cursor: grabbing;
 		background: var(--primary-soft);
 	}
-	.input:focus {
+	/* `outline: none` only suppresses the browser's default ring on the
+	   <input range>; the thumb itself uses a custom focused state below.
+	   `:focus-visible` so mouse interaction doesn't strip the indicator. */
+	.input:focus-visible {
 		outline: none;
+	}
+	@media (forced-colors: active) {
+		.input:focus-visible {
+			outline: 2px solid Highlight;
+			outline-offset: 4px;
+		}
 	}
 	.ticks {
 		position: relative;

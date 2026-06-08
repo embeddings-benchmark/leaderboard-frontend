@@ -103,13 +103,9 @@
 			justify-content: center;
 		}
 	}
-	/* When the FilterSidebar is expanded it sits at the right edge in
-	   every layout — in-flow 340 px on desktop, a fixed-position drawer
-	   of the same width on mobile — so the share pill at right: 22 px
-	   would always paint on top of it. Detect the open state via
-	   :has() on the body and slide the pill clear of the panel. */
+	/* Slide clear of the open FilterSidebar (set in sidebar.css). */
 	:global(body:has(.sidebar:not(.collapsed))) .share-btn {
-		right: calc(min(340px, 100vw) + 14px);
+		right: calc(var(--sidebar-active-width) + 14px);
 	}
 	/* Drawer covers ~entire viewport on the smallest screens — pushing
 	   the button left would put it offscreen, fade it out instead so

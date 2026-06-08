@@ -112,7 +112,7 @@
 		color: var(--copyable-text, var(--text-muted));
 		border: 1px solid var(--copyable-border, var(--border));
 		border-radius: 6px;
-		overflow: hidden;
+		overflow: clip;
 		cursor: pointer;
 		transition:
 			background 0.12s,

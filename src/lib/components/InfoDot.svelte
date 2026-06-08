@@ -2,6 +2,9 @@
 	// `as="span"` (default): non-interactive hint; surrounding host
 	// fires the tip. `as="button"`: standalone hint that fires the
 	// tip itself and forwards pointer/focus handlers.
+	//
+	// FUTURE: migrate to `popover="hint"` + `interestfor=` once those
+	// leave Chrome-only — would drop the host-driven tooltip portal.
 
 	interface Props {
 		ariaLabel?: string;

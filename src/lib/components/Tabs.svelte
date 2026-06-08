@@ -36,18 +36,9 @@
 		flex-wrap: nowrap;
 		overflow-x: auto;
 		overflow-y: hidden;
-		scrollbar-width: thin;
 		/* Snap each tab so quick swipes settle on a button edge instead
 		   of stopping mid-label. */
 		scroll-snap-type: x proximity;
-		-webkit-overflow-scrolling: touch;
-	}
-	.tabs::-webkit-scrollbar {
-		height: 4px;
-	}
-	.tabs::-webkit-scrollbar-thumb {
-		background: var(--border-strong);
-		border-radius: 2px;
 	}
 	.tab {
 		position: relative;
