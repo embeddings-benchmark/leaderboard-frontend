@@ -470,45 +470,34 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 28px;
-		padding: 22px 26px;
+		padding: 22px 26px 22px 30px;
 		margin-bottom: 16px;
 		position: relative;
 		overflow: hidden;
 	}
-	/* Per-modality tint treatment mirrored from BenchmarkCard: a 3px accent
-	   stripe along the top edge + a soft tint gradient behind the title row.
-	   Modality → tint pairs are the canonical mapping (see app.css notes:
-	   text → teal, image → blue, audio → amber, video → purple). */
+	/* Per-modality accent strip on the left edge. `overflow: hidden` clips
+	   it to the rounded corner. Modality → tint pairs are the canonical
+	   mapping (see app.css notes: text → teal, image → blue, audio →
+	   amber, video → purple). */
 	.hero[data-modality]::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 3px;
+		width: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	.hero[data-modality] {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--card-tint, var(--border)) 55%, var(--surface)) 0%,
-			var(--surface) 96px
-		);
-	}
 	.hero[data-modality='text'] {
-		--card-tint: var(--tint-teal);
 		--card-accent: var(--tint-teal-fg);
 	}
 	.hero[data-modality='image'] {
-		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);
 	}
 	.hero[data-modality='audio'] {
-		--card-tint: var(--tint-amber);
 		--card-accent: var(--tint-amber-fg);
 	}
 	.hero[data-modality='video'] {
-		--card-tint: var(--tint-purple);
 		--card-accent: var(--tint-purple-fg);
 	}
 	@media (max-width: 1000px) {

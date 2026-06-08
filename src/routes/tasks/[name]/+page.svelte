@@ -495,66 +495,49 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
 		gap: 28px;
-		padding: 26px 28px;
+		padding: 26px 28px 26px 32px;
 		margin-bottom: 18px;
 		position: relative;
 		overflow: hidden;
 	}
+	/* Per-simplified-type accent strip on the left edge. `overflow: hidden`
+	   clips it to the rounded corner. Mapping mirrors the group-chip /
+	   type-badge palette. */
 	.hero::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 4px;
+		width: 3px;
 		background: var(--accent, var(--border));
 	}
-	/* Hero gradient pulls its tint from the shared --tint-* palette so the
-	   dark-mode variants drop in automatically — no more white→dark wash.
-	   Keyed off `data-stype` (the simplified task group) to match the
-	   group-chip / type-badge mapping. */
 	.hero[data-stype='classification'] {
 		--accent: var(--tint-blue-fg);
-		--hero-tint: var(--tint-blue);
 	}
 	.hero[data-stype='clustering'] {
 		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
 	}
 	.hero[data-stype='pair-classification'] {
 		--accent: var(--tint-green-fg);
-		--hero-tint: var(--tint-green);
 	}
 	.hero[data-stype='reranking'] {
 		--accent: var(--tint-amber-fg);
-		--hero-tint: var(--tint-amber);
 	}
 	.hero[data-stype='retrieval'] {
 		--accent: var(--tint-purple-fg);
-		--hero-tint: var(--tint-purple);
 	}
 	.hero[data-stype='semantic-similarity'] {
 		--accent: var(--tint-pink-fg);
-		--hero-tint: var(--tint-pink);
 	}
 	.hero[data-stype='bitext-mining'] {
 		--accent: var(--tint-azure-fg);
-		--hero-tint: var(--tint-azure);
 	}
 	.hero[data-stype='instruction-reranking'] {
 		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
 	}
 	.hero[data-stype='summarization'] {
 		--accent: var(--tint-teal-fg);
-		--hero-tint: var(--tint-teal);
-	}
-	.hero[data-stype] {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	@media (max-width: 640px) {
 		.hero {

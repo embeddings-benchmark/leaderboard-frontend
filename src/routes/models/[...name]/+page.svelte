@@ -429,67 +429,36 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
 		gap: 28px;
-		padding: 26px 28px;
+		padding: 26px 28px 26px 32px;
 		margin-bottom: 18px;
 		position: relative;
 		overflow: hidden;
 	}
+	/* Per-type accent strip on the left edge. `overflow: hidden` clips it
+	   to the rounded corner. */
 	.hero::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 4px;
+		width: 3px;
 		background: var(--accent, var(--border));
 	}
-	/* Each model-type swap exposes both the accent foreground and the tint
-	   background as CSS vars; the gradient + badge then read those tokens so
-	   the dark-mode variants kick in automatically. */
 	.hero[data-type='dense'] {
 		--accent: var(--tint-blue-fg);
-		--hero-tint: var(--tint-blue);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='cross-encoder'] {
 		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='late-interaction'] {
 		--accent: var(--tint-green-fg);
-		--hero-tint: var(--tint-green);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='sparse'] {
 		--accent: var(--tint-amber-fg);
-		--hero-tint: var(--tint-amber);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	.hero[data-type='router'] {
 		--accent: var(--tint-purple-fg);
-		--hero-tint: var(--tint-purple);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
 	}
 	@media (max-width: 1000px) {
 		.hero {
