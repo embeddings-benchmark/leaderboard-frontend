@@ -299,7 +299,11 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 
 	const barRo = bar
 		? new ResizeObserver((entries) => {
-				cachedBarH = entries[0].contentRect.height;
+				// Use `borderBoxSize` not `contentRect` — the bar uses
+				// `box-sizing: border-box` so contentRect (content-box)
+				// would exclude its 10px×2 padding and the overlay
+				// would dock 20px above the bar's bottom edge.
+				cachedBarH = entries[0].borderBoxSize?.[0]?.blockSize ?? entries[0].contentRect.height;
 				markLayoutDirty();
 				scheduleUpdate();
 			})

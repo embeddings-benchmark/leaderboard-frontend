@@ -12,34 +12,28 @@ body:has(.sidebar:not(.collapsed)) {
 }
 
 .sidebar {
-	--header-offset: 64px;
-
-	flex: 0 0 340px;
-	min-width: 320px;
-	max-width: 380px;
+	/* Single `width` transition (Firefox refuses to interpolate
+	   `max-width: 380px ↔ none`). `overflow: clip` keeps content from
+	   bleeding past the right edge during the collapse. */
+	width: var(--sidebar-active-width, 340px);
+	flex: 0 0 auto;
 	margin-inline-start: auto;
 	border-inline-start: 1px solid var(--border);
 	background: var(--surface);
-	height: calc(100dvh - var(--header-offset));
+	height: calc(100dvh - var(--header-height));
 	position: sticky;
-	top: var(--header-offset);
+	top: var(--header-height);
 	display: flex;
 	flex-direction: column;
-	overflow: hidden;
+	overflow: clip;
 	z-index: 5;
 	transition:
-		flex-basis 0.18s ease,
-		min-width 0.18s ease,
-		max-width 0.18s ease;
+		width 0.22s ease,
+		border-inline-start-width 0.22s ease;
 }
 .sidebar.collapsed {
-	flex: 0 0 0;
-	min-width: 0;
-	max-width: none;
 	width: 0;
-	border-inline-start: none;
-	background: none;
-	overflow: visible;
+	border-inline-start-width: 0;
 }
 
 .sidebar-toggle {
@@ -58,16 +52,30 @@ body:has(.sidebar:not(.collapsed)) {
 	color: var(--text-muted);
 	cursor: pointer;
 	z-index: 2;
+	/* Match the sidebar's collapse timing so the toggle slides out
+	   alongside the panel instead of snapping into its pill form. */
+	transition:
+		transform 0.18s ease,
+		padding 0.18s ease,
+		border-radius 0.18s ease,
+		box-shadow 0.18s ease,
+		background 0.12s,
+		color 0.12s;
 }
 .sidebar.collapsed .sidebar-toggle {
-	position: relative;
-	transform: translateX(-100%);
-	margin-top: 56px;
-	margin-right: 8px;
-	padding: 6px 10px;
-	width: auto;
+	/* `fixed` escapes flow — `relative + translateX(-100%)` left a
+	   layout box past the viewport's right edge (Firefox → horizontal
+	   scrollbar). Top offset clears the bar + sticky table-head. */
+	position: fixed;
+	top: calc(2 * var(--header-height));
+	right: 8px;
+	width: 38px;
+	height: 38px;
+	margin: 0;
+	padding: 0;
+	justify-content: center;
 	border: 1px solid var(--border);
-	border-radius: 6px;
+	border-radius: 8px;
 	background: var(--surface);
 	box-shadow: var(--shadow-sm);
 	z-index: 11;
@@ -79,8 +87,7 @@ body:has(.sidebar:not(.collapsed)) {
 
 .chev {
 	display: inline-block;
-	font-size: 18px;
-	line-height: 1;
+	flex-shrink: 0;
 	transition: transform 0.18s ease;
 	color: var(--text-subtle);
 }
@@ -298,7 +305,7 @@ body:has(.sidebar:not(.collapsed)) {
 	   filters without losing the cards. */
 	.sidebar {
 		position: fixed;
-		top: var(--header-offset);
+		top: var(--header-height);
 		right: 0;
 		flex: 0 0 auto;
 		width: var(--sidebar-active-width);

@@ -225,6 +225,11 @@
 		padding: 10px 28px;
 		background: var(--bar-bg);
 		border-bottom: 1px solid var(--border);
+		/* `min-height` (not `height`) so content growth can still push
+		   the bar taller — sidebar/toolbar still dock cleanly because
+		   they read the same token. */
+		min-height: var(--header-height);
+		box-sizing: border-box;
 	}
 	.subnav {
 		justify-self: center;
@@ -372,6 +377,13 @@
 			justify-self: start;
 			min-width: 0;
 			overflow-x: auto;
+			/* Hide the scrollbar (paints under labels on a one-row strip);
+			   the right-edge mask fade is the affordance instead. */
+			scrollbar-width: none;
+			mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+		}
+		.subnav::-webkit-scrollbar {
+			display: none;
 		}
 	}
 

@@ -25,9 +25,10 @@
 
 /* `minmax(0, 1fr)` (not bare `1fr`) lets the left column shrink below
    its intrinsic content — without it a wide BibTeX block blows the card
-   past the viewport on mobile. Layout queried via container, not viewport,
-   so the shell adapts inside narrower main columns. Consumers override
-   the `--hero-*` props per page. */
+   past the viewport on mobile. Consumers override the `--hero-*` props
+   per page. Uses `@media` (viewport) over `@container` because a
+   `@container` query can't match the container element itself, and the
+   layout flip needs to fire on the `.hero-grid` element. */
 .hero-grid {
 	--hero-cols: minmax(0, 1.4fr) minmax(0, 1fr);
 	--hero-gap: 28px;
@@ -35,7 +36,6 @@
 	--hero-padding-inline: 32px 28px;
 	--hero-margin-block-end: 18px;
 
-	container: hero / inline-size;
 	display: grid;
 	grid-template-columns: var(--hero-cols);
 	gap: var(--hero-gap);
@@ -45,23 +45,18 @@
 	position: relative;
 	overflow: clip;
 }
-@container hero (max-width: 1000px) {
+@media (max-width: 1000px) {
 	.hero-grid {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
-@container hero (max-width: 640px) {
+@media (max-width: 640px) {
 	.hero-grid {
 		padding-block: 18px;
 		padding-inline: 16px;
 		gap: 16px;
 		margin-block-end: 12px;
 	}
-	/* Narrow-hero kpi polish — used to live under its own `@container
-	   kpis` query, but `container-type: inline-size` on `.kpis` made
-	   its grid-item width collapse to 0 wherever a parent grid used an
-	   `auto` track (the benchmark hero), so the container is gone and
-	   the rules ride the hero breakpoint instead. */
 	.kpis {
 		gap: 8px;
 	}
