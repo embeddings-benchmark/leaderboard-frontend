@@ -2,7 +2,6 @@
 	/* Single source of truth read by `header.bar` (min-height) and the
 	   sticky `.sidebar` / `.toolbar` (top offset). */
 	--header-height: 56px;
-
 	--font-sans: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
 	--font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
