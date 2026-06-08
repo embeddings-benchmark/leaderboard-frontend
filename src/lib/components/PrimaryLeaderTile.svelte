@@ -85,30 +85,56 @@
 </article>
 
 <style>
+	/* Accent-rail treatment, matching the benchmark/task/model cards: flat
+	   surface + neutral border, with an inset rounded marker rail on the
+	   left edge coloured by the per-tile tint. */
 	.prim {
 		--tint: var(--tint-blue);
 		--tint-fg: var(--tint-blue-fg);
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		padding: 18px 18px 14px;
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint) 50%, var(--surface)),
-			var(--surface) 60%
-		);
-		border: 1px solid color-mix(in srgb, var(--tint-fg) 22%, var(--border));
+		/* Extra left padding clears the rail. */
+		padding: 18px 18px 14px 22px;
+		/* Faint FLAT category wash over the whole tile (not a gradient band) —
+		   lifts the featured hero off the pure-white grid cards below without
+		   reintroducing the vibe-coded header gradient. Theme-aware via the
+		   tint token, so it stays subtle in both light and dark. */
+		background: color-mix(in srgb, var(--tint) 8%, var(--surface));
+		border: 1px solid color-mix(in srgb, var(--tint-fg) 18%, var(--border));
 		border-radius: 14px;
 		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
 		position: relative;
+		overflow: hidden;
 		transition:
 			transform 0.14s,
 			border-color 0.14s,
 			box-shadow 0.14s;
 	}
+	/* Inset rounded marker rail — grows toward the edges on hover. No
+	   z-index, so the later-painted stretched-link `.prim-title::after`
+	   (transparent) stays on top and clicks still open the benchmark; the
+	   rail shows through it. */
+	.prim::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 16px;
+		bottom: 16px;
+		width: 4px;
+		border-radius: 0 4px 4px 0;
+		background: var(--tint-fg);
+		transition:
+			top 0.14s ease,
+			bottom 0.14s ease;
+	}
+	.prim:hover::before {
+		top: 11px;
+		bottom: 11px;
+	}
 	.prim:hover {
 		transform: translateY(-1px);
-		border-color: var(--tint-fg);
+		border-color: color-mix(in srgb, var(--tint-fg) 45%, var(--border));
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.08);
 	}
 	.prim:hover .prim-title,

@@ -56,7 +56,7 @@
 	{#if modalities.length > 0}
 		<div class="badges">
 			{#each sortModalities(modalities) as mod (mod)}
-				<span class="badge modality-tint" data-modality={mod} title={mod}>
+				<span class="badge" data-modality={mod} title={mod}>
 					<ModalityIcon modality={mod} size={12} />
 					<span>{mod}</span>
 				</span>
@@ -74,32 +74,54 @@
 </a>
 
 <style>
+	/* Accent-rail design (see BenchmarkCard for the rationale). Per-stype
+	   blocks set `--card-accent`, which colours the inset left rail, the
+	   hover border + title, and the footer group-chip. */
 	.card {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		padding: 14px 16px;
+		/* Extra left padding clears the rail. */
+		padding: 16px 16px 16px 18px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 		position: relative;
 		overflow: hidden;
 		text-decoration: none;
 		color: inherit;
 		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease,
-			box-shadow 0.12s ease;
+			transform 0.15s ease,
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
 		/* `content-visibility: auto` lets the browser skip rendering off-screen
 		   cards (1759 entries on the full registry). `contain-intrinsic-size`
 		   reserves placeholder space so the scrollbar geometry stays stable. */
 		content-visibility: auto;
 		contain-intrinsic-size: 280px;
 	}
+	/* Inset rounded marker rail — grows toward the card edges on hover. */
+	.card::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 16px;
+		bottom: 16px;
+		width: 4px;
+		border-radius: 0 4px 4px 0;
+		background: var(--card-accent, var(--border-strong));
+		transition:
+			top 0.15s ease,
+			bottom 0.15s ease;
+	}
+	.card:hover::before {
+		top: 11px;
+		bottom: 11px;
+	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
-		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
+		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
+		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
 	.card:hover .title {
 		color: var(--card-accent, var(--primary-strong));
@@ -108,56 +130,34 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Per-stype accent + subtle header wash — matches the simplified
-	   task-type color mapping documented in CLAUDE.md. */
+	/* Per-stype accent — mirrors the `.group-chip` colour map (CLAUDE.md).
+	   All chip-coloured stypes set an accent so the rail matches the chip. */
 	.card[data-stype='retrieval'] {
 		--card-accent: var(--tint-purple-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='classification'] {
 		--card-accent: var(--tint-blue-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='pair-classification'] {
 		--card-accent: var(--tint-green-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='clustering'] {
 		--card-accent: var(--tint-orange-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-stype='semantic-similarity'] {
 		--card-accent: var(--tint-pink-fg);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-pink) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+	}
+	.card[data-stype='reranking'] {
+		--card-accent: var(--tint-amber-fg);
+	}
+	.card[data-stype='instruction-reranking'] {
+		--card-accent: var(--tint-orange-fg);
+	}
+	.card[data-stype='bitext-mining'] {
+		--card-accent: var(--tint-azure-fg);
+	}
+	.card[data-stype='summarization'] {
+		--card-accent: var(--tint-teal-fg);
 	}
 	.card-head {
 		display: flex;
@@ -230,17 +230,23 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: 5px;
 	}
+	/* Filled per-modality chip — coloured by each badge's own `data-modality`
+	   (text / image / audio / video each distinct). Matches BenchmarkCard. */
 	.badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 3px 8px;
+		gap: 5px;
+		font-size: 10.5px;
+		padding: 3px 9px;
 		border-radius: 999px;
 		font-weight: 600;
-		letter-spacing: 0.02em;
+		letter-spacing: 0.01em;
+		background: var(--modality-tint, var(--surface-muted));
+		border: 1px solid transparent;
+		color: var(--modality-tint-fg, var(--text-muted));
+		text-transform: lowercase;
 	}
 	.card-foot {
 		display: flex;

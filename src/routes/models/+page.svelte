@@ -309,7 +309,7 @@
 						{#if m.modalities && m.modalities.length > 0}
 							<div class="modality-row" aria-label="Supported modalities">
 								{#each sortModalities(m.modalities) as mod (mod)}
-									<span class="mod-chip modality-tint" data-modality={mod} title={mod}>
+									<span class="mod-chip" data-modality={mod} title={mod}>
 										<ModalityIcon modality={mod} size={12} />
 										<span class="mod-label">{mod}</span>
 									</span>
@@ -364,14 +364,18 @@
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 12px;
 	}
+	/* Accent-rail design (see BenchmarkCard for rationale). Per-type blocks
+	   set `--card-accent` (inset left rail + hover border + title tint) and
+	   `--card-tint` (the soft-filled type chip). */
 	.card {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		padding: 14px 16px;
+		/* Extra left padding clears the rail. */
+		padding: 16px 16px 16px 18px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 		/* `min-height` gives `.modality-row { margin-top: auto }` slack to
 		   push the modalities to the card bottom — without it the column
 		   collapses to content and the auto margin resolves to 0. */
@@ -381,13 +385,31 @@
 		text-decoration: none;
 		color: inherit;
 		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease,
-			box-shadow 0.12s ease;
+			transform 0.15s ease,
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
 		/* Skip render/paint for off-screen cards (the registry is long); the
 		   `min-height` above doubles as the intrinsic-size placeholder. */
 		content-visibility: auto;
 		contain-intrinsic-size: 220px;
+	}
+	/* Inset rounded marker rail — grows toward the card edges on hover. */
+	.card::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 16px;
+		bottom: 16px;
+		width: 4px;
+		border-radius: 0 4px 4px 0;
+		background: var(--card-accent, var(--border-strong));
+		transition:
+			top 0.15s ease,
+			bottom 0.15s ease;
+	}
+	.card:hover::before {
+		top: 11px;
+		bottom: 11px;
 	}
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));
@@ -395,67 +417,28 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
+		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
+		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Per-type cards: a flat surface so dark mode reads cleanly, plus the
-	   accent bar (.card::before) and a soft 40% tint at the very top via
-	   the theme-aware --tint-* tokens. */
 	.card[data-type='dense'] {
 		--card-accent: var(--tint-blue-fg);
 		--card-tint: var(--tint-blue);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-type='cross-encoder'] {
 		--card-accent: var(--tint-orange-fg);
 		--card-tint: var(--tint-orange);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-type='late-interaction'] {
 		--card-accent: var(--tint-green-fg);
 		--card-tint: var(--tint-green);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-type='sparse'] {
 		--card-accent: var(--tint-amber-fg);
 		--card-tint: var(--tint-amber);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-type='router'] {
 		--card-accent: var(--tint-purple-fg);
 		--card-tint: var(--tint-purple);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card:hover {
-		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
 	}
 
 	.card-head {
@@ -481,17 +464,21 @@
 		gap: 6px;
 		margin-top: auto;
 	}
-	/* Geometry only — per-modality tint comes from `.modality-tint` in
-	   src/app.css, shared with the /models/[name] hero badges. */
+	/* Filled per-modality chip — coloured by each badge's own `data-modality`
+	   (text / image / audio / video each distinct). Matches the benchmark and
+	   task card badges. */
 	.mod-chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		padding: 3px 8px;
+		gap: 5px;
+		padding: 3px 9px;
 		font-size: 11px;
 		font-weight: 600;
 		letter-spacing: 0.01em;
 		border-radius: 999px;
+		background: var(--modality-tint, var(--surface-muted));
+		border: 1px solid transparent;
+		color: var(--modality-tint-fg, var(--text-muted));
 	}
 	.mod-label {
 		text-transform: lowercase;
@@ -536,7 +523,7 @@
 	.stats dd {
 		margin: 0;
 		font-size: 14px;
-		font-weight: 600;
+		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -579,32 +566,24 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: 5px;
 	}
+	/* Calm outline chips. `.open` is the one meaningful colour moment among
+	   the capability badges — green text + a faintly green-tinted border,
+	   no fill. `.closed` / `.soft` stay fully neutral. */
 	.badge {
 		font-size: 10px;
-		padding: 3px 8px;
+		padding: 3px 9px;
 		border-radius: 999px;
 		font-weight: 600;
-		letter-spacing: 0.02em;
+		letter-spacing: 0.01em;
+		background: transparent;
+		border: 1px solid var(--border);
+		color: var(--text-muted);
 	}
-	/* Reuse the shared `--tint-green` pair so dark mode picks up the
-	   pre-tuned dark-green variant instead of a washed-out light bg.
-	   Dark mode gets a slightly deeper green than the default
-	   `--tint-green` so the pill reads as a distinct chip against the
-	   `--surface` card body (which itself is in the same green family
-	   territory under the gradient header band). */
 	.badge.open {
-		background: light-dark(var(--tint-green), #0d2a1c);
 		color: var(--tint-green-fg);
-	}
-	.badge.closed {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
-	.badge.soft {
-		background: var(--surface-muted);
-		color: var(--text-muted);
+		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, var(--border));
 	}
 
 	/* `.empty` lives in src/app.css. */

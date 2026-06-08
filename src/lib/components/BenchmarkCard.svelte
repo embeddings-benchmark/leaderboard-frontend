@@ -86,7 +86,7 @@
 	{#if b.modalities && b.modalities.length > 0}
 		<div class="badges">
 			{#each sortModalities(b.modalities) as mod (mod)}
-				<span class="badge modality-tint" data-modality={mod} title={mod}>
+				<span class="badge" data-modality={mod} title={mod}>
 					<ModalityIcon modality={mod} size={12} />
 					<span>{mod}</span>
 				</span>
@@ -96,26 +96,51 @@
 </a>
 
 <style>
+	/* Accent-rail design (no top stripe, no gradient band). Category colour
+	   lives in three places: the inset rail on the left edge (`::before`,
+	   coloured by `--card-accent` = the primary modality), the filled
+	   per-modality badges, and the hover state. The per-modality blocks
+	   below set `--card-accent` (rail + hover) and `--card-tint`. */
 	.card {
 		position: relative;
 		overflow: hidden;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		padding: 14px 16px;
+		/* Extra left padding clears the rail. */
+		padding: 16px 16px 16px 18px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 		text-decoration: none;
 		color: inherit;
 		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease;
+			transform 0.15s ease,
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+	/* Inset rounded marker rail — grows toward the card edges on hover. */
+	.card::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 16px;
+		bottom: 16px;
+		width: 4px;
+		border-radius: 0 4px 4px 0;
+		background: var(--card-accent, var(--border-strong));
+		transition:
+			top 0.15s ease,
+			bottom 0.15s ease;
+	}
+	.card:hover::before {
+		top: 11px;
+		bottom: 11px;
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
-		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 50%, var(--border));
+		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
+		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
 	.card:hover .title {
 		color: var(--card-accent, var(--primary-strong));
@@ -123,23 +148,6 @@
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
-	}
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Single gradient — per-modality blocks just swap the tint pair. */
-	.card[data-modality] {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--card-tint, var(--border)) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
 	}
 	.card[data-modality='text'] {
 		--card-tint: var(--tint-teal);
@@ -194,6 +202,27 @@
 		word-break: normal;
 		line-height: 1.3;
 	}
+	/* Tame the copy-id pill on the card only (it stays a full chip on the
+	   benchmark detail hero): ghost at rest so it doesn't compete with the
+	   title, resolving into a bordered chip on hover/focus. Scoped to the
+	   card via the `.card-titles` prefix — the `:global()` just reaches the
+	   child component's root. */
+	.card-titles :global(.copyable-id) {
+		background: transparent;
+		border-color: transparent;
+		color: var(--text-subtle);
+	}
+	.card-titles :global(.copyable-id .copy-btn) {
+		border-left-color: transparent;
+	}
+	.card-titles :global(.copyable-id:hover) {
+		background: var(--surface-muted);
+		border-color: var(--border);
+		color: var(--text);
+	}
+	.card-titles :global(.copyable-id:hover .copy-btn) {
+		border-left-color: var(--border);
+	}
 	.desc {
 		margin: 0;
 		font-size: 12.5px;
@@ -243,18 +272,26 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: 5px;
 		margin-top: auto;
 	}
+	/* Filled per-modality chip: each badge carries its own `data-modality`,
+	   so `--modality-tint` / `--modality-tint-fg` (set by the global
+	   `[data-modality]` rules in app.css) colour it by ITS modality — text,
+	   image, audio and video each read as a distinct colour. */
 	.badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 3px 8px;
+		gap: 5px;
+		font-size: 10.5px;
+		padding: 3px 9px;
 		border-radius: 999px;
 		font-weight: 600;
-		letter-spacing: 0.02em;
+		letter-spacing: 0.01em;
+		background: var(--modality-tint, var(--surface-muted));
+		border: 1px solid transparent;
+		color: var(--modality-tint-fg, var(--text-muted));
+		text-transform: lowercase;
 	}
 	.newer-note {
 		display: inline-flex;

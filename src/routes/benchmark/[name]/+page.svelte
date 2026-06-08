@@ -426,30 +426,25 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 28px;
-		padding: 22px 26px;
+		/* Extra left padding clears the rail. */
+		padding: 22px 26px 22px 30px;
 		margin-bottom: 16px;
 		position: relative;
 		overflow: hidden;
 	}
-	/* Per-modality tint treatment mirrored from BenchmarkCard: a 3px accent
-	   stripe along the top edge + a soft tint gradient behind the title row.
-	   Modality → tint pairs are the canonical mapping (see app.css notes:
-	   text → teal, image → blue, audio → amber, video → purple). */
+	/* Accent-rail treatment, mirrored from BenchmarkCard: an inset rounded
+	   marker on the left edge coloured by the primary modality (no top
+	   stripe, no gradient band). Modality → tint pairs are the canonical
+	   mapping (text → teal, image → blue, audio → amber, video → purple). */
 	.hero[data-modality]::before {
 		content: '';
 		position: absolute;
-		top: 0;
 		left: 0;
-		right: 0;
-		height: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	.hero[data-modality] {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--card-tint, var(--border)) 55%, var(--surface)) 0%,
-			var(--surface) 96px
-		);
+		top: 16px;
+		bottom: 16px;
+		width: 4px;
+		border-radius: 0 4px 4px 0;
+		background: var(--card-accent, var(--border-strong));
 	}
 	.hero[data-modality='text'] {
 		--card-tint: var(--tint-teal);
