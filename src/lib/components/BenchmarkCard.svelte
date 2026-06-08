@@ -20,7 +20,7 @@
 </script>
 
 <a
-	class="card"
+	class="card accent-rail"
 	href={resolve('/benchmark/[name]', { name: slug(b.name) })}
 	data-modality={accentModality}
 >
@@ -106,7 +106,7 @@
 		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 		text-decoration: none;
 		color: inherit;
 		transition:
@@ -121,8 +121,8 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
-		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 50%, var(--border));
+		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
+		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
 	.card:hover .title {
 		color: var(--card-accent, var(--primary-strong));
@@ -130,16 +130,6 @@
 	.card:focus-visible {
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
-	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--card-accent, var(--border));
 	}
 	.card[data-modality='text'] {
 		--card-accent: var(--tint-teal-fg);
@@ -190,6 +180,16 @@
 		word-break: normal;
 		line-height: 1.3;
 	}
+	/* Ghost the CopyableId pill so it doesn't compete with the title;
+	   resolves on hover. */
+	.card-titles {
+		--copyable-bg: transparent;
+		--copyable-border: transparent;
+		--copyable-text: var(--text-subtle);
+		--copyable-bg-hover: var(--surface-muted);
+		--copyable-border-hover: var(--border);
+		--copyable-text-hover: var(--text);
+	}
 	.desc {
 		margin: 0;
 		font-size: 12.5px;
@@ -239,18 +239,8 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: 5px;
 		margin-top: auto;
-	}
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 3px 8px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
 	}
 	.newer-note {
 		display: inline-flex;

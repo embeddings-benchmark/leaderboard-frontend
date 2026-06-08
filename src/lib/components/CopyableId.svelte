@@ -106,9 +106,11 @@
 		font-size: 12px;
 		line-height: 1;
 		text-align: left;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
+		/* Per-state colours overridable via CSS custom properties — parents
+		   can theme the pill without reaching for `:global(...)`. */
+		background: var(--copyable-bg, var(--surface-muted));
+		color: var(--copyable-text, var(--text-muted));
+		border: 1px solid var(--copyable-border, var(--border));
 		border-radius: 6px;
 		overflow: hidden;
 		cursor: pointer;
@@ -118,9 +120,15 @@
 			border-color 0.12s;
 	}
 	.copyable-id:hover {
-		color: var(--text);
-		background: color-mix(in srgb, var(--primary) 10%, var(--surface-muted));
-		border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+		color: var(--copyable-text-hover, var(--text));
+		background: var(
+			--copyable-bg-hover,
+			color-mix(in srgb, var(--primary) 10%, var(--surface-muted))
+		);
+		border-color: var(
+			--copyable-border-hover,
+			color-mix(in srgb, var(--primary) 40%, var(--border))
+		);
 	}
 	.copyable-id:focus-visible {
 		outline: 2px solid var(--primary);
@@ -153,8 +161,14 @@
 		width: 24px;
 		height: 100%;
 		padding: 0;
-		border-left: 1px solid var(--border);
+		border-left: 1px solid var(--copyable-border, var(--border));
 		color: inherit;
+	}
+	.copyable-id:hover .copy-btn {
+		border-left-color: var(
+			--copyable-border-hover,
+			color-mix(in srgb, var(--primary) 40%, var(--border))
+		);
 	}
 	.copyable-id.copied .copy-btn {
 		border-left-color: color-mix(in srgb, var(--primary) 40%, transparent);

@@ -156,12 +156,15 @@ Don't move the tooltip back inside a `<th>`. If a new table needs the same behav
 
 ### Overview cards (shared shell)
 
-The benchmark cards on `/` and `/benchmarks` and the task cards on `/tasks` all share one visual shape — keep them in lockstep when changing any of them:
+The benchmark cards on `/` and `/benchmarks`, the task cards on `/tasks`, and the model cards on `/models` all share one **accent-rail** visual shape — keep them in lockstep when changing any of them. Category color reads as a structured edge, not a wash.
 
-- `.card` is a flex column with `position: relative; overflow: hidden;` and a 3 px `::before` stripe coloured by `--card-accent` (the per-modality / per-simplified-type `*-fg` tint).
-- The top 64 px is a `linear-gradient` from `color-mix(in srgb, var(--tint-X) 55%, var(--surface))` down to `var(--surface)`, so the accent reads as a header tint without bleeding into the stats grid.
-- `.card-head` → `.desc` (2-line clamped) → `.stats` (2×2 grid of `<dt>` label + `<dd>` value) → optional `.newer-note` (only on benchmark cards) → `.badges` (modality pills, pinned to the bottom edge via `margin-top: auto`).
-- Hover lifts the card 1 px, swaps the border to the accent, and tints the `.title` to `--card-accent`.
+- `.card` is a plain `var(--surface)` flex column with a 1 px neutral border, `16px 16px 16px 18px` padding (the extra left clears the rail) and `12px` gap. **No** top stripe, **no** gradient header band — those were removed (they read as "vibe-coded"). The per-category attribute blocks (`[data-modality]` on benchmarks, `[data-stype]` on tasks, `[data-type]` on models) set `--card-accent` (rail + hover) and `--card-tint` (the soft chip fill).
+- **The rail** is the shared `.accent-rail` utility in `src/app.css` (`::before` pseudo: `left: 0; top/bottom: 16px; width: 4px; border-radius: 0 4px 4px 0; background: var(--card-accent)`; on hover `top/bottom: 11px`). Every consumer — the three card types, the PrimaryLeaderTile, and the `/benchmark/[name]` hero — adds `class="… accent-rail"` and supplies `--card-accent` via per-category attribute blocks. It falls back to `--border-strong` for categories with no accent mapping. This is the one consistent color moment shared across all of them; don't reintroduce per-component `::before` copies.
+- **Badges are filled per-modality.** `.badge` (and the model card's `.mod-chip`) read `--modality-tint` / `--modality-tint-fg` from each badge's **own** `data-modality` (set by the global `[data-modality]` rules in app.css), so text/image/audio/video each render a distinct color — do **not** color them from the card's single `--card-accent`. The model card's `Open weights` badge is a separate capability badge (green outline, not modality).
+- Category is **also** named by a soft-tint chip where useful: the model **type-chip** (top-right) and task **group-chip** (footer), both filled from `--card-tint` / `--card-accent`.
+- Hover state (shared): `translateY(-1px)`, border → `color-mix(--card-accent 45%, --border)`, `.title` → `--card-accent`, soft neutral shadow, plus the rail growth above.
+- Layout order is unchanged: `.card-head` → `.desc` (2-line clamped) → `.stats` (2×2 grid of `<dt>` label + `<dd>` value, `dd` weight 700) → optional `.newer-note` (benchmark only) → `.badges` (pinned to the bottom edge via `margin-top: auto`). On the benchmark card the `CopyableId` pill is ghosted (transparent until hover) via a scoped `.card-titles :global(.copyable-id)` override so it doesn't compete with the title — it stays a full chip on the `/benchmark/[name]` hero.
+- When adding a new category accent, set `--card-accent` (and `--card-tint` if a chip needs it) on the attribute block — never reintroduce a stripe or gradient.
 
 ### Sticky shelves and floating actions
 

@@ -35,7 +35,7 @@
 </script>
 
 <a
-	class="prim"
+	class="prim accent-rail"
 	data-key={tintKey}
 	href={resolve('/benchmark/[name]', { name: slug(benchmark.name) })}
 	aria-label={`Open ${benchmark.displayName} leaderboard`}
@@ -96,6 +96,8 @@
 	.prim {
 		--tint: var(--tint-blue);
 		--tint-fg: var(--tint-blue-fg);
+		/* Feed the shared `.accent-rail` the per-tile tint. */
+		--card-accent: var(--tint-fg);
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
@@ -113,19 +115,9 @@
 			border-color 0.14s,
 			box-shadow 0.14s;
 	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.prim::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--tint-fg);
-	}
 	.prim:hover {
 		transform: translateY(-1px);
-		border-color: var(--tint-fg);
+		border-color: color-mix(in srgb, var(--tint-fg) 45%, var(--border));
 		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.08);
 	}
 	.prim:hover .prim-title {

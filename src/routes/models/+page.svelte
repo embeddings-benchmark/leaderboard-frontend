@@ -27,7 +27,6 @@
 	let loadingData = $state(true);
 	let loadError = $state<string | null>(null);
 
-
 	// Local language filter state. Lives in the page (not the shared
 	// `filters` store) because /models is the only place that uses it.
 	// Same "all on = filter off" semantic as the shared store:
@@ -295,7 +294,7 @@
 			<div class="grid">
 				{#each visibleModels as m (m.name)}
 					<a
-						class="card"
+						class="card accent-rail"
 						href={resolve('/models/[...name]', { name: modelPath(m.name) })}
 						data-type={m.modelType}
 						title={m.modelType}
@@ -342,9 +341,9 @@
 						{#if m.modalities && m.modalities.length > 0}
 							<div class="modality-row" aria-label="Supported modalities">
 								{#each sortModalities(m.modalities) as mod (mod)}
-									<span class="mod-chip modality-tint" data-modality={mod} title={mod}>
+									<span class="badge modality-tint" data-modality={mod} title={mod}>
 										<ModalityIcon modality={mod} size={12} />
-										<span class="mod-label">{mod}</span>
+										<span>{mod}</span>
 									</span>
 								{/each}
 							</div>
@@ -405,7 +404,7 @@
 		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 		/* `min-height` gives `.modality-row { margin-top: auto }` slack to
 		   push the modalities to the card bottom — without it the column
 		   collapses to content and the auto margin resolves to 0. */
@@ -431,17 +430,8 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
-	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--card-accent, var(--border));
+		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
+		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
 	/* Per-type accent — mapping documented in CLAUDE.md. */
 	.card[data-type='dense'] {
@@ -491,21 +481,6 @@
 		gap: 6px;
 		margin-top: auto;
 	}
-	/* Geometry only — per-modality tint comes from `.modality-tint` in
-	   src/app.css, shared with the /models/[name] hero badges. */
-	.mod-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 3px 8px;
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.01em;
-		border-radius: 999px;
-	}
-	.mod-label {
-		text-transform: lowercase;
-	}
 	.title {
 		display: block;
 		font-size: 14px;
@@ -546,7 +521,7 @@
 	.stats dd {
 		margin: 0;
 		font-size: 14px;
-		font-weight: 600;
+		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -589,32 +564,15 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: 5px;
 	}
-	.badge {
-		font-size: 10px;
-		padding: 3px 8px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
-	}
-	/* Reuse the shared `--tint-green` pair so dark mode picks up the
-	   pre-tuned dark-green variant instead of a washed-out light bg.
-	   Dark mode gets a slightly deeper green than the default
-	   `--tint-green` so the pill reads as a distinct chip against the
-	   `--surface` card body (which itself is in the same green family
-	   territory under the gradient header band). */
-	.badge.open {
-		background: light-dark(var(--tint-green), #0d2a1c);
-		color: var(--tint-green-fg);
-	}
-	.badge.closed {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
+	/* Outline-only on the card (overrides the global filled defaults). */
+	.badge.open,
 	.badge.soft {
-		background: var(--surface-muted);
-		color: var(--text-muted);
+		background: transparent;
+	}
+	.badge.open {
+		color: var(--tint-green-fg);
 	}
 
 	/* `.empty` lives in src/app.css. */

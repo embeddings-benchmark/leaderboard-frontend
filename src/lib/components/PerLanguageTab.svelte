@@ -177,7 +177,6 @@
 		]);
 		return { headers, rows };
 	}
-
 </script>
 
 <div class="wrap">

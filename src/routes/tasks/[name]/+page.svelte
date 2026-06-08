@@ -625,19 +625,6 @@
 		background: var(--tint-teal);
 		color: var(--tint-teal-fg);
 	}
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 4px 9px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
-		/* Modality badges set their colour via `.modality-tint`, so the
-		   currentColor border picks up that same tint automatically. */
-		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-	}
 	.hero h1 {
 		font-size: 26px;
 		font-weight: 800;

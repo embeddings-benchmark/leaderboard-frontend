@@ -202,6 +202,52 @@ code {
 .modality-tint {
 	background: var(--modality-tint, var(--surface-muted));
 	color: var(--modality-tint-fg, var(--text-muted));
+	text-transform: lowercase;
+}
+
+/* Chip shell — pair with `.modality-tint`, `.open`, or `.soft` for a
+   fill. The border tracks `currentColor` so each variant's `color:`
+   colours the border too. */
+.badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 3px 9px;
+	font-size: 10.5px;
+	border-radius: 999px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	color: var(--text-muted);
+	border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+}
+/* Filled defaults; outline-only contexts clear `background` locally. */
+.badge.open {
+	background: light-dark(var(--tint-green), #0d2a1c);
+	color: var(--tint-green-fg);
+}
+.badge.soft {
+	background: var(--surface-muted);
+	color: var(--text-muted);
+}
+
+/* Inset left-edge marker coloured by `--card-accent`. Consumers must be
+   `position: relative` and leave ~18 px of left padding for the rail. */
+.accent-rail::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 16px;
+	bottom: 16px;
+	width: 4px;
+	border-radius: 0 4px 4px 0;
+	background: var(--card-accent, var(--border-strong));
+	transition:
+		top 0.15s ease,
+		bottom 0.15s ease;
+}
+.accent-rail:hover::before {
+	top: 11px;
+	bottom: 11px;
 }
 
 /* Hero lead paragraph used by every top-level index hero (/, /tasks,

@@ -36,7 +36,11 @@
 	}: Props = $props();
 </script>
 
-<a class="card" href={resolve('/tasks/[name]', { name: slug(name) })} data-stype={simplifiedType}>
+<a
+	class="card accent-rail"
+	href={resolve('/tasks/[name]', { name: slug(name) })}
+	data-stype={simplifiedType}
+>
 	<div class="card-head">
 		<span class="title" title={name}>{name}</span>
 	</div>
@@ -78,11 +82,10 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding for the 3 px accent strip. */
 		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 		position: relative;
 		overflow: hidden;
 		text-decoration: none;
@@ -101,8 +104,8 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
-		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
+		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
+		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
 	}
 	.card:hover .title {
 		color: var(--card-accent, var(--primary-strong));
@@ -111,17 +114,7 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
-	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 0;
-		width: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Per-stype accent — mapping documented in CLAUDE.md. */
+	/* Per-stype accent — mirrors `.group-chip` (CLAUDE.md). */
 	.card[data-stype='retrieval'] {
 		--card-accent: var(--tint-purple-fg);
 	}
@@ -208,17 +201,7 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 3px 8px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
+		gap: 5px;
 	}
 	.card-foot {
 		display: flex;
