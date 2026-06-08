@@ -20,7 +20,7 @@
 </script>
 
 <a
-	class="card accent-rail"
+	class="card card-link card-link-vis accent-rail"
 	href={resolve('/benchmark/[name]', { name: slug(b.name) })}
 	data-modality={accentModality}
 >
@@ -28,7 +28,7 @@
 		{#if b.icon}
 			{#if isIconUrl(b.icon)}
 				<img
-					class="card-icon"
+					class="card-icon icon-tile"
 					src={apiUrl(b.icon)}
 					alt="{b.displayName} icon"
 					width="28"
@@ -38,16 +38,16 @@
 					fetchpriority="low"
 				/>
 			{:else}
-				<span class="card-icon card-icon-text" aria-hidden="true">{b.icon}</span>
+				<span class="card-icon icon-tile icon-tile-text" aria-hidden="true">{b.icon}</span>
 			{/if}
 		{/if}
 		<div class="card-titles">
-			<span class="title" title={b.displayName}>{b.displayName}</span>
+			<span class="title card-title" title={b.displayName}>{b.displayName}</span>
 			<CopyableId value={b.name} ariaLabel="Copy benchmark id" />
 		</div>
 	</div>
-	<p class="desc"><MarkdownText text={b.description} /></p>
-	<dl class="stats">
+	<p class="card-desc"><MarkdownText text={b.description} /></p>
+	<dl class="card-stats">
 		<div>
 			<dt>Models</dt>
 			<dd>{fmtCompact(b.numModels ?? 0)}</dd>
@@ -84,7 +84,7 @@
 		</button>
 	{/if}
 	{#if b.modalities && b.modalities.length > 0}
-		<div class="badges">
+		<div class="chip-row">
 			{#each sortModalities(b.modalities) as mod (mod)}
 				<span class="badge modality-tint" data-modality={mod} title={mod}>
 					<ModalityIcon modality={mod} size={12} />
@@ -97,72 +97,20 @@
 
 <style>
 	.card {
-		position: relative;
-		overflow: hidden;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		/* Extra left padding for the 3 px accent strip. */
-		padding: 14px 16px 14px 18px;
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		text-decoration: none;
-		color: inherit;
-		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease;
-		/* Skip render/paint for off-screen cards (the /benchmarks catalogue
-		   can run to 75+ cards on the home page). `content-visibility: auto`
-		   already implies `contain: size layout paint style` — an explicit
-		   `contain:` would replace that set and break `contain-intrinsic-size`. */
-		content-visibility: auto;
-		contain-intrinsic-size: 240px;
+		--card-intrinsic: 240px;
 	}
-	.card:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
-		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
-	}
-	.card:hover .title {
-		color: var(--card-accent, var(--primary-strong));
-	}
-	.card:focus-visible {
-		outline: 2px solid var(--card-accent, var(--primary));
-		outline-offset: 2px;
-	}
-	.card[data-modality='text'] {
-		--card-accent: var(--tint-teal-fg);
-	}
-	.card[data-modality='image'] {
-		--card-accent: var(--tint-blue-fg);
-	}
-	.card[data-modality='audio'] {
-		--card-accent: var(--tint-amber-fg);
-	}
-	.card[data-modality='video'] {
-		--card-accent: var(--tint-purple-fg);
+	.card[data-modality] {
+		--card-accent: var(--modality-tint-fg);
 	}
 	.card-head {
 		display: flex;
 		align-items: flex-start;
 		gap: 10px;
 	}
+	/* 1 px nudge so the icon's optical centre aligns with the title. */
 	.card-icon {
-		width: 28px;
-		height: 28px;
-		flex-shrink: 0;
-		border-radius: 4px;
-		object-fit: contain;
-		background: var(--surface-muted);
+		--icon-size: 28px;
 		margin-top: 1px;
-	}
-	.card-icon-text {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 18px;
-		line-height: 1;
 	}
 	.card-titles {
 		display: flex;
@@ -172,16 +120,8 @@
 		min-width: 0;
 		flex: 1;
 	}
-	.title {
-		font-size: 14px;
-		font-weight: 700;
-		color: var(--text);
-		overflow-wrap: anywhere;
-		word-break: normal;
-		line-height: 1.3;
-	}
-	/* Ghost the CopyableId pill so it doesn't compete with the title;
-	   resolves on hover. */
+	/* Ghost the CopyableId pill until hover so it doesn't compete with
+	   the title. */
 	.card-titles {
 		--copyable-bg: transparent;
 		--copyable-border: transparent;
@@ -189,58 +129,6 @@
 		--copyable-bg-hover: var(--surface-muted);
 		--copyable-border-hover: var(--border);
 		--copyable-text-hover: var(--text);
-	}
-	.desc {
-		margin: 0;
-		font-size: 12.5px;
-		line-height: 1.45;
-		color: var(--text-muted);
-		overflow: hidden;
-		/* Standard CSS Overflow 4 shorthand: clamps without the deprecated
-		   `-webkit-box-orient`. Chromium 124+, Safari 18.2+, Firefox 136+. */
-		line-clamp: 2;
-	}
-	/* Fallback for browsers that haven't shipped the standard `line-clamp`
-	   yet — they get the legacy WebKit triplet (with `-webkit-box-orient`
-	   only inside this branch, so the deprecation warning doesn't fire
-	   for browsers that don't need it). */
-	@supports not (line-clamp: 2) {
-		.desc {
-			display: -webkit-box;
-			-webkit-line-clamp: 2;
-			line-clamp: 2;
-			-webkit-box-orient: vertical;
-		}
-	}
-	.stats {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 8px 14px;
-		margin: 0;
-	}
-	.stats > div {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.stats dt {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.stats dd {
-		margin: 0;
-		font-size: 14px;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-	}
-	.badges {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 5px;
-		margin-top: auto;
 	}
 	.newer-note {
 		display: inline-flex;

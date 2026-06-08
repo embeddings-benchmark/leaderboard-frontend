@@ -144,7 +144,7 @@
 	entity={{ kind: 'model', name: modelName }}
 />
 
-<div class="page">
+<main id="main-content" tabindex="-1" class="page">
 	<nav class="breadcrumb" aria-label="Breadcrumb">
 		<a href={resolve('/')}>Home</a>
 		<span class="sep">/</span>
@@ -156,16 +156,16 @@
 	{#if !model && !metaError}
 		<p class="muted">Loading model…</p>
 	{:else if !model}
-		<section class="empty card">
+		<section class="empty panel">
 			<h1>Unknown model</h1>
 			<p>{metaError ?? `No model named “${modelName}” found.`}</p>
 			<a class="back" href={resolve('/models')}>← All models</a>
 		</section>
 	{:else}
-		<section class="hero card" data-type={model.modelType}>
+		<section class="hero panel hero-grid" data-type={model.modelType}>
 			<div class="hero-left">
 				<div class="kicker">
-					<span class="type-badge" data-type={model.modelType}>
+					<span class="category-badge" data-type={model.modelType}>
 						<span>{model.modelType}</span>
 					</span>
 					<span class="badge" class:open={model.openWeights}>
@@ -307,7 +307,7 @@
 									     first N chips with a "+M more" pill so the reader still
 									     sees a representative sample; opening flips that pill to
 									     "Show fewer" and renders the full set. -->
-									<details class="trained-on">
+									<details class="trained-on details-flat">
 										<summary>
 											<span class="chips">
 												{#each previewed as ds (ds)}
@@ -405,36 +405,15 @@
 			{/if}
 		</section>
 	{/if}
-</div>
+</main>
 
 <ScrollToTopButton />
 <ShareUrlButton />
 
 <style>
-	/* `.page` (1280 px centred, 18/28/56 padding) and `.breadcrumb`
-	   family live in src/app.css. */
-
-	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: 0 1px 3px rgb(var(--shadow-tint) / 0.04);
-	}
-
-	/* Hero ----------------------------------------------------------------- */
 	.hero-left :global(.cite) {
 		margin-top: 10px;
 	}
-	.hero {
-		display: grid;
-		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-		gap: 28px;
-		padding: 26px 28px 26px 32px;
-		margin-bottom: 18px;
-		position: relative;
-		overflow: hidden;
-	}
-	/* Left-edge accent strip. */
 	.hero::before {
 		content: '';
 		position: absolute;
@@ -442,99 +421,7 @@
 		bottom: 0;
 		left: 0;
 		width: 3px;
-		background: var(--accent, var(--border));
-	}
-	.hero[data-type='dense'] {
-		--accent: var(--tint-blue-fg);
-	}
-	.hero[data-type='cross-encoder'] {
-		--accent: var(--tint-orange-fg);
-	}
-	.hero[data-type='late-interaction'] {
-		--accent: var(--tint-green-fg);
-	}
-	.hero[data-type='sparse'] {
-		--accent: var(--tint-amber-fg);
-	}
-	.hero[data-type='router'] {
-		--accent: var(--tint-purple-fg);
-	}
-	@media (max-width: 1000px) {
-		.hero {
-			grid-template-columns: minmax(0, 1fr);
-		}
-	}
-	/* Mobile: tighten hero padding so the gradient header + chip rows
-	   don't bleed past the viewport edge, and force long-token chip
-	   text (e.g. "FEVERHardNegatives") to break instead of overflowing
-	   the chip + page. */
-	@media (max-width: 640px) {
-		.hero {
-			padding: 18px 16px;
-			gap: 16px;
-			margin-bottom: 12px;
-		}
-		.kpis {
-			gap: 8px;
-		}
-		.kpi {
-			padding: 8px 10px;
-		}
-		.kpi-value {
-			font-size: 17px;
-		}
-		.spec-list {
-			grid-template-columns: 110px minmax(0, 1fr);
-			column-gap: 12px;
-			row-gap: 8px;
-		}
-		.spec-list .chip {
-			overflow-wrap: anywhere;
-		}
-		.spec-list dd {
-			overflow-wrap: anywhere;
-		}
-	}
-
-	.kicker {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		margin-bottom: 12px;
-	}
-	.type-badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		font-weight: 700;
-		padding: 4px 10px;
-		border-radius: 999px;
-		/* `currentColor` is the per-model-type foreground tint set below,
-		   so one rule covers every variant — no per-type repetition. */
-		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-	}
-	.type-badge[data-type='dense'] {
-		background: var(--tint-blue);
-		color: var(--tint-blue-fg);
-	}
-	.type-badge[data-type='cross-encoder'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-	}
-	.type-badge[data-type='late-interaction'] {
-		background: var(--tint-green);
-		color: var(--tint-green-fg);
-	}
-	.type-badge[data-type='sparse'] {
-		background: var(--tint-amber);
-		color: var(--tint-amber-fg);
-	}
-	.type-badge[data-type='router'] {
-		background: var(--tint-purple);
-		color: var(--tint-purple-fg);
+		background: var(--category-tint-fg, var(--border));
 	}
 
 	.hero h1 {
@@ -561,40 +448,12 @@
 	.ref {
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--accent, var(--primary-strong));
+		color: var(--category-tint-fg, var(--primary-strong));
 	}
 	.ref.muted {
 		color: var(--link);
 	}
 
-	.kpis {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 10px;
-		align-content: start;
-	}
-	.kpi {
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		padding: 10px 12px;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.kpi-label {
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.kpi-value {
-		font-size: 20px;
-		font-weight: 700;
-		color: var(--text);
-		font-variant-numeric: tabular-nums;
-	}
 	.kpi-value .unit {
 		font-size: 0.65em;
 		font-weight: 500;
@@ -604,51 +463,9 @@
 	.kpi-value.date {
 		font-size: 16px;
 	}
-
-	/* Spec list — extended metadata rendered inline in the hero card. */
-	.spec-list {
-		display: grid;
-		grid-template-columns: 160px minmax(0, 1fr);
-		row-gap: 6px;
-		column-gap: 14px;
-		margin: 12px 0 0;
-	}
-	.spec-list .row {
-		display: contents;
-	}
-	.spec-list dt {
-		font-size: 12px;
-		font-weight: 500;
-		color: var(--text-subtle);
-		letter-spacing: 0.02em;
-		padding-top: 3px;
-	}
-	.spec-list dd {
-		font-size: 13px;
-		color: var(--text);
-		margin: 0;
-		min-width: 0;
-		word-break: break-word;
-	}
-	.spec-list dd a {
-		color: var(--link);
-	}
-	.spec-list .muted-dd {
-		color: var(--text-subtle);
-	}
-	.spec-list .chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
+	/* Chips here render as anchor tags; strip the underline so they
+	   read as pills. */
 	.spec-list .chip {
-		font-family: var(--font-mono);
-		font-size: 11.5px;
-		padding: 2px 8px;
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		color: var(--text);
 		text-decoration: none;
 	}
 	.spec-list .chip-link {
@@ -660,15 +477,9 @@
 	}
 	/* Trained-on fold-out: <summary> carries the preview chips + a
 	   pill-styled "+N more" toggle; the matching "Show fewer" pill
-	   becomes visible only while the <details> is open. The native
-	   disclosure triangle is suppressed so the chip row reads as a
-	   single visual unit. */
+	   becomes visible only while the <details> is open. */
 	.trained-on summary {
-		list-style: none;
 		cursor: pointer;
-	}
-	.trained-on summary::-webkit-details-marker {
-		display: none;
 	}
 	.trained-on summary:focus-visible {
 		outline: 2px solid var(--primary);

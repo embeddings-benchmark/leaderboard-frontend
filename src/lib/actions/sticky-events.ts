@@ -23,14 +23,14 @@ function install() {
 	window.addEventListener('resize', onResize);
 }
 
-export function onWindowScroll(fn: Sub): () => void {
+export function onWindowScroll(fn: Sub, signal: AbortSignal): void {
 	install();
 	scrollSubs.add(fn);
-	return () => scrollSubs.delete(fn);
+	signal.addEventListener('abort', () => scrollSubs.delete(fn), { once: true });
 }
 
-export function onWindowResize(fn: Sub): () => void {
+export function onWindowResize(fn: Sub, signal: AbortSignal): void {
 	install();
 	resizeSubs.add(fn);
-	return () => resizeSubs.delete(fn);
+	signal.addEventListener('abort', () => resizeSubs.delete(fn), { once: true });
 }

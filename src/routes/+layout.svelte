@@ -2,6 +2,7 @@
 	import '../app.css';
 	import '$lib/styles/leaderboard-table.css';
 	import '$lib/styles/sidebar.css';
+	import '$lib/styles/detail-page.css';
 	import { onMount } from 'svelte';
 	import { afterNavigate, beforeNavigate } from '$app/navigation';
 	import { page, updated } from '$app/state';
@@ -89,6 +90,9 @@
      ShareMeta into the page level eliminates the duplicate. -->
 
 <div class="shell">
+	<!-- Skip link — targets each route's `#main-content` (WCAG 2.4.1). -->
+	<a class="skip-link" href="#main-content">Skip to content</a>
+
 	<header class="bar">
 		<a class="brand" href={resolve('/')}>
 			<img class="brand-icon" src="{base}/dots-icon.png" alt="MTEB logo" width="22" height="22" />
@@ -195,7 +199,7 @@
 	.shell {
 		display: flex;
 		flex-direction: column;
-		min-height: 100vh;
+		min-height: 100dvh;
 		/* Light-mode: a barely-there dark-noise grain over the cool
 		   off-white --bg. Dark mode swaps the grain mask below. */
 		background: var(--grain-dark), var(--bg);
@@ -368,10 +372,6 @@
 			justify-self: start;
 			min-width: 0;
 			overflow-x: auto;
-			scrollbar-width: none;
-		}
-		.subnav::-webkit-scrollbar {
-			display: none;
 		}
 	}
 

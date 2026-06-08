@@ -267,8 +267,8 @@
 	image={benchmark?.icon && isIconUrl(benchmark.icon) ? apiUrl(benchmark.icon) : undefined}
 />
 
-<div class="app">
-	<main class="main">
+<div class="layout-sidebar">
+	<main id="main-content" tabindex="-1" class="main">
 		<nav class="breadcrumb" aria-label="Breadcrumb">
 			<a href={resolve('/')}>Home</a>
 			<span class="sep">/</span>
@@ -280,25 +280,25 @@
 		{#if leaderboard.loading && !benchmark}
 			<p class="muted">Loading benchmark…</p>
 		{:else if leaderboard.error}
-			<section class="empty card">
+			<section class="empty panel">
 				<h1>Couldn't load benchmark</h1>
 				<p>{leaderboard.error}</p>
 				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else if !benchmark}
-			<section class="empty card">
+			<section class="empty panel">
 				<h1>Unknown benchmark</h1>
 				<p>No benchmark named “{benchmarkName}”.</p>
 				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else}
-			<section class="hero card accent-rail" data-modality={accentModality}>
+			<section class="hero panel hero-grid accent-rail" data-modality={accentModality}>
 				<div class="hero-left">
 					<div class="title-block">
 						{#if benchmark.icon}
 							{#if isIconUrl(benchmark.icon)}
 								<img
-									class="hero-icon"
+									class="hero-icon icon-tile"
 									src={apiUrl(benchmark.icon)}
 									alt="{benchmark.displayName} icon"
 									width="32"
@@ -306,7 +306,9 @@
 									fetchpriority="high"
 								/>
 							{:else}
-								<span class="hero-icon hero-icon-text" aria-hidden="true">{benchmark.icon}</span>
+								<span class="hero-icon icon-tile icon-tile-text" aria-hidden="true"
+									>{benchmark.icon}</span
+								>
 							{/if}
 						{/if}
 						<div class="title-text">
@@ -443,58 +445,23 @@
 <ShareUrlButton />
 
 <style>
-	.app {
-		display: flex;
-		min-height: 100vh;
-	}
+	/* No max-width cap so the leaderboard table can stretch full
+	   width on ultrawide displays. */
 	.main {
 		flex: 1;
 		min-width: 0;
-		/* Fill all the slack between the page edge and the filter
-		   sidebar — no max-width cap so the table can stretch full
-		   width on ultrawide displays. 12 px right padding gives a
-		   small gap to the sidebar (or the overlay toggle button
-		   when the sidebar is collapsed). */
 		padding: 18px 12px 40px 28px;
 	}
-	/* `.breadcrumb`, `.breadcrumb a`, `.breadcrumb .sep`,
-	   `.breadcrumb .current` live in src/app.css. */
 
-	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: 0 1px 3px rgb(var(--shadow-tint) / 0.04);
-	}
+	/* `.hero-grid` shell from detail-page.css; overrides hug KPIs to content. */
 	.hero {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		gap: 28px;
-		padding: 22px 26px 22px 30px;
-		margin-bottom: 16px;
-		position: relative;
-		overflow: hidden;
+		--hero-cols: minmax(0, 1fr) auto;
+		--hero-padding-block: 22px;
+		--hero-padding-inline: 30px 26px;
+		--hero-margin-block-end: 16px;
 	}
-	.hero[data-modality='text'] {
-		--card-accent: var(--tint-teal-fg);
-	}
-	.hero[data-modality='image'] {
-		--card-accent: var(--tint-blue-fg);
-	}
-	.hero[data-modality='audio'] {
-		--card-accent: var(--tint-amber-fg);
-	}
-	.hero[data-modality='video'] {
-		--card-accent: var(--tint-purple-fg);
-	}
-	@media (max-width: 1000px) {
-		.hero {
-			/* `minmax(0, 1fr)` (not bare `1fr`) lets the column shrink
-			   below its intrinsic content width — without it, the
-			   CiteBlock's <pre> claims its full bibtex width and
-			   blows the card past the viewport on mobile. */
-			grid-template-columns: minmax(0, 1fr);
-		}
+	.hero[data-modality] {
+		--card-accent: var(--modality-tint-fg);
 	}
 	.title-block {
 		display: flex;
@@ -515,19 +482,9 @@
 		min-width: 0;
 	}
 	.hero-icon {
-		width: 32px;
-		height: 32px;
-		flex-shrink: 0;
-		border-radius: 5px;
-		object-fit: contain;
-		background: var(--surface-muted);
-	}
-	.hero-icon-text {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 22px;
-		line-height: 1;
+		--icon-size: 32px;
+		--icon-radius: 5px;
+		--icon-font-size: 22px;
 	}
 	.hero-left h1 {
 		font-size: 26px;
@@ -652,7 +609,6 @@
 		min-width: 0;
 		margin: 8px 0;
 	}
-	/* `.muted` (color + margin: 0) lives in src/app.css. */
 
 	.empty {
 		background: var(--surface);

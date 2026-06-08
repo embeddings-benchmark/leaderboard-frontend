@@ -1,0 +1,161 @@
+/* Chrome shared by /benchmark/[name], /models/[...name], /tasks/[name]. */
+
+.kicker {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-block-end: 12px;
+}
+
+/* currentColor border so the per-category fg tints the outline. */
+.category-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	font-weight: 700;
+	padding: 4px 10px;
+	border-radius: 999px;
+	background: var(--category-tint, var(--surface-muted));
+	color: var(--category-tint-fg, var(--text-muted));
+	border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+}
+
+/* `minmax(0, 1fr)` (not bare `1fr`) lets the left column shrink below
+   its intrinsic content — without it a wide BibTeX block blows the card
+   past the viewport on mobile. Layout queried via container, not viewport,
+   so the shell adapts inside narrower main columns. Consumers override
+   the `--hero-*` props per page. */
+.hero-grid {
+	--hero-cols: minmax(0, 1.4fr) minmax(0, 1fr);
+	--hero-gap: 28px;
+	--hero-padding-block: 26px;
+	--hero-padding-inline: 32px 28px;
+	--hero-margin-block-end: 18px;
+
+	container: hero / inline-size;
+	display: grid;
+	grid-template-columns: var(--hero-cols);
+	gap: var(--hero-gap);
+	padding-block: var(--hero-padding-block);
+	padding-inline: var(--hero-padding-inline);
+	margin-block-end: var(--hero-margin-block-end);
+	position: relative;
+	overflow: clip;
+}
+@container hero (max-width: 1000px) {
+	.hero-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+@container hero (max-width: 640px) {
+	.hero-grid {
+		padding-block: 18px;
+		padding-inline: 16px;
+		gap: 16px;
+		margin-block-end: 12px;
+	}
+}
+
+.kpis {
+	container: kpis / inline-size;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	align-content: start;
+}
+.kpi {
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.kpi-label {
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-subtle);
+	font-weight: 600;
+}
+.kpi-value {
+	font-size: 20px;
+	font-weight: 700;
+	color: var(--text);
+	font-variant-numeric: tabular-nums;
+}
+@container kpis (max-width: 360px) {
+	.kpis {
+		gap: 8px;
+	}
+	.kpi {
+		padding: 8px 10px;
+	}
+	.kpi-value {
+		font-size: 17px;
+	}
+}
+
+/* `.row` is `display: contents` so each <dt>/<dd> pair participates
+   directly in the parent two-column grid. */
+.spec-list {
+	display: grid;
+	grid-template-columns: 160px minmax(0, 1fr);
+	row-gap: 6px;
+	column-gap: 14px;
+	margin: 12px 0 0;
+}
+.spec-list .row {
+	display: contents;
+}
+.spec-list dt {
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-subtle);
+	letter-spacing: 0.02em;
+	padding-block-start: 3px;
+}
+.spec-list dd {
+	font-size: 13px;
+	color: var(--text);
+	margin: 0;
+	min-width: 0;
+	word-break: break-word;
+}
+.spec-list dd a {
+	color: var(--link);
+}
+.spec-list .muted-dd {
+	color: var(--text-subtle);
+}
+.spec-list .chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.spec-list .chip {
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	padding: 2px 8px;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	color: var(--text);
+}
+@media (max-width: 640px) {
+	.spec-list {
+		grid-template-columns: 110px minmax(0, 1fr);
+		column-gap: 12px;
+		row-gap: 8px;
+	}
+	.spec-list .chip {
+		overflow-wrap: anywhere;
+	}
+	.spec-list dd {
+		overflow-wrap: anywhere;
+	}
+}

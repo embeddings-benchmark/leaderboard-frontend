@@ -66,21 +66,22 @@
 
 <div class="tbl-scroll" use:stickyHScroll>
 	<table class="tbl bench-table" use:stickyHead>
+		<caption class="sr-only">Per-benchmark scores for this model</caption>
 		<thead>
 			<tr>
-				<th class="sticky" aria-sort={sort.aria('benchmark')}>
+				<th scope="col" class="sticky" aria-sort={sort.aria('benchmark')}>
 					<SortHeader {sort} field="benchmark" label="Benchmark" align="left" />
 				</th>
-				<th class="tbl-num" aria-sort={sort.aria('zeroShot')}>
+				<th scope="col" class="tbl-num" aria-sort={sort.aria('zeroShot')}>
 					<SortHeader {sort} field="zeroShot" label="Zero-shot" />
 				</th>
-				<th class="tbl-num" aria-sort={sort.aria('rank')}>
+				<th scope="col" class="tbl-num" aria-sort={sort.aria('rank')}>
 					<SortHeader {sort} field="rank" label="Rank" />
 				</th>
-				<th class="tbl-num" aria-sort={sort.aria('meanTask')}>
+				<th scope="col" class="tbl-num" aria-sort={sort.aria('meanTask')}>
 					<SortHeader {sort} field="meanTask" label="Mean (Task)" />
 				</th>
-				<th class="tbl-num" aria-sort={sort.aria('meanTaskType')}>
+				<th scope="col" class="tbl-num" aria-sort={sort.aria('meanTaskType')}>
 					<SortHeader {sort} field="meanTaskType" label="Mean (TaskType)" />
 				</th>
 			</tr>
@@ -88,14 +89,14 @@
 		<tbody>
 			{#each sortedRows as s (s.benchmarkName)}
 				<tr>
-					<td class="sticky">
+					<th scope="row" class="sticky">
 						<a
 							class="bench-link"
 							href={resolve('/benchmark/[name]', { name: slug(s.benchmarkName) })}
 						>
 							{s.benchmarkDisplay}
 						</a>
-					</td>
+					</th>
 					<td class="tbl-num">{fmtZeroShot(s.zeroShotPct)}</td>
 					<td class="tbl-num">
 						<span class="rank-pill" class:top={s.rank === 1}>#{s.rank}</span>
@@ -129,10 +130,10 @@
 		background: var(--surface-muted);
 		z-index: 3;
 	}
-	tbody tr:nth-child(even) td.sticky {
+	tbody tr:nth-child(even) th.sticky {
 		background: var(--row-alt);
 	}
-	tbody tr:hover td.sticky {
+	tbody tr:hover th.sticky {
 		background: var(--row-hover);
 	}
 	/* Mobile: drop the sticky column so every score reaches the viewport. */

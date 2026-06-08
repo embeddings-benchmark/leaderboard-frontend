@@ -31,19 +31,6 @@
 import type { Action } from 'svelte/action';
 import { onWindowResize, onWindowScroll } from './sticky-events';
 
-/**
- * Resolve the current sticky-bar offset (px). The header is `position: sticky;
- * top: 0` in `+layout.svelte` and its height depends on the viewport — the
- * mobile breakpoint compacts it to ~48 px, desktop sits ~52 px. Reading it
- * live keeps the floating thead-clone flush against the bar instead of
- * leaving a gap (when the constant was too large) or sliding under it
- * (when too small).
- */
-function stickyTopPx(): number {
-	const bar = document.querySelector<HTMLElement>('header.bar');
-	return bar ? bar.getBoundingClientRect().height : 48;
-}
-
 export const stickyHead: Action<HTMLTableElement> = (table) => {
 	const wrapperOrNull = table.closest<HTMLElement>('.tbl-scroll');
 	const theadOrNull = table.tHead;
@@ -51,6 +38,22 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	// Bind to non-nullable locals so closures below don't need re-narrowing.
 	const wrapper: HTMLElement = wrapperOrNull;
 	const realThead: HTMLTableSectionElement = theadOrNull;
+
+	const ac = new AbortController();
+	const { signal } = ac;
+
+	// Header bar height — mobile/desktop breakpoint swaps it between ~48
+	// and ~52 px. Cached so the dirty-path `readLayout()` doesn't pay for
+	// a query + rect read; `barRo` below invalidates on actual resize.
+	const bar = document.querySelector<HTMLElement>('header.bar');
+	let cachedBarH = bar ? bar.offsetHeight : null;
+	function stickyTopPx(): number {
+		if (cachedBarH !== null) return cachedBarH;
+		// Cold mount: action ran before the layout header existed. Re-query
+		// lazily so a late-arriving bar still drives the offset.
+		const lateBar = document.querySelector<HTMLElement>('header.bar');
+		return lateBar ? lateBar.offsetHeight : 48;
+	}
 
 	const overlay = document.createElement('div');
 	overlay.setAttribute('aria-hidden', 'true');
@@ -82,7 +85,6 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		width: 100%;
 		height: 100%;
 	`;
-	(inner.style as CSSStyleDeclaration & { msOverflowStyle?: string }).msOverflowStyle = 'none';
 
 	const cloneTable = document.createElement('table');
 	cloneTable.className = table.className;
@@ -295,6 +297,15 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	ro.observe(table);
 	ro.observe(wrapper);
 
+	const barRo = bar
+		? new ResizeObserver((entries) => {
+				cachedBarH = entries[0].contentRect.height;
+				markLayoutDirty();
+				scheduleUpdate();
+			})
+		: null;
+	barRo?.observe(bar!);
+
 	const mo = new MutationObserver(scheduleContent);
 	mo.observe(realThead, { childList: true, subtree: true, characterData: true, attributes: true });
 
@@ -314,10 +325,10 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 		paneMo.observe(paneAncestor, { attributes: true, attributeFilter: ['class'] });
 	}
 
-	const offScroll = onWindowScroll(scheduleUpdate);
-	wrapper.addEventListener('scroll', scheduleUpdate, { passive: true });
-	const offResize = onWindowResize(scheduleResync);
-	inner.addEventListener('click', onCloneClick);
+	onWindowScroll(scheduleUpdate, signal);
+	wrapper.addEventListener('scroll', scheduleUpdate, { passive: true, signal });
+	onWindowResize(scheduleResync, signal);
+	inner.addEventListener('click', onCloneClick, { signal });
 
 	syncWidths();
 	update();
@@ -328,12 +339,10 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 			if (resyncRaf) cancelAnimationFrame(resyncRaf);
 			if (contentRaf) cancelAnimationFrame(contentRaf);
 			ro.disconnect();
+			barRo?.disconnect();
 			mo.disconnect();
 			paneMo?.disconnect();
-			offScroll();
-			wrapper.removeEventListener('scroll', scheduleUpdate);
-			offResize();
-			inner.removeEventListener('click', onCloneClick);
+			ac.abort();
 			overlay.remove();
 		}
 	};

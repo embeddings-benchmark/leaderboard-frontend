@@ -233,9 +233,9 @@
 	description={`Every embedding model on the MTEB Leaderboard — ${ALL_MODELS.length || '700+'} models with architecture type, parameter count, embedding dimension, context length, release date, and supported languages.`}
 />
 
-<div class="app">
-	<main class="main">
-		<header class="hero">
+<div class="layout-sidebar">
+	<main id="main-content" tabindex="-1" class="layout-main">
+		<header class="hero index-hero">
 			<h1>Models</h1>
 			<p class="lead">
 				Every model in the leaderboard with its architecture type, parameter count, embedding
@@ -291,10 +291,10 @@
 		{:else if filtered.length === 0}
 			<p class="empty">No models match those filters.</p>
 		{:else}
-			<div class="grid">
+			<div class="grid card-grid">
 				{#each visibleModels as m (m.name)}
 					<a
-						class="card accent-rail"
+						class="card card-link card-link-vis accent-rail"
 						href={resolve('/models/[...name]', { name: modelPath(m.name) })}
 						data-type={m.modelType}
 						title={m.modelType}
@@ -309,7 +309,7 @@
 								<span>{m.modelType}</span>
 							</span>
 						</div>
-						<dl class="stats">
+						<dl class="card-stats">
 							<div>
 								<dt>Params</dt>
 								<dd>{fmtParamsCompact(m.totalParamsB)}</dd>
@@ -339,7 +339,7 @@
 							{/if}
 						</div>
 						{#if m.modalities && m.modalities.length > 0}
-							<div class="modality-row" aria-label="Supported modalities">
+							<div class="chip-row modality-row" aria-label="Supported modalities">
 								{#each sortModalities(m.modalities) as mod (mod)}
 									<span class="badge modality-tint" data-modality={mod} title={mod}>
 										<ModalityIcon modality={mod} size={12} />
@@ -368,91 +368,16 @@
 <ShareUrlButton />
 
 <style>
-	.app {
-		display: flex;
-		min-height: 100vh;
-	}
-	.main {
-		flex: 1;
-		min-width: 0;
-		max-width: 1280px;
-		margin: 0 auto;
-		padding: 28px 28px 64px;
-	}
-	.hero {
-		padding: 24px 0 16px;
-	}
-	.hero h1 {
-		font-size: 32px;
-		margin: 0 0 10px;
-		letter-spacing: -0.01em;
-	}
-	/* `.lead`, `.sort*`, `.dir-btn*` live in src/app.css — same
-	   markup is on /tasks so the rules were exact duplicates. */
-	/* `.toolbar` (sticky shell + mobile rules) is shared in src/app.css. */
-	/* Cards ---------------------------------------------------------------- */
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 12px;
-	}
+	/* `min-height` gives `.modality-row { margin-top: auto }` slack
+	   to push the modalities to the card bottom — without it the
+	   column collapses to content and the auto margin resolves to 0. */
 	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		/* Extra left padding for the 3 px accent strip. */
-		padding: 14px 16px 14px 18px;
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		/* `min-height` gives `.modality-row { margin-top: auto }` slack to
-		   push the modalities to the card bottom — without it the column
-		   collapses to content and the auto margin resolves to 0. */
+		--card-intrinsic: 220px;
 		min-height: 220px;
-		position: relative;
-		overflow: hidden;
-		text-decoration: none;
-		color: inherit;
-		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease,
-			box-shadow 0.12s ease;
-		/* Skip render/paint for off-screen cards (the registry is long).
-		   `content-visibility: auto` already implies `contain: size layout
-		   paint style`; an explicit `contain:` would replace that set and
-		   break `contain-intrinsic-size`. */
-		content-visibility: auto;
-		contain-intrinsic-size: 220px;
 	}
-	.card:focus-visible {
-		outline: 2px solid var(--card-accent, var(--primary));
-		outline-offset: 2px;
-	}
-	.card:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
-		border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
-	}
-	/* Per-type accent — mapping documented in CLAUDE.md. */
-	.card[data-type='dense'] {
-		--card-tint: var(--tint-blue);
-		--card-accent: var(--tint-blue-fg);
-	}
-	.card[data-type='cross-encoder'] {
-		--card-tint: var(--tint-orange);
-		--card-accent: var(--tint-orange-fg);
-	}
-	.card[data-type='late-interaction'] {
-		--card-tint: var(--tint-green);
-		--card-accent: var(--tint-green-fg);
-	}
-	.card[data-type='sparse'] {
-		--card-tint: var(--tint-amber);
-		--card-accent: var(--tint-amber-fg);
-	}
-	.card[data-type='router'] {
-		--card-tint: var(--tint-purple);
-		--card-accent: var(--tint-purple-fg);
+	.card[data-type] {
+		--card-tint: var(--category-tint);
+		--card-accent: var(--category-tint-fg);
 	}
 	.card:hover {
 		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
@@ -468,18 +393,8 @@
 		flex: 1;
 		min-width: 0;
 	}
-	/* Bottom-of-card modality strip: small color-keyed chips that read
-	   "the model can encode <icon> text / image / audio / video". Sits
-	   below the open-weights / instruction-tuned badges so the card
-	   reads top-to-bottom as identity → stats → capability → modality.
-	   `margin-top: auto` pins the strip to the bottom edge of the flex
-	   card so the row aligns across the grid no matter how many soft
-	   badges (Instruction-tuned / ST compatible) the model carries. */
 	.modality-row {
-		display: flex;
-		flex-wrap: wrap;
 		gap: 6px;
-		margin-top: auto;
 	}
 	.title {
 		display: block;
@@ -500,43 +415,14 @@
 		margin: 0 1px;
 		font-weight: 400;
 	}
-	.stats {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 8px 14px;
-		margin: 0;
-	}
-	.stats > div {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.stats dt {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.stats dd {
-		margin: 0;
-		font-size: 14px;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-	}
-
-	/* Mobile: keep the 2x2 KPI grid (params / embed dim / max tokens /
-	   released) so the card carries real information. Tighten the gap +
-	   font sizes so the card stays compact, and drop the min-height
-	   floor since the stats now fill the body naturally. */
 	@media (max-width: 640px) {
-		.stats {
+		.card-stats {
 			gap: 6px 12px;
 		}
-		.stats dt {
+		.card-stats dt {
 			font-size: 9px;
 		}
-		.stats dd {
+		.card-stats dd {
 			font-size: 13px;
 		}
 		.card {
@@ -574,6 +460,4 @@
 	.badge.open {
 		color: var(--tint-green-fg);
 	}
-
-	/* `.empty` lives in src/app.css. */
 </style>

@@ -35,7 +35,7 @@
 	let hasMore = $derived(cards.length > initialCount);
 </script>
 
-<section class="menu-section" class:open>
+<section class="menu-section panel" class:open>
 	<button
 		type="button"
 		class="head"
@@ -74,10 +74,9 @@
 </section>
 
 <style>
+	/* `overflow: hidden` so the rounded corners truncate the head's
+	   muted background. */
 	.menu-section {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
 		overflow: hidden;
 		margin-bottom: 14px;
 	}

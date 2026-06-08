@@ -8,13 +8,13 @@
 	<div class="skel title"></div>
 	<div class="skel desc"></div>
 	<div class="skel desc short"></div>
-	<div class="stats">
+	<div class="card-stats">
 		<div class="skel stat"></div>
 		<div class="skel stat"></div>
 		<div class="skel stat"></div>
 		<div class="skel stat"></div>
 	</div>
-	<div class="badges">
+	<div class="chip-row">
 		<div class="skel chip"></div>
 		<div class="skel chip"></div>
 	</div>
@@ -55,19 +55,11 @@
 	.desc.short {
 		width: 60%;
 	}
-	.stats {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 8px 14px;
+	.card-stats {
 		margin-top: 4px;
 	}
 	.stat {
 		height: 22px;
-	}
-	.badges {
-		display: flex;
-		gap: 6px;
-		margin-top: auto;
 	}
 	.chip {
 		width: 64px;

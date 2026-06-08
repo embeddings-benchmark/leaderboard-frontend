@@ -23,3 +23,10 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+
+# Claude Code — personal overrides + runtime state stay local; shared
+# settings + hook scripts live in `.claude/settings.json` + `.claude/hooks/`.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.playwright-mcp/
+.idea

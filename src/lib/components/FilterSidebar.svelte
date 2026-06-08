@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import FilterContent from './FilterContent.svelte';
 
 	interface Props {
@@ -11,6 +12,11 @@
 		languagesPicked?: Set<string>;
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
+		// When provided, replaces the default FilterContent body — used
+		// by the /benchmarks catalogue page which filters benchmarks
+		// (not benchmark contents) and so has its own facet state
+		// outside the global filters store.
+		children?: Snippet;
 	}
 	let {
 		hideScope = false,
@@ -18,7 +24,8 @@
 		languageOptions,
 		languagesPicked,
 		onToggleLanguage,
-		onToggleAllLanguages
+		onToggleAllLanguages,
+		children
 	}: Props = $props();
 
 	// Collapsed on narrow viewports so the drawer doesn't overlap content;
@@ -43,15 +50,17 @@
 	</button>
 
 	{#if !collapsed}
-		<FilterContent
-			{hideScope}
-			{flatModel}
-			{languageOptions}
-			{languagesPicked}
-			{onToggleLanguage}
-			{onToggleAllLanguages}
-		/>
+		{#if children}
+			<div class="filters">{@render children()}</div>
+		{:else}
+			<FilterContent
+				{hideScope}
+				{flatModel}
+				{languageOptions}
+				{languagesPicked}
+				{onToggleLanguage}
+				{onToggleAllLanguages}
+			/>
+		{/if}
 	{/if}
 </aside>
-
-<!-- Shell + toggle styles live in $lib/styles/sidebar.css. -->

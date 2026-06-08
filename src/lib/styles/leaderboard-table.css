@@ -35,7 +35,6 @@
 	border-radius: 8px;
 	background: var(--surface);
 	box-shadow: var(--shadow-sm);
-	-webkit-overflow-scrolling: touch;
 	overscroll-behavior-x: contain;
 	/* `contain: layout style paint` isolates the table's layout/style/paint
 	   cost from the rest of the page — a hover or sort-indicator change
@@ -244,13 +243,20 @@
 	background: var(--surface-muted);
 	z-index: 3;
 }
-.tbl tbody tr:nth-child(even) td.tbl-sticky-col {
+/* Reset UA `<th>` defaults (centered, bold) on every row-header cell in
+   any leaderboard table. Per-component sticky classes (.sticky-model,
+   .tbl-sticky-col, .sticky) share this base. */
+.tbl tbody th {
+	font-weight: normal;
+	text-align: start;
+}
+.tbl tbody tr:nth-child(even) th.tbl-sticky-col {
 	background: var(--row-alt);
 }
-.tbl tbody tr:hover td.tbl-sticky-col {
+.tbl tbody tr:hover th.tbl-sticky-col {
 	background: var(--row-hover);
 }
-.tbl tbody tr.pinned td.tbl-sticky-col {
+.tbl tbody tr.pinned th.tbl-sticky-col {
 	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
 }
 

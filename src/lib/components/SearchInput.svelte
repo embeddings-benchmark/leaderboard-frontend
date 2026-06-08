@@ -68,10 +68,19 @@
 		background: var(--surface);
 		color: var(--text);
 	}
-	input:focus {
+	/* `:focus-visible` so the ring only shows for keyboard/programmatic focus.
+	   `box-shadow` halo for the gradient look; `@media (forced-colors)` swaps
+	   to a system-colour outline since shadows are stripped in HCM. */
+	input:focus-visible {
 		outline: none;
 		border-color: var(--primary);
 		box-shadow: 0 0 0 3px var(--primary-soft);
+	}
+	@media (forced-colors: active) {
+		input:focus-visible {
+			outline: 2px solid Highlight;
+			outline-offset: 1px;
+		}
 	}
 	input::placeholder {
 		color: var(--text-subtle);

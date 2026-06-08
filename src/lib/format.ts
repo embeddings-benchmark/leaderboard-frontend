@@ -116,7 +116,6 @@ export const COLLATOR = new Intl.Collator(undefined, { sensitivity: 'base' });
  * `.toLowerCase()` calls per row per keystroke. Memoised by `ModelMeta`
  * identity so a row that survives multiple keystrokes pays the cost once.
  */
-// eslint-disable-next-line svelte/prefer-svelte-reactivity
 const _modelSearchKeyCache = new WeakMap<ModelMeta, string>();
 export function modelSearchKey(m: ModelMeta): string {
 	let v = _modelSearchKeyCache.get(m);

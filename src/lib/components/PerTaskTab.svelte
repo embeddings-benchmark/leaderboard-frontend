@@ -279,15 +279,17 @@
 		</p>
 		<div class="tbl-scroll" use:stickyHScroll>
 			<table class="tbl" use:stickyHead>
+				<caption class="sr-only">Per-task scores</caption>
 				<thead>
 					<tr>
-						<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
-						<th class="tbl-sticky-col" aria-sort={sort.aria('model')}>
+						<th scope="col" class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
+						<th scope="col" class="tbl-sticky-col" aria-sort={sort.aria('model')}>
 							<SortHeader {sort} field="model" label="Model" align="left" />
 						</th>
 						{#each sortedTasks as task (task)}
 							{@const k = `task:${task}` as SortKey}
 							<th
+								scope="col"
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
 								onpointerenter={(e) => showTaskTip(e, task)}
@@ -311,7 +313,8 @@
 							<td class="tbl-pin-col tbl-sticky-pin">
 								<PinButton name={row.model.name} />
 							</td>
-							<td
+							<th
+								scope="row"
 								class="tbl-sticky-col"
 								data-model-type={row.model.modelType}
 								onpointerover={(e) => onCellEnter(e, row)}
@@ -320,7 +323,7 @@
 								onfocusout={onCellLeave}
 							>
 								<ModelCellName model={row.model} />
-							</td>
+							</th>
 							{#each sortedTasks as task (task)}
 								{@const trained = rowTrained?.has(task) ?? false}
 								{@const v = scoreFor(row, task)}
@@ -352,7 +355,7 @@
 
 	{#if trainTip.visible}
 		<div
-			class="train-tip"
+			class="train-tip tip-portal tip-portal-interactive"
 			role="tooltip"
 			style:left="{trainTip.x}px"
 			style:top="{trainTip.y}px"
@@ -365,7 +368,7 @@
 
 	{#if taskTip.visible}
 		<div
-			class="task-tip"
+			class="task-tip tip-portal tip-portal-interactive"
 			role="tooltip"
 			style:left="{taskTip.x}px"
 			style:top="{taskTip.y}px"
@@ -394,20 +397,13 @@
 	.wrap {
 		padding-top: 8px;
 	}
-	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
 		margin: 0 0 12px;
 	}
-	/* Task column headers can be long ("AmazonReviewsClassification…") — clip
-	   them so they don't push the column impossibly wide. */
-	/* Trained-on warning sits inline after the score number with a small
-	   gap so it doesn't crowd the digits. The cell already keeps its
-	   heat-shaded background, so the ⚠️ is purely additive. The
-	   tooltip itself lives in a fixed-positioned portal rendered as a
-	   sibling of `.tbl-scroll` (see `.train-tip` below) — JS sets x/y
-	   from the icon's getBoundingClientRect on pointerenter, so the
-	   bubble appears instantly without re-layout cost or browser
-	   `title` delay, and isn't clipped by the table's overflow-x. */
+	/* Tooltip lives in a fixed-positioned portal sibling of
+	   `.tbl-scroll` so it isn't clipped by the table's overflow-x.
+	   JS sets x/y from the icon's getBoundingClientRect, avoiding
+	   the browser-native `title` delay. */
 	.trained-warn {
 		/* Reset <button> chrome so the inline ⚠️ icon stays purely
 		   typographic — it's a button only so a static role / tabindex
@@ -424,43 +420,14 @@
 		border-radius: 3px;
 	}
 	.train-tip {
-		position: fixed;
-		transform: translate(-50%, 6px);
 		max-width: 260px;
 		padding: 6px 10px;
-		font-family: var(--font-sans);
 		font-size: 11px;
 		font-weight: 500;
 		line-height: 1.4;
-		color: var(--tip-fg);
-		background: var(--tip-bg);
-		border-radius: 6px;
-		box-shadow: 0 8px 18px rgb(var(--shadow-tint) / 0.22);
-		text-align: left;
-		white-space: normal;
-		z-index: 1000;
-		pointer-events: auto;
 	}
-	/* Column-header tip — same dark-portal treatment as the
-	   trained-on bubble and SummaryTable's column tip. */
 	.task-tip {
-		position: fixed;
-		transform: translate(-50%, 6px);
-		max-width: 320px;
 		min-width: 220px;
-		padding: 10px 12px;
-		font-family: var(--font-sans);
-		font-size: 12px;
-		font-weight: 400;
-		line-height: 1.5;
-		color: var(--tip-fg);
-		background: var(--tip-bg);
-		border-radius: 8px;
-		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
-		text-align: left;
-		white-space: normal;
-		z-index: 1000;
-		pointer-events: auto;
 	}
 	.task-tip-title {
 		display: block;

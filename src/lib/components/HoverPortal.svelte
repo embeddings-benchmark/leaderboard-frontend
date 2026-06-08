@@ -46,8 +46,8 @@
 
 {#if visible}
 	<div
-		class="hover-portal"
-		class:interactive
+		class="hover-portal tip-portal"
+		class:tip-portal-interactive={interactive}
 		role="tooltip"
 		data-model-type={modelType}
 		style:left="{x}px"
@@ -62,32 +62,13 @@
 
 <style>
 	.hover-portal {
-		position: fixed;
-		transform: translate(-50%, 6px);
 		min-width: 220px;
-		max-width: 340px;
-		padding: 10px 12px;
-		background: var(--tip-bg);
-		color: var(--tip-fg);
-		border-radius: 8px;
-		font-size: 12px;
-		font-weight: 400;
-		font-family: var(--font-sans);
-		text-transform: none;
-		letter-spacing: 0;
-		line-height: 1.5;
-		text-align: left;
-		z-index: 1000;
-		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
-		white-space: normal;
-		pointer-events: none;
 	}
-	.hover-portal.interactive {
-		/* Extra top padding bridges the visual gap to the anchor so
-		   the cursor can cross into the bubble without exiting either
-		   hit area — clickable links inside the body need this. */
+	/* Extra top padding bridges the gap to the anchor so the cursor
+	   can cross from the anchor into the bubble without exiting
+	   either hit area — clickable links inside need this. */
+	.hover-portal.tip-portal-interactive {
 		padding-top: 16px;
-		pointer-events: auto;
 	}
 	.hover-title {
 		display: block;

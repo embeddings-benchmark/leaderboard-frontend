@@ -135,24 +135,10 @@
 	.seg.on {
 		background: var(--surface);
 		color: var(--ink-strong);
-		box-shadow: 0 1px 2px rgb(0, 0, 0, 0.08);
+		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.08);
 	}
 	.seg:focus-visible {
 		outline: 2px solid var(--primary);
 		outline-offset: 2px;
-	}
-	.sr-only {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		padding: 0;
-		margin: -1px;
-		overflow: hidden;
-		/* `clip` was the legacy WCAG visually-hidden trick; deprecated
-		   in favour of `clip-path`. Same visual + AT behaviour, no
-		   console warning. */
-		clip-path: inset(50%);
-		white-space: nowrap;
-		border: 0;
 	}
 </style>

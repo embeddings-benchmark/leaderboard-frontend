@@ -18,6 +18,15 @@
  *   <div class="tbl-scroll" use:stickyHScroll>
  *     <table>…</table>
  *   </div>
+ *
+ * FUTURE: container scroll-state queries (`@container scroll-state(scrollable: right)`)
+ * could drive the *visibility* of the overlay declaratively once that feature
+ * is Baseline. The overlay still needs JS for two-way scrollLeft sync — the
+ * scroll-state API only exposes a boolean "can scroll", not a position — so
+ * this action would shrink, not disappear. Tracking guide:
+ * scrollability-affordance-hints in modern-web-guidance. Today (2026-06)
+ * container scroll-state queries are Chrome 133+ / Edge 133+ only, with no
+ * Firefox/Safari support, so a pure-CSS fallback isn't tenable yet.
  */
 
 import type { Action } from 'svelte/action';
@@ -39,6 +48,10 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 	if (typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches) {
 		return;
 	}
+
+	const ac = new AbortController();
+	const { signal } = ac;
+
 	const overlay = document.createElement('div');
 	overlay.setAttribute('aria-hidden', 'true');
 	overlay.className = 'sticky-hscroll-overlay';
@@ -104,7 +117,10 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		cachedWrapperWidth = wr.width;
 		cachedWrapperDocTop = wr.top + sy;
 		cachedWrapperDocBottom = wr.bottom + sy;
-		const table = wrapper.firstElementChild as HTMLElement | null;
+		// `querySelector('table')` over `firstElementChild` so a future
+		// caption, header strip, or skeleton placeholder above the table
+		// doesn't silently break the scrollWidth measurement.
+		const table = wrapper.querySelector('table');
 		cachedScrollWidth = table ? table.scrollWidth : wrapper.scrollWidth;
 		cachedClientWidth = wrapper.clientWidth;
 		layoutDirty = false;
@@ -192,7 +208,7 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 
 	const ro = new ResizeObserver(scheduleResync);
 	ro.observe(wrapper);
-	const table = wrapper.firstElementChild;
+	const table = wrapper.querySelector('table');
 	if (table) ro.observe(table);
 
 	// Mirror sticky-head — flush + re-evaluate the moment the containing
@@ -208,10 +224,10 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 		paneMo.observe(paneAncestor, { attributes: true, attributeFilter: ['class'] });
 	}
 
-	const offScroll = onWindowScroll(scheduleUpdate);
-	wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
-	overlay.addEventListener('scroll', onOverlayScroll, { passive: true });
-	const offResize = onWindowResize(scheduleResync);
+	onWindowScroll(scheduleUpdate, signal);
+	wrapper.addEventListener('scroll', onWrapperScroll, { passive: true, signal });
+	overlay.addEventListener('scroll', onOverlayScroll, { passive: true, signal });
+	onWindowResize(scheduleResync, signal);
 
 	update();
 
@@ -220,10 +236,7 @@ export const stickyHScroll: Action<HTMLElement> = (wrapper) => {
 			if (rafId) cancelAnimationFrame(rafId);
 			ro.disconnect();
 			paneMo?.disconnect();
-			offScroll();
-			wrapper.removeEventListener('scroll', onWrapperScroll);
-			overlay.removeEventListener('scroll', onOverlayScroll);
-			offResize();
+			ac.abort();
 			overlay.remove();
 		}
 	};

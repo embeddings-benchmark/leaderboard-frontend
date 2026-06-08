@@ -6,16 +6,21 @@
    instead of being covered, so wide tables don't clip under the panel.
    `overflow: hidden` + `display: flex` so `.filters` can `flex: 1` and
    the last facet (Language) absorbs leftover height. */
+/* Open-sidebar width — ShareUrlButton reads this for its right offset. */
+body:has(.sidebar:not(.collapsed)) {
+	--sidebar-active-width: min(340px, 100dvw);
+}
+
 .sidebar {
 	--header-offset: 64px;
 
 	flex: 0 0 340px;
 	min-width: 320px;
 	max-width: 380px;
-	margin-left: auto;
-	border-left: 1px solid var(--border);
+	margin-inline-start: auto;
+	border-inline-start: 1px solid var(--border);
 	background: var(--surface);
-	height: calc(100vh - var(--header-offset));
+	height: calc(100dvh - var(--header-offset));
 	position: sticky;
 	top: var(--header-offset);
 	display: flex;
@@ -32,7 +37,7 @@
 	min-width: 0;
 	max-width: none;
 	width: 0;
-	border-left: none;
+	border-inline-start: none;
 	background: none;
 	overflow: visible;
 }
@@ -97,6 +102,8 @@
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
+	/* Reserve scrollbar space so pills don't jitter when the thumb appears. */
+	scrollbar-gutter: stable;
 }
 .group {
 	display: flex;
@@ -119,22 +126,18 @@
 	text-transform: uppercase;
 	color: var(--text-subtle);
 }
+.muted-inline {
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-subtle);
+	font-variant-numeric: tabular-nums;
+}
 
+/* Cap width + tighter padding so the in-block search doesn't fill
+   the whole sidebar. */
 .type-search {
-	width: 100%;
 	max-width: 320px;
 	padding: 5px 9px;
-	font-size: 12px;
-	font-family: inherit;
-	background: var(--surface);
-	color: var(--text);
-	border: 1px solid var(--border);
-	border-radius: 6px;
-}
-.type-search:focus {
-	outline: none;
-	border-color: var(--primary);
-	box-shadow: 0 0 0 3px var(--primary-soft);
 }
 .no-match {
 	margin: 0;
@@ -157,6 +160,10 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
+	padding: 8px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface-muted);
 }
 /* `contain: layout` isolates the inner flex-wrap layout from the ancestor
    sidebar's scroll calculation — without it Chromium leaks each
@@ -165,7 +172,6 @@
 .pills.scroll {
 	max-height: 380px;
 	overflow-y: auto;
-	padding-right: 4px;
 	contain: layout;
 }
 /* Marker for the facet that absorbs leftover sidebar height (Language).
@@ -264,6 +270,28 @@
 	background: var(--modality-tint);
 }
 
+/* Per-stype tint when checked — same shape as the modality tint
+   above, used on /tasks for the Task group facet. */
+.type-pill[data-stype]:not([data-stype='']):has(input:checked) {
+	background: var(--category-tint);
+	border-color: color-mix(in srgb, var(--category-tint-fg) 35%, transparent);
+	color: var(--category-tint-fg);
+}
+/* Same pattern for model-type pills inside FilterContent — `data-type`
+   drives the per-category tint via app.css. */
+.model-type-pill[data-type]:not([data-type='']):has(input:checked) {
+	background: var(--category-tint);
+	border-color: color-mix(in srgb, var(--category-tint-fg) 35%, transparent);
+	color: var(--category-tint-fg);
+}
+
+/* Long unbroken names (e.g. `XM3600T2IRetrieval`) wrap inside the
+   pill instead of overflowing. */
+.pill-label {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+
 @media (max-width: 640px) {
 	/* Mobile: in-flow at 340 px would leave the main column ~50 px wide;
 	   fall back to a fixed-position drawer so the user can briefly inspect
@@ -273,10 +301,10 @@
 		top: var(--header-offset);
 		right: 0;
 		flex: 0 0 auto;
-		width: min(340px, 100vw);
+		width: var(--sidebar-active-width);
 		min-width: 0;
 		max-width: none;
-		margin-left: 0;
+		margin-inline-start: 0;
 		z-index: 30;
 		box-shadow: -8px 0 24px rgb(var(--shadow-tint) / 0.18);
 	}

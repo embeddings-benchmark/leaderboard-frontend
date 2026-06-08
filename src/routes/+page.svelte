@@ -122,7 +122,7 @@
 	description="MTEB Leaderboard home — primary General / Retrieval / English benchmark winners plus curated sections for language, modality, retrieval, and domain-specific evaluations."
 />
 
-<div class="page">
+<main id="main-content" tabindex="-1" class="page">
 	<header class="hero">
 		<h1>Benchmark Overview</h1>
 		<a class="all-link" href={resolve('/benchmarks')}>See all benchmarks →</a>
@@ -131,7 +131,7 @@
 	{#if loading}
 		<section class="primary" aria-busy="true" aria-label="Loading featured leaderboards">
 			<div class="section-head">
-				<span class="eyebrow">Featured</span>
+				<span class="eyebrow-chip">Featured</span>
 			</div>
 			<div class="primary-grid">
 				{#each [0, 1, 2] as i (i)}
@@ -154,7 +154,7 @@
 	{:else}
 		<section class="primary" aria-label="Featured leaderboards">
 			<div class="section-head">
-				<span class="eyebrow">Featured</span>
+				<span class="eyebrow-chip">Featured</span>
 			</div>
 			<div class="primary-grid">
 				{#each primaries as p (p.key)}
@@ -174,7 +174,7 @@
 			{/each}
 		</div>
 	{/if}
-</div>
+</main>
 
 <style>
 	.page {
@@ -208,7 +208,7 @@
 		margin-bottom: 12px;
 		flex-wrap: wrap;
 	}
-	.eyebrow {
+	.eyebrow-chip {
 		font-size: 11px;
 		font-weight: 800;
 		letter-spacing: 0.08em;

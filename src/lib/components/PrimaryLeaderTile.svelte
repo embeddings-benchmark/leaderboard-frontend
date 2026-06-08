@@ -35,7 +35,7 @@
 </script>
 
 <a
-	class="prim accent-rail"
+	class="prim card-link accent-rail"
 	data-key={tintKey}
 	href={resolve('/benchmark/[name]', { name: slug(benchmark.name) })}
 	aria-label={`Open ${benchmark.displayName} leaderboard`}
@@ -47,23 +47,24 @@
 		{#if benchmark.icon}
 			{#if isIconUrl(benchmark.icon)}
 				<img
-					class="prim-icon"
+					class="prim-icon icon-tile"
 					src={apiUrl(benchmark.icon)}
 					alt=""
 					width="22"
 					height="22"
 					loading="lazy"
 					decoding="async"
+					fetchpriority="low"
 				/>
 			{:else}
-				<span class="prim-icon prim-icon-text" aria-hidden="true">{benchmark.icon}</span>
+				<span class="prim-icon icon-tile icon-tile-text" aria-hidden="true">{benchmark.icon}</span>
 			{/if}
 		{/if}
 		<span class="prim-title-text">{benchmark.displayName}</span>
 	</div>
 	<span class="prim-sub">{benchmark.numModels ?? 0} models · {benchmark.tasks.length} tasks</span>
 	{#if leaders === 'loading' || leaders === undefined}
-		<div class="prim-list-head">Top models</div>
+		<div class="eyebrow prim-list-head">Top models</div>
 		<ul class="prim-buckets" aria-busy="true" aria-label="Loading leaders">
 			{#each [0, 1, 2, 3] as i (i)}
 				<li class="bucket">
@@ -77,7 +78,7 @@
 	{:else if orderedBuckets.every((bk) => !bk.leader)}
 		<div class="prim-state">No size-bucketed data yet.</div>
 	{:else}
-		<div class="prim-list-head">Top models</div>
+		<div class="eyebrow prim-list-head">Top models</div>
 		<ul class="prim-buckets">
 			{#each orderedBuckets as bk (`${bk.min}-${bk.max ?? 'inf'}`)}
 				{@const r = bk.leader}
@@ -96,36 +97,14 @@
 	.prim {
 		--tint: var(--tint-blue);
 		--tint-fg: var(--tint-blue-fg);
-		/* Feed the shared `.accent-rail` the per-tile tint. */
 		--card-accent: var(--tint-fg);
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		padding: 18px 18px 14px 22px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
+		--card-radius: 14px;
+		--card-padding: 18px 18px 14px 22px;
+		--card-gap: 4px;
 		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
-		text-decoration: none;
-		color: inherit;
-		position: relative;
-		overflow: hidden;
-		transition:
-			transform 0.14s,
-			border-color 0.14s,
-			box-shadow 0.14s;
-	}
-	.prim:hover {
-		transform: translateY(-1px);
-		border-color: color-mix(in srgb, var(--tint-fg) 45%, var(--border));
-		box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.08);
 	}
 	.prim:hover .prim-title {
 		color: var(--tint-fg);
-	}
-	.prim:focus-visible {
-		outline: 2px solid var(--tint-fg);
-		outline-offset: 2px;
 	}
 	.prim[data-key='retrieval'] {
 		--tint: var(--tint-purple);
@@ -161,19 +140,12 @@
 		min-width: 0;
 	}
 	.prim-icon {
-		width: 22px;
-		height: 22px;
-		flex-shrink: 0;
-		border-radius: 4px;
-		object-fit: contain;
-		background: color-mix(in srgb, var(--surface) 60%, var(--tint));
+		--icon-size: 22px;
+		--icon-bg: color-mix(in srgb, var(--surface) 60%, var(--tint));
 	}
-	.prim-icon-text {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 18px;
-		line-height: 1;
+	/* Emoji glyph variant — clear the tinted backdrop so the glyph
+	   reads cleanly. */
+	.prim-icon.icon-tile-text {
 		background: transparent;
 	}
 	.prim-title-text {
@@ -196,11 +168,6 @@
 		color: var(--tint-orange-fg, #c0432e);
 	}
 	.prim-list-head {
-		font-size: 10px;
-		font-weight: 800;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
 		margin: 4px 0 2px;
 	}
 	.prim-buckets {

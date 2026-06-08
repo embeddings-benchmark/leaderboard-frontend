@@ -141,7 +141,7 @@ html,
 body {
 	margin: 0;
 	padding: 0;
-	min-height: 100vh;
+	min-height: 100dvh;
 	background: var(--bg);
 	color: var(--text);
 	font-family: var(--font-sans);
@@ -180,58 +180,63 @@ code {
 }
 
 /* Per-modality colour pair via `.modality-tint[data-modality=text|image|audio|video]`.
-   Each variant sets the tint-pair custom properties; one paint rule below
-   reads them, collapsing 4 declaration blocks into 4 var-only blocks + 1
-   shared paint rule. */
-[data-modality='text'] {
+   `:where()` keeps these at zero specificity so consumer classes always win. */
+:where([data-modality='text']) {
 	--modality-tint: var(--tint-teal);
 	--modality-tint-fg: var(--tint-teal-fg);
 }
-[data-modality='image'] {
+:where([data-modality='image']) {
 	--modality-tint: var(--tint-blue);
 	--modality-tint-fg: var(--tint-blue-fg);
 }
-[data-modality='audio'] {
+:where([data-modality='audio']) {
 	--modality-tint: var(--tint-amber);
 	--modality-tint-fg: var(--tint-amber-fg);
 }
-[data-modality='video'] {
+:where([data-modality='video']) {
 	--modality-tint: var(--tint-purple);
 	--modality-tint-fg: var(--tint-purple-fg);
 }
-.modality-tint {
-	background: var(--modality-tint, var(--surface-muted));
-	color: var(--modality-tint-fg, var(--text-muted));
-	text-transform: lowercase;
-}
+/* `utilities` always wins over `components`, so `.modality-tint` paints
+   over `.badge` regardless of source order. */
+@layer components, utilities;
 
 /* Chip shell — pair with `.modality-tint`, `.open`, or `.soft` for a
    fill. The border tracks `currentColor` so each variant's `color:`
    colours the border too. */
-.badge {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	padding: 3px 9px;
-	font-size: 10.5px;
-	border-radius: 999px;
-	font-weight: 600;
-	letter-spacing: 0.01em;
-	color: var(--text-muted);
-	border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-}
-/* Filled defaults; outline-only contexts clear `background` locally. */
-.badge.open {
-	background: light-dark(var(--tint-green), #0d2a1c);
-	color: var(--tint-green-fg);
-}
-.badge.soft {
-	background: var(--surface-muted);
-	color: var(--text-muted);
+@layer components {
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 3px 9px;
+		font-size: 10.5px;
+		border-radius: 999px;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		color: var(--text-muted);
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+	}
+	.badge.open {
+		background: light-dark(var(--tint-green), #0d2a1c);
+		color: var(--tint-green-fg);
+	}
+	.badge.soft {
+		background: var(--surface-muted);
+		color: var(--text-muted);
+	}
 }
 
-/* Inset left-edge marker coloured by `--card-accent`. Consumers must be
-   `position: relative` and leave ~18 px of left padding for the rail. */
+@layer utilities {
+	.modality-tint {
+		background: var(--modality-tint, var(--surface-muted));
+		color: var(--modality-tint-fg, var(--text-muted));
+		text-transform: lowercase;
+	}
+}
+
+/* Consumers must be `position: relative` and leave ~18 px of left
+   padding for the rail. */
 .accent-rail::before {
 	content: '';
 	position: absolute;
@@ -250,12 +255,355 @@ code {
 	bottom: 11px;
 }
 
-/* Hero lead paragraph used by every top-level index hero (/, /tasks,
-   /models, /benchmarks). Pages override font-size where they want a
-   larger / smaller block. */
+/* Per-task-group tints — `data-stype` exposes `--category-tint(-fg)`.
+   Mapping documented in CLAUDE.md. */
+:where([data-stype='classification']) {
+	--category-tint: var(--tint-blue);
+	--category-tint-fg: var(--tint-blue-fg);
+}
+:where([data-stype='clustering']) {
+	--category-tint: var(--tint-orange);
+	--category-tint-fg: var(--tint-orange-fg);
+}
+:where([data-stype='pair-classification']) {
+	--category-tint: var(--tint-green);
+	--category-tint-fg: var(--tint-green-fg);
+}
+:where([data-stype='reranking']) {
+	--category-tint: var(--tint-amber);
+	--category-tint-fg: var(--tint-amber-fg);
+}
+:where([data-stype='retrieval']) {
+	--category-tint: var(--tint-purple);
+	--category-tint-fg: var(--tint-purple-fg);
+}
+:where([data-stype='semantic-similarity']) {
+	--category-tint: var(--tint-pink);
+	--category-tint-fg: var(--tint-pink-fg);
+}
+:where([data-stype='bitext-mining']) {
+	--category-tint: var(--tint-azure);
+	--category-tint-fg: var(--tint-azure-fg);
+}
+:where([data-stype='instruction-reranking']) {
+	--category-tint: var(--tint-orange);
+	--category-tint-fg: var(--tint-orange-fg);
+}
+:where([data-stype='summarization']) {
+	--category-tint: var(--tint-teal);
+	--category-tint-fg: var(--tint-teal-fg);
+}
+
+/* Per-model-type tints — `data-type` exposes `--category-tint(-fg)`.
+   `[data-model-type]` in leaderboard-table.css covers row-cell tints. */
+:where([data-type='dense']) {
+	--category-tint: var(--tint-blue);
+	--category-tint-fg: var(--tint-blue-fg);
+}
+:where([data-type='cross-encoder']) {
+	--category-tint: var(--tint-orange);
+	--category-tint-fg: var(--tint-orange-fg);
+}
+:where([data-type='late-interaction']) {
+	--category-tint: var(--tint-green);
+	--category-tint-fg: var(--tint-green-fg);
+}
+:where([data-type='sparse']) {
+	--category-tint: var(--tint-amber);
+	--category-tint-fg: var(--tint-amber-fg);
+}
+:where([data-type='router']) {
+	--category-tint: var(--tint-purple);
+	--category-tint-fg: var(--tint-purple-fg);
+}
+
+/* `utilities` layer so this shell wins over `components` like `.badge`. */
+@layer utilities {
+	.category-tint {
+		background: var(--category-tint, var(--surface-muted));
+		color: var(--category-tint-fg, var(--text-muted));
+		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+	}
+}
+
 .lead {
 	margin: 0;
 	color: var(--text-muted);
+	text-wrap: pretty;
+}
+
+.index-hero {
+	padding: 24px 0 16px;
+}
+.index-hero h1 {
+	font-size: 32px;
+	margin: 0 0 10px;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+}
+
+.card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: 12px;
+}
+
+.layout-sidebar {
+	display: flex;
+	min-height: 100dvh;
+}
+.layout-main {
+	flex: 1;
+	min-width: 0;
+	max-width: 1280px;
+	margin: 0 auto;
+	padding: 28px 28px 64px;
+}
+
+.card-stats {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 8px 14px;
+	margin: 0;
+}
+.card-stats > div {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.card-stats dt {
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-subtle);
+	font-weight: 600;
+}
+.card-stats dd {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.chip-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	margin-block-start: auto;
+}
+
+.chip-neutral {
+	display: inline-block;
+	padding: 2px 8px;
+	font-size: 11px;
+	font-weight: 500;
+	border-radius: 999px;
+	background: var(--surface-muted);
+	color: var(--text);
+	border: 1px solid var(--border);
+}
+
+.eyebrow {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-subtle);
+}
+
+/* Override `--icon-size`, `--icon-radius`, `--icon-bg`,
+   `--icon-font-size` per consumer. */
+.icon-tile {
+	width: var(--icon-size, 24px);
+	height: var(--icon-size, 24px);
+	flex-shrink: 0;
+	object-fit: contain;
+	background: var(--icon-bg, var(--surface-muted));
+	border-radius: var(--icon-radius, 4px);
+}
+.icon-tile-text {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
+	font-size: var(--icon-font-size, 18px);
+}
+
+/* Suppress the default `<details>` disclosure marker; pair with a
+   custom summary affordance. */
+.details-flat > summary {
+	list-style: none;
+}
+.details-flat > summary::-webkit-details-marker {
+	display: none;
+}
+
+/* Override `--panel-radius` / `--panel-shadow` per consumer. */
+.panel {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--panel-radius, 14px);
+	box-shadow: var(--panel-shadow, 0 1px 3px rgb(var(--shadow-tint) / 0.04));
+}
+
+/* Tappable card. Override `--card-radius`, `--card-padding`,
+   `--card-gap`, `--card-accent` per consumer. */
+.card-link {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--card-radius, 12px);
+	padding: var(--card-padding, 14px 16px 14px 18px);
+	display: flex;
+	flex-direction: column;
+	gap: var(--card-gap, 12px);
+	position: relative;
+	overflow: clip;
+	text-decoration: none;
+	color: inherit;
+	transition:
+		transform 0.12s ease,
+		border-color 0.12s ease,
+		box-shadow 0.12s ease;
+}
+/* `text-decoration: none` re-asserted so the global `a:hover` underline
+   doesn't underline every line of card text. */
+.card-link:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 6px 18px rgb(var(--shadow-tint) / 0.07);
+	border-color: color-mix(in srgb, var(--card-accent, var(--primary)) 45%, var(--border));
+	text-decoration: none;
+}
+.card-link:hover .title {
+	color: var(--card-accent, var(--primary-strong));
+}
+.card-link:focus-visible {
+	outline: 2px solid var(--card-accent, var(--primary));
+	outline-offset: 2px;
+}
+/* No explicit `contain:` — `content-visibility: auto` already implies the
+   right set, and overriding it would break `contain-intrinsic-size`. */
+.card-link-vis {
+	content-visibility: auto;
+	contain-intrinsic-size: var(--card-intrinsic, 240px);
+}
+
+/* `.tip-portal-interactive` flips pointer-events so the user can
+   mouse onto the bubble (e.g. select text inside) without it
+   vanishing. */
+.tip-portal {
+	position: fixed;
+	transform: translate(-50%, 6px);
+	max-width: min(360px, calc(100dvw - 24px));
+	padding: 10px 12px;
+	background: var(--tip-bg);
+	color: var(--tip-fg);
+	border-radius: 8px;
+	font-family: var(--font-sans);
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.5;
+	text-align: left;
+	white-space: normal;
+	z-index: 1000;
+	box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
+	pointer-events: none;
+}
+.tip-portal-interactive {
+	pointer-events: auto;
+}
+
+.input-text {
+	width: 100%;
+	padding: 6px 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	font-size: 12px;
+	font-family: inherit;
+	background: var(--surface);
+	color: var(--text);
+}
+.input-text:focus-visible {
+	outline: none;
+	border-color: var(--primary);
+	box-shadow: 0 0 0 3px var(--primary-soft);
+}
+/* `box-shadow` halos are stripped in HCM — restore a visible focus ring. */
+@media (forced-colors: active) {
+	.input-text:focus-visible {
+		outline: 2px solid Highlight;
+		outline-offset: 1px;
+	}
+}
+
+/* Off-screen until focused (WCAG 2.4.1). */
+.skip-link {
+	position: fixed;
+	top: -100px;
+	left: 12px;
+	z-index: 100;
+	padding: 8px 14px;
+	background: var(--primary);
+	color: var(--surface);
+	border-radius: 8px;
+	font-weight: 600;
+	font-size: 13px;
+	text-decoration: none;
+	box-shadow: 0 4px 12px rgb(var(--shadow-tint) / 0.2);
+	transition: top 0.18s ease;
+}
+.skip-link:focus-visible {
+	top: 12px;
+	outline: 2px solid var(--primary-strong);
+	outline-offset: 2px;
+}
+
+/* Visually-hidden text for screen readers. `clip-path: inset(50%)`
+   over the legacy `clip: rect(...)` which is deprecated in CSS
+   Masking 1. */
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Position/transform/visibility are per-consumer because each
+   floating button docks to a different edge with its own enter/exit
+   transition. */
+.floating-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	height: 38px;
+	padding: 0 14px;
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--primary-strong);
+	background: var(--surface);
+	border: 1.5px solid var(--primary);
+	border-radius: 999px;
+	box-shadow:
+		0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
+		0 6px 18px rgb(var(--shadow-tint) / 0.12);
+	cursor: pointer;
+	text-decoration: none;
+}
+.floating-pill:hover {
+	background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+	border-color: var(--primary-strong);
+	box-shadow:
+		0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent),
+		0 10px 22px rgb(var(--shadow-tint) / 0.16);
+}
+.floating-pill:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 2px;
 }
 
 /* Sticky search + sort shelf shared by every overview page. */
@@ -281,17 +629,18 @@ code {
 		gap: 8px 10px;
 	}
 	.toolbar .sort {
-		margin-left: 0;
+		margin-inline-start: 0;
 	}
 }
 
 /* Sort + direction-toggle widget shared by the /models and /tasks
-   index toolbars. */
+   index toolbars. FUTURE: migrate `<select>` to `appearance: base-select`
+   when it leaves Chrome-only — branded-select-styling in modern-web-guidance. */
 .sort {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	margin-left: auto;
+	margin-inline-start: auto;
 	font-size: 12px;
 	color: var(--text-muted);
 }
@@ -329,7 +678,7 @@ code {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	margin-bottom: 14px;
+	margin-block-end: 14px;
 	font-size: 12px;
 	color: var(--text-muted);
 }
@@ -365,19 +714,31 @@ code {
 	color: var(--text-muted);
 }
 
-/* Shared thin scrollbar — applied to internally-scrolling regions
-   (filter pill lists, tab strips, task-info tables) so they don't
-   each redeclare the same `::-webkit-scrollbar` rules. */
-.scroll-thin {
-	scrollbar-width: thin;
+/* Shared title + clamped description used by BenchmarkCard and TaskCard. */
+.card-title {
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--text);
+	overflow-wrap: anywhere;
+	word-break: normal;
+	line-height: 1.3;
 }
-.scroll-thin::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+.card-desc {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--text-muted);
+	overflow: clip;
+	text-wrap: pretty;
+	line-clamp: 2;
 }
-.scroll-thin::-webkit-scrollbar-thumb {
-	background: var(--border-strong);
-	border-radius: 3px;
+@supports not (line-clamp: 2) {
+	.card-desc {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+	}
 }
 
 /* Heat-shading classes for leaderboard table cells. ~1500 cells per

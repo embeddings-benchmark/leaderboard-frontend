@@ -84,15 +84,17 @@
 
 <div class="tbl-scroll" use:stickyHScroll>
 	<table class="tbl task-table" use:stickyHead>
+		<caption class="sr-only">Models scored on this task</caption>
 		<thead>
 			<tr>
-				<th class="tbl-num sticky-rank" aria-sort={sort.aria('rank')}>
+				<th scope="col" class="tbl-num sticky-rank" aria-sort={sort.aria('rank')}>
 					<SortHeader {sort} field="rank" label="Rank" />
 				</th>
-				<th class="sticky" aria-sort={sort.aria('model')}>
+				<th scope="col" class="sticky" aria-sort={sort.aria('model')}>
 					<SortHeader {sort} field="model" label="Model" align="left" />
 				</th>
 				<th
+					scope="col"
 					class="tbl-num mean-head"
 					aria-sort={sort.aria('score')}
 					title="Mean of per-subset scores for this task"
@@ -101,7 +103,7 @@
 				</th>
 				{#each subsets as sub (sub)}
 					{@const k = `subset:${sub}` as SortKey}
-					<th class="tbl-num sub" aria-sort={sort.aria(k)} title={sub}>
+					<th scope="col" class="tbl-num sub" aria-sort={sort.aria(k)} title={sub}>
 						<SortHeader {sort} field={k} label={sub} />
 					</th>
 				{/each}
@@ -113,9 +115,9 @@
 					<td class="tbl-num sticky-rank">
 						<span class="rank-pill">#{s.rank}</span>
 					</td>
-					<td class="sticky" data-model-type={s.model.modelType}>
+					<th scope="row" class="sticky" data-model-type={s.model.modelType}>
 						<ModelCellName model={s.model} />
-					</td>
+					</th>
 					<td
 						class="tbl-num mean-cell {s.score == null ? '' : heat(s.score, worstScore, bestScore)}"
 						class:partial={s.score == null}
@@ -179,10 +181,10 @@
 		background: var(--surface-muted);
 		z-index: 3;
 	}
-	tbody tr:nth-child(even) td.sticky {
+	tbody tr:nth-child(even) th.sticky {
 		background: var(--row-alt);
 	}
-	tbody tr:hover td.sticky {
+	tbody tr:hover th.sticky {
 		background: var(--row-hover);
 	}
 	/* Mobile: the sticky pair hides almost every score column behind it
