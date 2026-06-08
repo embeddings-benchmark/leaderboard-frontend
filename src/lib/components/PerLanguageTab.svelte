@@ -89,7 +89,6 @@
 	// comparator. The row→mean map gives the comparator a constant-time
 	// lookup.
 	let rowStats = $derived.by(() => {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const rowMeanMap = new WeakMap<SummaryRow, number | null>();
 		const best: Record<string, number> = {};
 		const worst: Record<string, number> = {};

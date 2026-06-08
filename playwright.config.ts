@@ -16,8 +16,7 @@ export default defineConfig({
 			// Custom `tests/preview-server.mjs` over `npm run preview` because
 			// vite preview fails to URL-decode benchmark filenames with
 			// special chars (parens / commas) — see comment in that file.
-			command:
-				'npx wait-on -t 30s tcp:8787 && npm run build && node tests/preview-server.mjs',
+			command: 'npx wait-on -t 30s tcp:8787 && npm run build && node tests/preview-server.mjs',
 			env: { PUBLIC_API_URL: 'http://localhost:8787' },
 			port: 4173,
 			reuseExistingServer: true,

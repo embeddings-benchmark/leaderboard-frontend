@@ -113,6 +113,5 @@ createServer((req, res) => {
 
 	json(res, { error: 'not found', path }, 404);
 }).listen(PORT, () => {
-	// eslint-disable-next-line no-console
 	console.log(`mock API listening on http://localhost:${PORT}`);
 });

@@ -526,7 +526,6 @@ interface NarrowingResult {
 	taskTypesOut: string[];
 	taskNamesOut: string[];
 	tasksByType: Map<string, string[]>;
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	perRowAgg: WeakMap<
 		SummaryRow,
 		{
@@ -539,7 +538,6 @@ interface NarrowingResult {
 	// independent of the row filter (intersected at compute time).
 	sortedByTask: Map<string, readonly { name: string; v: number }[]>;
 }
-// eslint-disable-next-line svelte/prefer-svelte-reactivity
 const _narrowingCache = new WeakMap<BenchmarkSummary, NarrowingResult>();
 
 function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResult {
@@ -581,9 +579,7 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 			if (!fullTasks && !filters.tasks.has(t.name)) return false;
 			return true;
 		});
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const visibleTaskNames = new Set(visibleTasks.map((t) => t.name));
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const visibleTaskTypes = new Set(visibleTasks.map((t) => t.type));
 		// Drop type columns no visible task feeds — backend strips spaces from
 		// display labels, so `summary.taskTypes` keys line up with `tasksMeta[i].type`.
@@ -605,9 +601,7 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 		taskTypesOut,
 		taskNamesOut,
 		tasksByType,
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		perRowAgg: new WeakMap(),
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		sortedByTask: new Map()
 	};
 	_narrowingCache.set(summary, result);

@@ -65,6 +65,5 @@ createServer(async (req, res) => {
 	res.writeHead(404, { 'Content-Type': 'text/plain' });
 	res.end('not found');
 }).listen(PORT, () => {
-	// eslint-disable-next-line no-console
 	console.log(`preview server on http://localhost:${PORT} serving ${ROOT}`);
 });
