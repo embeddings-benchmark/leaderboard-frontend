@@ -2,13 +2,10 @@
    FilterSidebar component used by /benchmark/[name] + /models). One source
    of truth so the three filter surfaces stay in lock-step. */
 
-/* In-flow flex column so the main content reflows when the drawer
-   toggles. Content shrinks/grows instead of being covered, which
-   keeps wide tables from being clipped under the panel.
-
-   Outer `overflow: hidden` + `display: flex` lets `.filters` claim the
-   full inner height so the last facet (Language) can `flex: 1` and
-   fill any empty space at the bottom of the sidebar. */
+/* In-flow flex column: main content reflows when the drawer toggles
+   instead of being covered, so wide tables don't clip under the panel.
+   `overflow: hidden` + `display: flex` so `.filters` can `flex: 1` and
+   the last facet (Language) absorbs leftover height. */
 .sidebar {
 	--header-offset: 64px;
 
@@ -95,9 +92,8 @@
 	flex-direction: column;
 	gap: 18px;
 	padding: 14px 16px 24px;
-	/* Fill the sidebar so `.group:last-child { flex: 1 }` has somewhere to
-	   grow. `min-height: 0` lets the inner scrollport shrink past its
-	   intrinsic content when the sidebar is short. */
+	/* `min-height: 0` lets the inner scrollport shrink past intrinsic
+	   content on short viewports. */
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
@@ -107,9 +103,7 @@
 	flex-direction: column;
 	gap: 6px;
 	min-width: 0;
-	/* Natural-height by default so the leftover sidebar space lands on
-	   `.filters > .group:last-child` (Language) rather than being split
-	   evenly across every facet. */
+	/* Natural-height so leftover space lands on `:last-child` only. */
 	flex: 0 0 auto;
 }
 .group-head {
@@ -164,34 +158,32 @@
 	flex-wrap: wrap;
 	gap: 4px;
 }
-/* Long task-type / domain lists scroll internally — leave the rest of the
-   sidebar room. */
-/* Add `.scroll-thin` (from app.css) alongside `.scroll` to get the styled
-   scrollbar; this rule just sizes the scrollport itself. */
 /* `contain: layout` isolates the inner flex-wrap layout from the ancestor
-   `<aside>`'s scroll calculation. Without it Chromium leaks each
-   inner-overflowed row into the sidebar's `scrollHeight`, leaving the
-   user with a phantom ~350 px tall empty band below the last facet. */
+   sidebar's scroll calculation — without it Chromium leaks each
+   inner-overflowed row into the sidebar's `scrollHeight` (phantom ~350 px
+   band below the last facet). */
 .pills.scroll {
 	max-height: 380px;
 	overflow-y: auto;
 	padding-right: 4px;
 	contain: layout;
 }
-/* Last facet (Language) grows to fill whatever sidebar height the other
-   groups leave behind, scrolling internally when it can't. `flex-basis: 0`
-   makes the flex calculation ignore the natural content size, so the
-   container only grows when there's *leftover* space; `min-height: 280px`
-   keeps it usable on short viewports — at that point `.filters` itself
-   scrolls. */
-.filters > .group:last-child {
+/* Marker for the facet that absorbs leftover sidebar height (Language).
+   `flex-basis: 0` so growth comes from leftover space, not the natural
+   content size of a long pill list. */
+.group.grow {
 	flex: 1 1 0;
 	min-height: 280px;
 }
-.filters > .group:last-child .pills.scroll {
+/* The `.scroll{,Y}` qualifier is needed to outrank FilterContent's
+   scoped `.pills.scroll-y` cap (max-height: 220 px). */
+.group.grow > .pills:is(.scroll, .scroll-y) {
 	flex: 1;
 	min-height: 0;
 	max-height: none;
+	/* `flex-wrap: wrap` defaults to `align-content: stretch` — without
+	   this, wrapped rows balloon to fill the scrollport. */
+	align-content: flex-start;
 }
 .pill {
 	display: inline-flex;

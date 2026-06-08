@@ -516,7 +516,7 @@
 			<!-- Language facet, only rendered when the host page wires up
 			     `languageOptions` (currently /models). State lives in the
 			     parent so the sidebar stays generic. -->
-			<div class="group">
+			<div class="group grow">
 				<div class="group-header">
 					<span class="group-label">Language</span>
 					<button type="button" class="link-btn" onclick={() => onToggleAllLanguages?.()}>
@@ -807,16 +807,16 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		/* Fill the sidebar so the inner `.flat-groups` can claim leftover
-		   vertical space and pass it to the last facet (Language). The
-		   sidebar shell sets `overflow: hidden`; this is where overflow
-		   is handled if total content exceeds the viewport. */
+		/* Scroll container when total content overflows the sidebar; also
+		   bounds `.flat-groups` so its last facet can `flex: 1`. */
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
 	}
 
 	/* Active filter chips ----------------------------------------------------- */
+	/* `flex-shrink: 0` — sibling of `.block` inside the flex column;
+	   without it the wrap content would clip silently. */
 	.active-strip {
 		display: flex;
 		flex-wrap: wrap;
@@ -882,15 +882,14 @@
 	}
 
 	/* Block sections ---------------------------------------------------------- */
+	/* `flex-shrink: 0`: flex column siblings shrink by default, and our
+	   `overflow: hidden` (for rounded corners) would clip the body
+	   instead of letting `.filter-content` scroll. */
 	.block {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		overflow: hidden;
-		/* Stay at natural height inside `.filter-content`'s flex column —
-		   without this, flex would shrink the block and `overflow: hidden`
-		   above would silently clip the body instead of letting the
-		   container's own `overflow-y: auto` scroll. */
 		flex-shrink: 0;
 	}
 	.block-head {
@@ -944,33 +943,17 @@
 		gap: 16px;
 		border-top: 1px solid var(--border);
 	}
-	/* Sibling of `.block` used in flat mode — no card chrome, just the groups. */
+	/* Sibling of `.block` used in flat mode — no card chrome, just the groups.
+	   `flex: 1; min-height: 0` fills `.filter-content` so the last facet
+	   absorbs leftover height. The `> .group:last-child` rule lives in
+	   `$lib/styles/sidebar.css` (shared with `.filters`). */
 	.flat-groups {
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
 		padding: 0 2px;
-		/* Fill `.filter-content` so the last group (Language) can absorb the
-		   leftover sidebar height — matches the /tasks + /benchmarks
-		   sidebar behaviour. */
 		flex: 1;
 		min-height: 0;
-	}
-	/* Same pattern as `.filters > .group:last-child` in sidebar.css: only
-	   the bottom-most facet grows; siblings stay at their natural height
-	   so removing flex:1 from the shared `.group` rule doesn't collapse
-	   them. `flex-basis: 0` so the calculation only sees leftover space,
-	   not the language list's natural content; `min-height: 280px` keeps
-	   the facet usable on short viewports and lets `.filter-content`
-	   scroll instead. */
-	.flat-groups > .group:last-child {
-		flex: 1 1 0;
-		min-height: 280px;
-	}
-	.flat-groups > .group:last-child .pills.scroll-y {
-		flex: 1;
-		min-height: 0;
-		max-height: none;
 	}
 
 	/* Groups ------------------------------------------------------------------ */

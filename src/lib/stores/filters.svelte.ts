@@ -115,9 +115,7 @@ function createFilters() {
 		/* eslint-disable svelte/prefer-svelte-reactivity */
 		const domains = new Set<string>();
 		const modalities = new Set<string>();
-		// Count tasks per language so the filter pills can be ordered by
-		// popularity (number of tasks in this benchmark that declare each
-		// language). Long-tail languages drop to the bottom.
+		// Count per language so the filter pills sort by popularity.
 		const languageCount = new Map<string, number>();
 		/* eslint-enable svelte/prefer-svelte-reactivity */
 		for (const t of summary.tasksMeta) {
@@ -519,12 +517,8 @@ function isFullSet(selected: Set<string>, available: string[]): boolean {
 	return available.every((x) => selected.has(x));
 }
 
-// Visible-task narrowing decision: cached per `summary` identity behind a
-// task-filter signature so a keystroke in the name search box doesn't rebuild
-// the visibleTasks/Set/byType structures (or the per-row aggregate cache
-// they index). Cleared when `summary` swaps (rare) or when the task / domain
-// / modality / per-task selection set changes (typical when the user toggles
-// a sidebar facet).
+// Cached per `summary` + task-filter signature so name-search keystrokes
+// reuse the previous visibleTasks / Sets / per-row aggregate cache.
 interface NarrowingResult {
 	signature: string;
 	fullView: boolean;
@@ -537,18 +531,16 @@ interface NarrowingResult {
 		SummaryRow,
 		{ meanTask: number | null; meanTaskType: number | null; scoresByTaskType: Record<string, number> }
 	>;
-	// Per-task sorted (model name → score) descending — backs the Borda cache.
-	// Independent of row filter, so reused across keystrokes; only the visible
-	// row set is intersected at compute time.
+	// Per-task sorted (name, score) lists — backs the Borda cache,
+	// independent of the row filter (intersected at compute time).
 	sortedByTask: Map<string, readonly { name: string; v: number }[]>;
 }
 // eslint-disable-next-line svelte/prefer-svelte-reactivity
 const _narrowingCache = new WeakMap<BenchmarkSummary, NarrowingResult>();
 
 function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResult {
-	// Signature captures every input that flips `fullView` or changes
-	// `visibleTasks`. Sets are sorted before joining so order doesn't
-	// invalidate the cache spuriously.
+	// Signature of every input that flips `fullView` or changes
+	// `visibleTasks`; sets sorted so iteration order is stable.
 	const sig = [
 		lenient ? 'L' : 'S',
 		[...filters.taskTypes].sort().join('|'),
@@ -793,10 +785,9 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			rankedRows = rows;
 		}
 	} else {
-		// Per-task sorted (model, score) lists are precomputed once per
-		// (summary, taskNamesOut) and reused across keystrokes — they don't
-		// depend on the row filter. Borda points for the visible set fall out
-		// of walking each cached list, skipping names not in `visibleNames`.
+		// Per-task sorted (name, score) lists, cached once per (summary,
+		// taskNamesOut). Borda for the visible set walks each list and
+		// skips names not in `visibleNames`.
 		const { sortedByTask } = narrow;
 		if (sortedByTask.size === 0) {
 			for (const taskName of taskNamesOut) {
@@ -805,11 +796,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 					const v = r.scoresByTask[taskName];
 					if (v !== undefined) ranked.push({ name: r.model.name, v });
 				}
-				// Stable tie-break on model name so Borda points land on the
-				// same row regardless of the filter pass that produced
-				// `visibleNames`. Without this, tied scores would award
-				// points in whatever order `summary.rows` happened to be in,
-				// shifting Borda totals across re-renders.
+				// Stable tie-break by name so tied scores award deterministic
+				// points regardless of `summary.rows` order.
 				ranked.sort((a, b) => b.v - a.v || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 				sortedByTask.set(taskName, ranked);
 			}
@@ -822,8 +810,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		for (const taskName of taskNamesOut) {
 			const ranked = sortedByTask.get(taskName);
 			if (!ranked) continue;
-			// First pass: how many visible-set entries this task contributes
-			// (Borda awards `visibleCount - rank`, so we need the total).
+			// Visible count per task — Borda awards `visibleCount - rank`.
 			let visibleCount = 0;
 			for (const r of ranked) if (visibleNames.has(r.name)) visibleCount++;
 			let i = 0;
@@ -837,8 +824,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			.map((row) => ({ row, borda: bordaPoints.get(row.model.name) ?? 0 }))
 			.sort((a, b) => {
 				if (a.borda !== b.borda) return b.borda - a.borda;
-				// Tiebreak: higher Mean(Task) first; nulls (incomplete coverage)
-				// land at the bottom of any tie.
+				// Tiebreak: higher Mean(Task) first; nulls to bottom.
 				const am = a.row.meanTask ?? -Infinity;
 				const bm = b.row.meanTask ?? -Infinity;
 				return bm - am;

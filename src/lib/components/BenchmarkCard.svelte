@@ -102,8 +102,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding so the 3 px accent strip doesn't crowd
-		   the title text. */
+		/* Extra left padding for the 3 px accent strip. */
 		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
@@ -132,8 +131,7 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
-	/* Per-modality accent strip on the left edge. `overflow: hidden` on
-	   the card clips it to the rounded corner. */
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
 	.card::before {
 		content: '';
 		position: absolute;

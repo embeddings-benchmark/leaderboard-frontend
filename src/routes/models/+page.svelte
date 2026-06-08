@@ -52,10 +52,7 @@
 				// `ModelMeta.languages` may be missing (older backends, models
 				// with no declared language scope) — those rows pass the
 				// filter trivially via the "everything checked" default.
-				// Count occurrences so the filter pills can be ordered by
-				// popularity (number of models that declare each language).
-				// Plain Map is correct here — throwaway local accumulator,
-				// never read reactively.
+				// Count per language so the filter pills sort by popularity.
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const langCount = new Map<string, number>();
 				for (const x of m)
@@ -404,8 +401,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding so the 3 px accent strip doesn't crowd the
-		   title text. */
+		/* Extra left padding for the 3 px accent strip. */
 		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
@@ -437,8 +433,7 @@
 		transform: translateY(-1px);
 		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
 	}
-	/* Per-type accent strip on the left edge. `overflow: hidden` on the
-	   card clips it to the rounded corner. */
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
 	.card::before {
 		content: '';
 		position: absolute;
@@ -448,9 +443,7 @@
 		width: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	/* Per-type tints: just set the custom property; the accent strip in
-	   `.card::before` consumes it. Mapping documented in CLAUDE.md
-	   (dense → blue, cross-encoder → orange, …). */
+	/* Per-type accent — mapping documented in CLAUDE.md. */
 	.card[data-type='dense'] {
 		--card-tint: var(--tint-blue);
 		--card-accent: var(--tint-blue-fg);

@@ -475,10 +475,7 @@
 		position: relative;
 		overflow: hidden;
 	}
-	/* Per-modality accent strip on the left edge. `overflow: hidden` clips
-	   it to the rounded corner. Modality → tint pairs are the canonical
-	   mapping (see app.css notes: text → teal, image → blue, audio →
-	   amber, video → purple). */
+	/* Left-edge accent strip; canonical modality→tint mapping in app.css. */
 	.hero[data-modality]::before {
 		content: '';
 		position: absolute;

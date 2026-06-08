@@ -500,9 +500,7 @@
 		position: relative;
 		overflow: hidden;
 	}
-	/* Per-simplified-type accent strip on the left edge. `overflow: hidden`
-	   clips it to the rounded corner. Mapping mirrors the group-chip /
-	   type-badge palette. */
+	/* Left-edge accent strip — mapping mirrors the group-chip palette. */
 	.hero::before {
 		content: '';
 		position: absolute;

@@ -133,9 +133,7 @@
 				const mods = new Set<string>();
 				const simpTypes = new Set<string>();
 				const doms = new Set<string>();
-				// Language count → sort the filter pills by popularity (number
-				// of benchmarks that include each language) so the long tail
-				// drops to the bottom of the list.
+				// Count per language so the filter pills sort by popularity.
 				const langCount = new Map<string, number>();
 				/* eslint-enable svelte/prefer-svelte-reactivity */
 				for (const b of list) {
@@ -177,12 +175,8 @@
 			});
 	});
 
-	// All benchmarks share one sorted list. The off-menu ones
-	// (`displayOnLeaderboard === false`) still surface their "newer
-	// version available" hint on the card itself, so visually they're
-	// distinguishable without forcing them to the bottom — splitting them
-	// out made "sort by model count" look like only the featured set was
-	// shown until the user scrolled past 46 cards.
+	// Off-menu benchmarks sort alongside the featured ones — the per-card
+	// "newer version available" hint already distinguishes them.
 	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		// "All on" = filter off; partial = intersection check; empty =
@@ -391,7 +385,7 @@
 					</div>
 				</div>
 
-				<div class="group">
+				<div class="group grow">
 					<div class="group-head">
 						<span class="group-label">Language</span>
 						<button type="button" class="link-btn" onclick={toggleAllLanguages}>

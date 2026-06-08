@@ -434,8 +434,7 @@
 		position: relative;
 		overflow: hidden;
 	}
-	/* Per-type accent strip on the left edge. `overflow: hidden` clips it
-	   to the rounded corner. */
+	/* Left-edge accent strip. */
 	.hero::before {
 		content: '';
 		position: absolute;

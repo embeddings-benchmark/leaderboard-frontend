@@ -78,8 +78,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		/* Extra left padding so the 3 px accent strip below doesn't crowd
-		   the title text. */
+		/* Extra left padding for the 3 px accent strip. */
 		padding: 14px 16px 14px 18px;
 		display: flex;
 		flex-direction: column;
@@ -112,8 +111,7 @@
 		outline: 2px solid var(--card-accent, var(--primary));
 		outline-offset: 2px;
 	}
-	/* Per-stype accent strip on the left edge. `overflow: hidden` on the
-	   card clips the strip to the rounded corner. */
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
 	.card::before {
 		content: '';
 		position: absolute;
@@ -123,8 +121,7 @@
 		width: 3px;
 		background: var(--card-accent, var(--border));
 	}
-	/* Per-stype accent — the left strip in `.card::before` consumes
-	   `--card-accent`. Mapping documented in CLAUDE.md. */
+	/* Per-stype accent — mapping documented in CLAUDE.md. */
 	.card[data-stype='retrieval'] {
 		--card-accent: var(--tint-purple-fg);
 	}

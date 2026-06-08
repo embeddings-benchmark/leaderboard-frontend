@@ -45,14 +45,8 @@
 		}
 	} as const;
 
-	// Short explanations for the per-task-type columns. Surfaced on
-	// column-header hover so users skimming the table know what each
-	// score is measuring without leaving the page.
-	// Keyed by the *real* task type as it appears on `tasksMeta[i].type`, not by
-	// the stripped form on `summary.taskTypes` — the backend's display label
-	// strips parens (and an `S` next to them) for column ids, so e.g.
-	// `VisualSTS(eng)` arrives in `summary.taskTypes` as `VisualSTeng`. The
-	// table reverses that via `realTaskType` below before looking up here.
+	// Per-column hover descriptions. Keyed by `tasksMeta[i].type` (not the
+	// `summary.taskTypes` form the backend strips) — see `realTaskType` below.
 	const TASK_TYPE_INFO: Record<string, string> = {
 		Classification: 'Classify text into pre-defined labels (sentiment, topic, intent, …).',
 		Clustering:
@@ -270,20 +264,14 @@
 	let sortedTaskTypes = $derived(summary.taskTypes);
 
 	// `summary.taskTypes` carries the backend's stripped form (no parens,
-	// and a stray `S` next to them eaten too — e.g. `VisualSTS(eng)` ⇒
-	// `VisualSTeng`). `tasksMeta[i].type` keeps the real form. Build a
-	// reverse map so the column header can show the human label, and
-	// `TASK_TYPE_INFO` lookups hit even when the description key contains
-	// parens. Falls through to the stripped form when no task in the
-	// summary backs the column (shouldn't happen in practice).
+	// and a stray `S` next to them — `VisualSTS(eng)` → `VisualSTeng`).
+	// `tasksMeta[i].type` keeps the real form, so reverse the strip to
+	// recover human labels + hit `TASK_TYPE_INFO` keys that contain parens.
 	let realTaskType = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const m = new Map<string, string>();
 		for (const t of summary.tasksMeta) {
 			if (!t.type) continue;
-			// Mirror the backend strip: drop parens, plus an `S` immediately
-			// adjacent to `(` or `)`. Captures the observed
-			// `VisualSTS(eng)` → `VisualSTeng` transform.
 			const stripped = t.type.replace(/S?\(|\)S?/g, '');
 			if (!m.has(stripped)) m.set(stripped, t.type);
 		}

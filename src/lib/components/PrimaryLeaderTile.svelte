@@ -113,8 +113,7 @@
 			border-color 0.14s,
 			box-shadow 0.14s;
 	}
-	/* Per-tile accent strip on the left edge. `overflow: hidden` on the
-	   tile clips it to the rounded corner. */
+	/* Left-edge accent strip; clipped to the rounded corner by `overflow: hidden`. */
 	.prim::before {
 		content: '';
 		position: absolute;

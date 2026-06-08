@@ -74,10 +74,7 @@
 				const modSet = new Set<string>();
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const domSet = new Set<string>();
-				// Languages: keep a count so we can order the filter pills by
-				// popularity (number of tasks that declare each language)
-				// rather than alphabetically — the long tail of single-task
-				// languages drops to the bottom of the list.
+				// Count per language so the filter pills sort by popularity.
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const langCount = new Map<string, number>();
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -522,7 +519,7 @@
 					</div>
 				</div>
 
-				<div class="group">
+				<div class="group grow">
 					<div class="group-head">
 						<span class="group-label">Language</span>
 						<button type="button" class="link-btn" onclick={toggleAllLanguages}>
