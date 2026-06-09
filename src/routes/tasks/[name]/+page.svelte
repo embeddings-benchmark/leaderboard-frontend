@@ -126,7 +126,8 @@
 			score: r.score,
 			rank: r.rank,
 			benchmarkName: r.benchmarks[0] ?? '',
-			subsetScores: r.subsetScores
+			subsetScores: r.subsetScores,
+			trainedOn: r.trainedOn
 		}));
 	});
 
