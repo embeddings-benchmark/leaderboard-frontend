@@ -47,14 +47,10 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	// a query + rect read; `barRo` below invalidates on actual resize.
 	const bar = document.querySelector<HTMLElement>('header.bar');
 	let cachedBarH = bar ? bar.offsetHeight : null;
-	// Per-table offsets via CSS vars on the table element:
-	//   `--sticky-head-base`  — overrides `bar.offsetHeight` (use this when
-	//                           the rendered bar adds a border the table
-	//                           shouldn't see, e.g. set to `var(--header-height)`)
-	//   `--sticky-head-extra` — added on top, for a sticky toolbar etc.
-	// Both default to 0 when unset; leaderboard tables (no toolbar) leave
-	// them empty and fall back to bar.offsetHeight. Re-read every layout
-	// pass so responsive var values are picked up.
+	// Per-table offsets via CSS vars on the table element. Unset → fall
+	// back to `bar.offsetHeight`.
+	//   `--sticky-head-base`  — replaces `bar.offsetHeight`
+	//   `--sticky-head-extra` — added on top (sticky toolbar height)
 	function readCssPx(name: string): number | null {
 		const v = getComputedStyle(table).getPropertyValue(name).trim();
 		if (!v) return null;

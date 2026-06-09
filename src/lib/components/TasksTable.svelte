@@ -85,8 +85,6 @@
 </div>
 
 <style>
-	/* Main-metric cell — mono so identifiers like `cosine_spearman` read
-	   cleanly. Specific to this table. */
 	.tbl-col-metric {
 		font-family: var(--font-mono);
 		font-size: 12px;

@@ -618,20 +618,12 @@ code {
 }
 
 /* Sticky search + sort shelf shared by every overview page.
-   `flex-wrap: nowrap` + `overflow-x: auto` is the modern-web-guidance
-   pattern (csslayout §2): a single-row toolbar that scrolls horizontally
-   when its content can't fit instead of wrapping to a second row. This
-   keeps the toolbar at a constant ~56px tall across every viewport /
-   sidebar state so the table-view's sticky thead can dock at a single
-   fixed offset (`--search-group-h: 56px`) without per-breakpoint math. */
+   `nowrap` + `overflow-x: auto` keeps the row a constant 56px tall so
+   the table-view's sticky thead can dock at a single fixed offset. */
 .toolbar {
 	display: flex;
 	flex-wrap: nowrap;
 	overflow-x: auto;
-	/* Hide the horizontal scrollbar — it would add ~15px to the toolbar's
-	   height (browsers reserve space inside the padding box) and break
-	   the constant-height invariant the table thead's offset relies on.
-	   Users still scroll the toolbar with wheel/trackpad/swipe. */
 	scrollbar-width: none;
 	align-items: center;
 	gap: 10px 12px;
@@ -648,21 +640,21 @@ code {
 .toolbar::-webkit-scrollbar {
 	display: none;
 }
-/* Each widget keeps its intrinsic width — they don't squeeze, the
-   toolbar scrolls instead. Without this, items try to share the row and
-   the search input or sort dropdown gets crushed to a sliver. */
+/* Only the first child (the search input) compresses; sort/toggle/count
+   keep their intrinsic widths so their labels stay legible. */
 .toolbar > * {
 	flex-shrink: 0;
 }
-/* Search input stays the row's elastic filler — grows to absorb extra
-   space when the toolbar is wider than its contents. Use `flex-basis`
-   = the component's own 220px min so the widget is the same width as it
-   would be without `flex-wrap` overriding. */
-.toolbar > :is(.search, :first-child) {
+.toolbar > :first-child {
 	flex: 1 1 220px;
+	min-inline-size: 0;
 }
-/* Single-line text so widgets keep their natural height (no vertical
-   wrap that would push the row past 56px). */
+/* `.layout-main` lifts specificity (0,3,0) above SearchInput's scoped
+   `.search.svelte-xxx` (0,2,0) so we can override without `!important`. */
+.layout-main .toolbar > .search {
+	min-inline-size: 100px;
+	max-inline-size: 420px;
+}
 .toolbar .count,
 .toolbar .sort,
 .toolbar .sort label {
@@ -673,6 +665,41 @@ code {
 		margin: 10px 0 14px;
 		padding: 10px;
 		gap: 8px 10px;
+	}
+}
+/* Phone: explicit grid (search on row 1, controls on row 2). Grid +
+   fixed row heights keep the toolbar pixel-identical across engines —
+   flex-wrap row counts differ between Chrome and Firefox at the same
+   viewport. */
+@media (max-width: 480px) {
+	.toolbar {
+		display: grid;
+		grid-template-columns: 1fr auto auto;
+		grid-template-rows: 36px 36px;
+		grid-template-areas:
+			'search search search'
+			'sort toggle count';
+		row-gap: 8px;
+		column-gap: 10px;
+		overflow-x: visible;
+	}
+	.layout-main .toolbar > .search {
+		grid-area: search;
+		max-inline-size: none;
+		min-inline-size: 0;
+	}
+	.toolbar > .sort {
+		grid-area: sort;
+		margin-inline-start: 0;
+		min-inline-size: 0;
+	}
+	.toolbar > .view-toggle {
+		grid-area: toggle;
+		justify-self: center;
+	}
+	.toolbar > .count {
+		grid-area: count;
+		justify-self: end;
 	}
 }
 

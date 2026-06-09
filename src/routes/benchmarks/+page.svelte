@@ -59,15 +59,11 @@
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
 
-	// View mode: card grid (default) vs sortable table. Persisted in the URL
-	// so a shared link preserves the chosen view.
+	// URL-backed view mode (cards default) and a SortState adapter that
+	// lets the table's `SortHeader` drive the same sort/sortDir as the
+	// dropdown.
 	const initialView = getParam('view');
 	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
-
-	// Adapter exposing the existing sort/sortDir state through the
-	// `SortState<K>` interface that `SortHeader` consumes. Behaviour matches
-	// the dropdown: clicking a new key swaps + resets to its natural dir;
-	// clicking the active key flips direction.
 	const sortAdapter: SortState<SortId> = {
 		get key() {
 			return sort;

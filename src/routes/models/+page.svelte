@@ -127,16 +127,13 @@
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
 
-	// View mode: card grid (default) vs sortable table. URL-backed so a
-	// shared link preserves the chosen view.
+	// URL-backed view mode (cards default) and a SortState adapter so the
+	// table's `SortHeader` drives the same sort/sortDir as the dropdown.
 	const initialView = getParam('view');
 	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
 	$effect(() => {
 		updateUrl({ view: view === 'cards' ? null : view });
 	});
-
-	// SortHeader adapter — same shape the leaderboard tables use, wired
-	// to the existing reactive sort/sortDir state.
 	const sortAdapter: SortState<SortId> = {
 		get key() {
 			return sort;

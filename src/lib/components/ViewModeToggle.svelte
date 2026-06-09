@@ -1,8 +1,4 @@
 <script lang="ts">
-	// Compact cards/table view toggle for overview-page toolbars.
-	// Two icon buttons sharing the look of the `.dir-btn` widget so it
-	// docks naturally next to the sort dropdown.
-
 	export type ViewMode = 'cards' | 'table';
 
 	interface Props {

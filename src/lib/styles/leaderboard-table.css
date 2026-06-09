@@ -355,32 +355,21 @@
 }
 
 /* ─── Overview-page tables (Benchmarks / Models / Tasks index views) ─────
-   These tables are the alternate "table view" for the three overview pages.
-   They inherit `.tbl-scroll`'s `overflow-x: auto` so wide tables scroll
-   horizontally on any viewport. The `stickyHead` action on each table
-   clones the `<thead>` into a viewport-pinned overlay; `--sticky-head-extra`
-   pushes the overlay down by the live toolbar height so the head docks
-   flush against the sticky `.toolbar`.
-
-   The toolbar is a flex-wrap row of search + sort + view-toggle + count;
-   it sits in one row at desktop widths (~56px) but wraps to two rows when
-   the open filter sidebar narrows the main column (the empirical break
-   sits around 1100px viewport, sidebar-open). The two breakpoints below
-   match that — small extra gap is tolerated when the sidebar is closed at
-   the intermediate width in exchange for a CSS-only fix that needs no JS
-   measurement and stays right at the two cases that matter (desktop and
-   phone). */
-/* `--search-group-h` is the rendered height of the sticky `.toolbar`.
-   Because `.toolbar` is `flex-wrap: nowrap` + `overflow-x: auto` (see
-   app.css), the row stays a constant 56 px on every viewport / sidebar
-   state — one value covers everything. */
+   The `stickyHead` action clones the `<thead>` into a viewport-pinned
+   overlay. `--sticky-head-base` overrides the bar's `offsetHeight` (which
+   includes a 1px border) with the CSS header-height so the overlay aligns
+   exactly with the sticky `.toolbar`. `--search-group-h` matches the
+   toolbar's height — 56px in the one-row flex layout, 102px in the phone
+   grid layout (see app.css). */
 .tbl-overview {
 	--search-group-h: 56px;
-	/* Pin against the CSS-declared header height (not bar.offsetHeight,
-	   which includes its 1px bottom-border) so the cloned head aligns
-	   exactly with the toolbar's sticky bottom edge. */
 	--sticky-head-base: var(--header-height);
 	--sticky-head-extra: var(--search-group-h);
+}
+@media (max-width: 480px) {
+	.tbl-overview {
+		--search-group-h: 102px;
+	}
 }
 .tbl-overview .tbl {
 	width: 100%;
@@ -397,8 +386,6 @@
 	padding: 6px 12px;
 	white-space: normal;
 }
-/* The row title (inside a <th>) is just a wrapper for the link; let the
-   anchor own the padding so the entire cell area is clickable. */
 .tbl-overview tbody th.tbl-col-name {
 	padding: 0;
 }
@@ -414,7 +401,6 @@
 .tbl-overview .tbl-row-link:hover .tbl-row-title {
 	color: var(--primary-strong);
 }
-/* `.row-link-icon` lays out an `.icon-tile` next to the title/id stack. */
 .tbl-overview .row-link-icon {
 	flex-direction: row;
 	align-items: flex-start;
@@ -423,7 +409,6 @@
 .tbl-overview .row-icon {
 	--icon-size: 24px;
 	--icon-font-size: 16px;
-	/* Nudge to align the icon's optical centre with the title baseline. */
 	margin-top: 1px;
 }
 .tbl-overview .row-text {

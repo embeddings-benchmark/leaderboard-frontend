@@ -88,9 +88,6 @@
 </div>
 
 <style>
-	/* Availability cell — green for open weights, muted for proprietary.
-	   Lives here (not in the shared CSS) because only this table renders
-	   the column. */
 	.badge.avail.open {
 		color: var(--tint-green-fg);
 		background: transparent;
