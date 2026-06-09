@@ -401,6 +401,18 @@
 .tbl-overview .tbl-row-link:hover .tbl-row-title {
 	color: var(--primary-strong);
 }
+/* Make the whole row clickable — the link's `::after` pseudo is
+   absolutely positioned over the entire `<tr>` (which is the nearest
+   positioned ancestor). Cells stay visually as-is; clicks anywhere
+   navigate via the link. */
+.tbl-overview tbody tr {
+	position: relative;
+}
+.tbl-overview .tbl-row-link::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
 .tbl-overview .row-link-icon {
 	flex-direction: row;
 	align-items: flex-start;
