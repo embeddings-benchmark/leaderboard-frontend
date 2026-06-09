@@ -353,3 +353,129 @@
 	color: var(--ink-strong);
 	font-variant-numeric: tabular-nums;
 }
+
+/* ─── Overview-page tables (Benchmarks / Models / Tasks index views) ─────
+   These tables are the alternate "table view" for the three overview pages.
+   They inherit `.tbl-scroll`'s `overflow-x: auto` so wide tables scroll
+   horizontally on any viewport. The `stickyHead` action on each table
+   clones the `<thead>` into a viewport-pinned overlay; `--sticky-head-extra`
+   pushes the overlay down by the live toolbar height so the head docks
+   flush against the sticky `.toolbar`.
+
+   The toolbar is a flex-wrap row of search + sort + view-toggle + count;
+   it sits in one row at desktop widths (~56px) but wraps to two rows when
+   the open filter sidebar narrows the main column (the empirical break
+   sits around 1100px viewport, sidebar-open). The two breakpoints below
+   match that — small extra gap is tolerated when the sidebar is closed at
+   the intermediate width in exchange for a CSS-only fix that needs no JS
+   measurement and stays right at the two cases that matter (desktop and
+   phone). */
+/* `--search-group-h` is the rendered height of the sticky `.toolbar`.
+   Because `.toolbar` is `flex-wrap: nowrap` + `overflow-x: auto` (see
+   app.css), the row stays a constant 56 px on every viewport / sidebar
+   state — one value covers everything. */
+.tbl-overview {
+	--search-group-h: 56px;
+	/* Pin against the CSS-declared header height (not bar.offsetHeight,
+	   which includes its 1px bottom-border) so the cloned head aligns
+	   exactly with the toolbar's sticky bottom edge. */
+	--sticky-head-base: var(--header-height);
+	--sticky-head-extra: var(--search-group-h);
+}
+.tbl-overview .tbl {
+	width: 100%;
+}
+.tbl-overview .tbl-col-name {
+	min-width: 220px;
+	max-width: 380px;
+}
+.tbl-overview .tbl-col-num {
+	width: 1%;
+}
+.tbl-overview .tbl-col-chips {
+	min-width: 140px;
+	padding: 6px 12px;
+	white-space: normal;
+}
+/* The row title (inside a <th>) is just a wrapper for the link; let the
+   anchor own the padding so the entire cell area is clickable. */
+.tbl-overview tbody th.tbl-col-name {
+	padding: 0;
+}
+.tbl-overview .tbl-row-link {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 12px;
+	color: var(--text);
+	text-decoration: none;
+	line-height: 1.35;
+}
+.tbl-overview .tbl-row-link:hover .tbl-row-title {
+	color: var(--primary-strong);
+}
+/* `.row-link-icon` lays out an `.icon-tile` next to the title/id stack. */
+.tbl-overview .row-link-icon {
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 10px;
+}
+.tbl-overview .row-icon {
+	--icon-size: 24px;
+	--icon-font-size: 16px;
+	/* Nudge to align the icon's optical centre with the title baseline. */
+	margin-top: 1px;
+}
+.tbl-overview .row-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.tbl-overview .tbl-row-title {
+	font-weight: 600;
+	word-break: break-word;
+	white-space: normal;
+}
+.tbl-overview .tbl-row-sub {
+	font-size: 11px;
+	color: var(--text-subtle);
+}
+.tbl-overview .tbl-row-id {
+	font-size: 11px;
+	color: var(--text-subtle);
+	font-family: var(--font-mono);
+}
+.tbl-overview .tbl-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+/* Per-stype tinted chip — `data-stype` pulls `--category-tint(-fg)` from
+   the global map in app.css, matching the task card's group-chip look. */
+.tbl-stype-chip {
+	display: inline-block;
+	padding: 2px 7px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	border-radius: 999px;
+	background: var(--category-tint, var(--surface-muted));
+	color: var(--category-tint-fg, var(--text-muted));
+	border: 1px solid color-mix(in srgb, var(--category-tint-fg, var(--border)) 30%, transparent);
+	white-space: nowrap;
+}
+/* Model-type tint chip (dense/cross-encoder/late-interaction/...). */
+.tbl-type-chip {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: 999px;
+	text-transform: lowercase;
+	background: var(--category-tint, var(--surface-muted));
+	color: var(--category-tint-fg, var(--text-muted));
+	border: 1px solid color-mix(in srgb, var(--category-tint-fg, var(--border)) 35%, transparent);
+}

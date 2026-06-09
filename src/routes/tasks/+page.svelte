@@ -9,10 +9,13 @@
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import TaskCard from '$lib/components/TaskCard.svelte';
+	import TasksTable from '$lib/components/TasksTable.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
-	import { COLLATOR } from '$lib/format';
+	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
+	import type { SortState } from '$lib/stores/sort.svelte';
+	import { ariaSort, COLLATOR, sortIcon } from '$lib/format';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 
@@ -189,6 +192,32 @@
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
+
+	// View mode: card grid (default) vs sortable table.
+	const initialView = getParam('view');
+	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	$effect(() => {
+		updateUrl({ view: view === 'cards' ? null : view });
+	});
+
+	const sortAdapter: SortState<SortId> = {
+		get key() {
+			return sort;
+		},
+		get dir() {
+			return sortDir;
+		},
+		click(k: SortId) {
+			if (sort !== k) onSortKeyChange(k);
+			else toggleSortDir();
+		},
+		icon(k: SortId) {
+			return sortIcon(k, sort, sortDir, '↕');
+		},
+		aria(k: SortId) {
+			return ariaSort(k, sort, sortDir);
+		}
+	};
 
 	function toggleType(t: string) {
 		if (typeFilter.has(t)) typeFilter.delete(t);
@@ -399,6 +428,7 @@
 					<SortDirIcon dir={sortDir} />
 				</button>
 			</div>
+			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
 			{#if !loadingData && !loadError}
 				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
 			{/if}
@@ -410,6 +440,8 @@
 			<p class="empty">Failed to load tasks: {loadError}</p>
 		{:else if filtered.length === 0}
 			<p class="empty">No tasks match those filters.</p>
+		{:else if view === 'table'}
+			<TasksTable rows={filtered} sort={sortAdapter} />
 		{:else}
 			<div class="grid card-grid" data-loaded>
 				{#each visibleTasks as t (t.name)}

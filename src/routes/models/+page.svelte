@@ -6,19 +6,24 @@
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ModelsTable from '$lib/components/ModelsTable.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
+	import type { SortState } from '$lib/stores/sort.svelte';
 	import type { ModelMeta } from '$lib/types';
 	import {
+		ariaSort,
 		COLLATOR,
 		fmtInt,
 		fmtParamsCompact,
 		modelPath,
 		modelSearchKey,
+		sortIcon,
 		sortModalities
 	} from '$lib/format';
 	import { getParam, updateUrl } from '$lib/url-state';
@@ -71,7 +76,10 @@
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
+		{ id: 'type', label: 'Type' },
 		{ id: 'params', label: 'Parameters' },
+		{ id: 'embedDim', label: 'Embed dim' },
+		{ id: 'maxTokens', label: 'Max tokens' },
 		{ id: 'released', label: 'Release date' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];
@@ -81,7 +89,10 @@
 	// that default; the explicit toggle below lets them override.
 	const NATURAL_DIR: Record<SortId, SortDir> = {
 		name: 'asc',
+		type: 'asc',
 		params: 'desc',
+		embedDim: 'desc',
+		maxTokens: 'desc',
 		released: 'desc'
 	};
 	// Default sort: newest release first. Surfaces just-shipped models at
@@ -115,6 +126,35 @@
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
+
+	// View mode: card grid (default) vs sortable table. URL-backed so a
+	// shared link preserves the chosen view.
+	const initialView = getParam('view');
+	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	$effect(() => {
+		updateUrl({ view: view === 'cards' ? null : view });
+	});
+
+	// SortHeader adapter — same shape the leaderboard tables use, wired
+	// to the existing reactive sort/sortDir state.
+	const sortAdapter: SortState<SortId> = {
+		get key() {
+			return sort;
+		},
+		get dir() {
+			return sortDir;
+		},
+		click(k: SortId) {
+			if (sort !== k) onSortKeyChange(k);
+			else toggleSortDir();
+		},
+		icon(k: SortId) {
+			return sortIcon(k, sort, sortDir, '↕');
+		},
+		aria(k: SortId) {
+			return ariaSort(k, sort, sortDir);
+		}
+	};
 
 	// Apply the shared leaderboard filter store's predicates to a flat model
 	// list. Same logic as applyFilters() in filters.svelte.ts, just minus the
@@ -180,15 +220,22 @@
 			let cmp: number;
 			if (sort === 'name') {
 				cmp = COLLATOR.compare(a.name, b.name);
+			} else if (sort === 'type') {
+				cmp = COLLATOR.compare(a.modelType ?? '', b.modelType ?? '');
 			} else if (sort === 'params') {
 				const aP = a.totalParamsB || -1;
 				const bP = b.totalParamsB || -1;
 				cmp = aP - bP;
+			} else if (sort === 'embedDim') {
+				cmp = (a.embeddingDim ?? -1) - (b.embeddingDim ?? -1);
+			} else if (sort === 'maxTokens') {
+				cmp = (a.maxTokens ?? -1) - (b.maxTokens ?? -1);
 			} else if (sort === 'released') {
 				cmp = COLLATOR.compare(a.releaseDate ?? '', b.releaseDate ?? '');
 			} else {
 				cmp = 0;
 			}
+			if (cmp === 0) cmp = COLLATOR.compare(a.name, b.name);
 			return sortDir === 'asc' ? cmp : -cmp;
 		});
 		return list;
@@ -282,6 +329,7 @@
 					<SortDirIcon dir={sortDir} />
 				</button>
 			</div>
+			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
 		</div>
 
 		{#if loadingData}
@@ -290,6 +338,8 @@
 			<p class="empty">Failed to load models: {loadError}</p>
 		{:else if filtered.length === 0}
 			<p class="empty">No models match those filters.</p>
+		{:else if view === 'table'}
+			<ModelsTable rows={filtered} sort={sortAdapter} />
 		{:else}
 			<div class="grid card-grid">
 				{#each visibleModels as m (m.name)}

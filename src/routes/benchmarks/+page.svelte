@@ -3,6 +3,7 @@
 	import { loadBenchmarks } from '$lib/data/service';
 	import type { Benchmark } from '$lib/types';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
+	import BenchmarksTable from '$lib/components/BenchmarksTable.svelte';
 	import FilterFacet from '$lib/components/FilterFacet.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
@@ -12,6 +13,9 @@
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
+	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
+	import { ariaSort, sortIcon } from '$lib/format';
+	import type { SortState } from '$lib/stores/sort.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 
 	let allBenchmarks = $state<Benchmark[]>([]);
@@ -54,11 +58,41 @@
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
+
+	// View mode: card grid (default) vs sortable table. Persisted in the URL
+	// so a shared link preserves the chosen view.
+	const initialView = getParam('view');
+	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+
+	// Adapter exposing the existing sort/sortDir state through the
+	// `SortState<K>` interface that `SortHeader` consumes. Behaviour matches
+	// the dropdown: clicking a new key swaps + resets to its natural dir;
+	// clicking the active key flips direction.
+	const sortAdapter: SortState<SortId> = {
+		get key() {
+			return sort;
+		},
+		get dir() {
+			return sortDir;
+		},
+		click(k: SortId) {
+			if (sort !== k) onSortKeyChange(k);
+			else toggleSortDir();
+		},
+		icon(k: SortId) {
+			return sortIcon(k, sort, sortDir, '↕');
+		},
+		aria(k: SortId) {
+			return ariaSort(k, sort, sortDir);
+		}
+	};
+
 	$effect(() => {
 		updateUrl({
 			q: query.trim() || null,
 			sort: sort === DEFAULT_SORT ? null : sort,
-			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir
+			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir,
+			view: view === 'cards' ? null : view
 		});
 	});
 
@@ -263,6 +297,7 @@
 					<SortDirIcon dir={sortDir} />
 				</button>
 			</div>
+			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
 			<span class="count">
 				{filteredAll.length} / {allBenchmarks.length}
 			</span>
@@ -274,6 +309,8 @@
 			<p class="muted">Failed to load: {error}</p>
 		{:else if filteredAll.length === 0}
 			<p class="muted">No benchmark matches that search.</p>
+		{:else if view === 'table'}
+			<BenchmarksTable rows={filteredAll} sort={sortAdapter} />
 		{:else}
 			<section class="block">
 				<header class="block-head">
@@ -355,7 +392,6 @@
 	}
 	.hero {
 		padding: 28px 0 18px;
-		position: relative;
 	}
 	h1 {
 		font-size: 32px;
@@ -364,16 +400,6 @@
 		line-height: 1.08;
 		margin: 0 0 10px;
 		color: var(--ink-strong);
-	}
-	.hero::before {
-		content: '';
-		position: absolute;
-		top: 18px;
-		left: 0;
-		width: 32px;
-		height: 3px;
-		background: var(--primary);
-		border-radius: 2px;
 	}
 	.lead {
 		font-size: 15px;

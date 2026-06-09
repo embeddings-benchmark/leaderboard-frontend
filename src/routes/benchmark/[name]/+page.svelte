@@ -517,9 +517,6 @@
 		align-items: baseline;
 		justify-content: space-between;
 		padding: 6px 12px;
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 8px;
 		min-width: 150px;
 	}
 	.kpi-label {
