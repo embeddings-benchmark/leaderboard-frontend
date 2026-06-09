@@ -353,3 +353,126 @@
 	color: var(--ink-strong);
 	font-variant-numeric: tabular-nums;
 }
+
+/* ─── Overview-page tables (Benchmarks / Models / Tasks index views) ─────
+   The `stickyHead` action clones the `<thead>` into a viewport-pinned
+   overlay. `--sticky-head-base` overrides the bar's `offsetHeight` (which
+   includes a 1px border) with the CSS header-height so the overlay aligns
+   exactly with the sticky `.toolbar`. `--search-group-h` matches the
+   toolbar's height — 56px in the one-row flex layout, 102px in the phone
+   grid layout (see app.css). */
+.tbl-overview {
+	--search-group-h: 56px;
+	--sticky-head-base: var(--header-height);
+	--sticky-head-extra: var(--search-group-h);
+}
+@media (max-width: 480px) {
+	.tbl-overview {
+		--search-group-h: 102px;
+	}
+}
+.tbl-overview .tbl {
+	width: 100%;
+}
+.tbl-overview .tbl-col-name {
+	min-width: 220px;
+	max-width: 380px;
+}
+.tbl-overview .tbl-col-num {
+	width: 1%;
+}
+.tbl-overview .tbl-col-chips {
+	min-width: 140px;
+	padding: 6px 12px;
+	white-space: normal;
+}
+.tbl-overview tbody th.tbl-col-name {
+	padding: 0;
+}
+.tbl-overview .tbl-row-link {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 12px;
+	color: var(--text);
+	text-decoration: none;
+	line-height: 1.35;
+}
+.tbl-overview .tbl-row-link:hover .tbl-row-title {
+	color: var(--primary-strong);
+}
+/* Make the whole row clickable — the link's `::after` pseudo is
+   absolutely positioned over the entire `<tr>` (which is the nearest
+   positioned ancestor). Cells stay visually as-is; clicks anywhere
+   navigate via the link. */
+.tbl-overview tbody tr {
+	position: relative;
+}
+.tbl-overview .tbl-row-link::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
+.tbl-overview .row-link-icon {
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 10px;
+}
+.tbl-overview .row-icon {
+	--icon-size: 24px;
+	--icon-font-size: 16px;
+	margin-top: 1px;
+}
+.tbl-overview .row-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.tbl-overview .tbl-row-title {
+	font-weight: 600;
+	word-break: break-word;
+	white-space: normal;
+}
+.tbl-overview .tbl-row-sub {
+	font-size: 11px;
+	color: var(--text-subtle);
+}
+.tbl-overview .tbl-row-id {
+	font-size: 11px;
+	color: var(--text-subtle);
+	font-family: var(--font-mono);
+}
+.tbl-overview .tbl-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+/* Per-stype tinted chip — `data-stype` pulls `--category-tint(-fg)` from
+   the global map in app.css, matching the task card's group-chip look. */
+.tbl-stype-chip {
+	display: inline-block;
+	padding: 2px 7px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	border-radius: 999px;
+	background: var(--category-tint, var(--surface-muted));
+	color: var(--category-tint-fg, var(--text-muted));
+	border: 1px solid color-mix(in srgb, var(--category-tint-fg, var(--border)) 30%, transparent);
+	white-space: nowrap;
+}
+/* Model-type tint chip (dense/cross-encoder/late-interaction/...). */
+.tbl-type-chip {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: 999px;
+	text-transform: lowercase;
+	background: var(--category-tint, var(--surface-muted));
+	color: var(--category-tint-fg, var(--text-muted));
+	border: 1px solid color-mix(in srgb, var(--category-tint-fg, var(--border)) 35%, transparent);
+}

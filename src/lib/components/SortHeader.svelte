@@ -19,11 +19,23 @@
 		 * PerTaskTab where task names like "AmazonReviewsClassification"
 		 * would otherwise blow the column width. */
 		ellipsis?: boolean;
-		/** Optional content rendered before the label (e.g. an InfoDot).
+		/** Optional content rendered next to the label (e.g. an InfoDot).
 		 * Sits inline at the same baseline as the column name. */
 		info?: Snippet;
+		/** Render the `info` snippet after the label instead of before.
+		 * Used by ModelScoreTable's Zero-shot column where the InfoDot
+		 * reads more naturally trailing the word. */
+		infoAfter?: boolean;
 	}
-	let { sort, field, label, align = 'right', ellipsis = false, info }: Props = $props();
+	let {
+		sort,
+		field,
+		label,
+		align = 'right',
+		ellipsis = false,
+		info,
+		infoAfter = false
+	}: Props = $props();
 </script>
 
 <button
@@ -32,8 +44,9 @@
 	class:tbl-sort-left={align === 'left'}
 	onclick={() => sort.click(field)}
 >
-	{@render info?.()}
+	{#if !infoAfter}{@render info?.()}{/if}
 	<span class:ellipsis>{label}</span>
+	{#if infoAfter}{@render info?.()}{/if}
 	<span class="tbl-sort-ind" class:on={sort.key === field}>{sort.icon(field)}</span>
 </button>
 

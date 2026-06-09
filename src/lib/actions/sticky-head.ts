@@ -47,12 +47,25 @@ export const stickyHead: Action<HTMLTableElement> = (table) => {
 	// a query + rect read; `barRo` below invalidates on actual resize.
 	const bar = document.querySelector<HTMLElement>('header.bar');
 	let cachedBarH = bar ? bar.offsetHeight : null;
+	// Per-table offsets via CSS vars on the table element. Unset → fall
+	// back to `bar.offsetHeight`.
+	//   `--sticky-head-base`  — replaces `bar.offsetHeight`
+	//   `--sticky-head-extra` — added on top (sticky toolbar height)
+	function readCssPx(name: string): number | null {
+		const v = getComputedStyle(table).getPropertyValue(name).trim();
+		if (!v) return null;
+		const n = parseFloat(v);
+		return Number.isFinite(n) ? n : null;
+	}
 	function stickyTopPx(): number {
-		if (cachedBarH !== null) return cachedBarH;
+		const extra = readCssPx('--sticky-head-extra') ?? 0;
+		const base = readCssPx('--sticky-head-base');
+		if (base !== null) return base + extra;
+		if (cachedBarH !== null) return cachedBarH + extra;
 		// Cold mount: action ran before the layout header existed. Re-query
 		// lazily so a late-arriving bar still drives the offset.
 		const lateBar = document.querySelector<HTMLElement>('header.bar');
-		return lateBar ? lateBar.offsetHeight : 48;
+		return (lateBar ? lateBar.offsetHeight : 48) + extra;
 	}
 
 	const overlay = document.createElement('div');

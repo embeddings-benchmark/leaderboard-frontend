@@ -41,55 +41,61 @@
 	aria-label={`Open ${benchmark.displayName} leaderboard`}
 >
 	<header class="prim-head">
-		<span class="prim-label">{label}</span>
-	</header>
-	<div class="prim-title">
-		{#if benchmark.icon}
-			{#if isIconUrl(benchmark.icon)}
-				<img
-					class="prim-icon icon-tile"
-					src={apiUrl(benchmark.icon)}
-					alt=""
-					width="22"
-					height="22"
-					loading="lazy"
-					decoding="async"
-					fetchpriority="low"
-				/>
-			{:else}
-				<span class="prim-icon icon-tile icon-tile-text" aria-hidden="true">{benchmark.icon}</span>
+		<div class="prim-title">
+			{#if benchmark.icon}
+				{#if isIconUrl(benchmark.icon)}
+					<img
+						class="prim-icon icon-tile"
+						src={apiUrl(benchmark.icon)}
+						alt=""
+						width="22"
+						height="22"
+						loading="lazy"
+						decoding="async"
+						fetchpriority="low"
+					/>
+				{:else}
+					<span class="prim-icon icon-tile icon-tile-text" aria-hidden="true">{benchmark.icon}</span>
+				{/if}
 			{/if}
-		{/if}
-		<span class="prim-title-text">{benchmark.displayName}</span>
-	</div>
+			<span class="prim-title-text">{benchmark.displayName}</span>
+		</div>
+		<span class="prim-chip">{label}</span>
+	</header>
 	<span class="prim-sub">{benchmark.numModels ?? 0} models · {benchmark.tasks.length} tasks</span>
 	{#if leaders === 'loading' || leaders === undefined}
-		<div class="eyebrow prim-list-head">Top models</div>
-		<ul class="prim-buckets" aria-busy="true" aria-label="Loading leaders">
+		<div class="prim-grid" aria-busy="true" aria-label="Loading leaders">
+			<div class="prim-row prim-head-row">
+				<span>Model</span>
+				<span>Size group</span>
+			</div>
 			{#each [0, 1, 2, 3] as i (i)}
-				<li class="bucket">
-					<span class="skel bk-chip-skel"></span>
-					<span class="skel bk-name-skel"></span>
-				</li>
+				<div class="prim-row">
+					<span class="skel skel-name"></span>
+					<span class="skel skel-size"></span>
+				</div>
 			{/each}
-		</ul>
+		</div>
 	{:else if leaders === 'error'}
 		<div class="prim-state error">Couldn't load.</div>
 	{:else if orderedBuckets.every((bk) => !bk.leader)}
 		<div class="prim-state">No size-bucketed data yet.</div>
 	{:else}
-		<div class="eyebrow prim-list-head">Top models</div>
-		<ul class="prim-buckets">
+		<div class="prim-grid">
+			<div class="prim-row prim-head-row">
+				<span>Model</span>
+				<span>Size group</span>
+			</div>
 			{#each orderedBuckets as bk (`${bk.min}-${bk.max ?? 'inf'}`)}
 				{@const r = bk.leader}
 				{#if r}
-					<li class="bucket">
-						<span class="bk-chip">{bucketLabel(bk.min, bk.max)}</span>
-						<span class="bk-name">{splitModelName(r.model.name).displayName}</span>
-					</li>
+					<div class="prim-row">
+						<span class="prim-model">{splitModelName(r.model.name).displayName}</span>
+						<span class="prim-size">{bucketLabel(bk.min, bk.max)}</span>
+					</div>
 				{/if}
 			{/each}
-		</ul>
+		</div>
 	{/if}
 </a>
 
@@ -101,9 +107,8 @@
 		--card-radius: 14px;
 		--card-padding: 18px 18px 14px 22px;
 		--card-gap: 4px;
-		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.04);
 	}
-	.prim:hover .prim-title {
+	.prim:hover .prim-title-text {
 		color: var(--tint-fg);
 	}
 	.prim[data-key='retrieval'] {
@@ -121,23 +126,17 @@
 	.prim-head {
 		display: flex;
 		align-items: center;
-	}
-	.prim-label {
-		font-size: 11px;
-		font-weight: 800;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--tint-fg);
+		justify-content: space-between;
+		gap: 10px;
 	}
 	.prim-title {
-		font-size: 19px;
-		font-weight: 700;
-		color: var(--ink-strong);
-		margin-top: 2px;
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
 		min-width: 0;
+		font-size: 17px;
+		font-weight: 700;
+		color: var(--ink-strong);
 	}
 	.prim-icon {
 		--icon-size: 22px;
@@ -154,6 +153,18 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	.prim-chip {
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--tint-fg);
+		padding: 3px 9px;
+		background: color-mix(in srgb, var(--tint-fg) 12%, transparent);
+		border: 1px solid color-mix(in srgb, var(--tint-fg) 28%, transparent);
+		border-radius: 999px;
+		white-space: nowrap;
+	}
 	.prim-sub {
 		font-size: 12px;
 		color: var(--text-muted);
@@ -167,62 +178,51 @@
 	.prim-state.error {
 		color: var(--tint-orange-fg, #c0432e);
 	}
-	.prim-list-head {
-		margin: 4px 0 2px;
-	}
-	.prim-buckets {
-		list-style: none;
-		margin: 0;
-		padding: 0;
+	/* Two-col tabular list: model name (flex), bucket label (right). */
+	.prim-grid {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
 	}
-	.bucket {
+	.prim-row {
 		display: grid;
-		grid-template-columns: 80px 1fr;
+		grid-template-columns: 1fr auto;
 		align-items: center;
-		gap: 10px;
-		padding: 7px 4px;
+		gap: 12px;
+		padding: 8px 4px;
 		font-size: 13px;
 	}
-	.bucket + .bucket {
+	.prim-head-row {
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+		padding-block: 4px;
+		border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	}
+	.prim-row + .prim-row {
 		border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 	}
-	.bk-chip {
-		/* Stretch to the grid cell + center text so every bucket chip
-		   reads at the same width regardless of its label
-		   (`<500M` vs `500M–1B` etc.). */
-		justify-self: stretch;
-		text-align: center;
-		padding: 3px 8px;
-		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0.02em;
-		color: var(--tint-fg);
-		background: color-mix(in srgb, var(--tint-fg) 14%, transparent);
-		border: 1px solid color-mix(in srgb, var(--tint-fg) 28%, transparent);
-		border-radius: 999px;
-		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
-	}
-	.bk-name {
+	.prim-model {
 		font-weight: 600;
 		color: var(--text);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		min-width: 0;
+		overflow-wrap: anywhere;
 	}
-	/* Skeleton shapes for the loading state — sized to match the real
-	   chip + name row so the layer doesn't reflow when data lands. */
-	.bk-chip-skel {
-		justify-self: stretch;
-		height: 18px;
-		border-radius: 999px;
+	.prim-size {
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+		white-space: nowrap;
 	}
-	.bk-name-skel {
+	/* Skeleton shapes — sized to match the real row so the layer
+	   doesn't reflow when data lands. */
+	.skel-name {
 		height: 14px;
 		width: 70%;
+	}
+	.skel-size {
+		height: 14px;
+		width: 56px;
+		justify-self: end;
 	}
 </style>

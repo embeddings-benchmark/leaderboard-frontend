@@ -242,6 +242,11 @@ export interface TaskScoreRow {
 	score: number | null;
 	subsetScores: Record<string, number>;
 	benchmarks: string[];
+	// Three-state per-task training-overlap signal from the backend:
+	//   true  → task is in `model.trainingDatasets` (matches PerTaskTab's ⚠️)
+	//   false → model declared its training data and this task isn't in it
+	//   null  → model didn't declare `trainingDatasets` (rendered as NA)
+	trainedOn: boolean | null;
 }
 
 export interface TaskScores {
