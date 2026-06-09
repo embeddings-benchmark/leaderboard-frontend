@@ -349,9 +349,11 @@
 		outline-offset: 2px;
 	}
 
-	@media (max-width: 900px) {
-		/* On narrow viewports keep the icons but drop the labels — the
-		   `title=` attribute still announces them on hover/focus. */
+	@media (max-width: 920px) {
+		/* Drop the labels (icons + `title=` remain). 920, not 900: the
+		   bar with labels is ~913 px wide, so 901-919 would overflow and
+		   trigger a Firefox horizontal scrollbar that shifts every
+		   bottom-anchored fixed element up by ~15 px. */
 		.icon-link span {
 			display: none;
 		}
@@ -359,11 +361,12 @@
 			padding: 6px 8px;
 		}
 	}
-	@media (max-width: 720px) {
-		/* Keep everything on one row: brand | nav (scrolls) | ext-links.
-		   The middle column is `minmax(0, 1fr)` so it doesn't push the
-		   ext-links offscreen; long nav lists scroll horizontally
-		   within their column instead. */
+	@media (max-width: 800px) {
+		/* Compact grid: brand | scrolling nav | ext-links, all one row.
+		   `minmax(0, 1fr)` lets the nav scroll inside its cell instead
+		   of pushing ext-links offscreen. 800, not 720: same Firefox-
+		   scrollbar reason as the 920 breakpoint — bar with icon-only
+		   ext-links is ~763 px, so 721-799 would overflow. */
 		.bar {
 			grid-template-columns: auto minmax(0, 1fr) auto;
 		}
