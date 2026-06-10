@@ -25,13 +25,17 @@ export function performanceSizePlot(
 
 	const x = rows.map((r) => r.activeParamsB * 1e9);
 	const y = rows.map((r) => r.meanTask * 100);
-	const sizes = rows.map((r) => paramSizeForBubble(r.embeddingDim));
-	const colors = rows.map((r) => Math.log10(Math.max(r.maxTokens, 1)));
+	// `embeddingDim` / `maxTokens` are declared `number` on the TS side but
+	// the backend returns `null` for models whose metadata doesn't pin them
+	// down (mostly proprietary). Coerce here so the bubble/color/hover paths
+	// don't blow up on `null.toLocaleString()` etc.
+	const sizes = rows.map((r) => paramSizeForBubble(r.embeddingDim ?? 0));
+	const colors = rows.map((r) => Math.log10(Math.max(r.maxTokens ?? 1, 1)));
 	const text = rows.map((r) => r.model.displayName);
 	const isPinned = rows.map((r) => pinned.has(r.model.name));
 	const customdata = rows.map((r) => [
-		r.maxTokens.toLocaleString(),
-		r.embeddingDim.toLocaleString(),
+		r.maxTokens != null ? r.maxTokens.toLocaleString() : '—',
+		r.embeddingDim != null ? r.embeddingDim.toLocaleString() : '—',
 		(r.activeParamsB * 1e9).toLocaleString(),
 		r.rank
 	]);

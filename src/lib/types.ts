@@ -125,8 +125,10 @@ export interface ModelMeta {
 	zeroShotPct: number;
 	activeParamsB: number;
 	totalParamsB: number;
-	embeddingDim: number;
-	maxTokens: number;
+	// Nullable: backend returns `null` for models whose ModelMeta doesn't
+	// pin these down (mostly proprietary entries with no published spec).
+	embeddingDim: number | null;
+	maxTokens: number | null;
 	releaseDate?: string;
 	modelType: ModelType;
 	instructionTuned: boolean;
@@ -157,8 +159,10 @@ export interface SummaryRow {
 	zeroShotPct: number;
 	activeParamsB: number;
 	totalParamsB: number;
-	embeddingDim: number;
-	maxTokens: number;
+	// Nullable: see ModelMeta — backend returns `null` when the model
+	// doesn't publish these specs.
+	embeddingDim: number | null;
+	maxTokens: number | null;
 	// `null` when the model is missing any task / task-type cell. Don't average
 	// partial coverage — it would silently outrank fully-evaluated peers.
 	meanTask: number | null;

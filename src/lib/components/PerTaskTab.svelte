@@ -400,25 +400,12 @@
 	.muted {
 		margin: 0 0 12px;
 	}
-	/* Tooltip lives in a fixed-positioned portal sibling of
-	   `.tbl-scroll` so it isn't clipped by the table's overflow-x.
-	   JS sets x/y from the icon's getBoundingClientRect, avoiding
-	   the browser-native `title` delay. */
-	.trained-warn {
-		/* Reset <button> chrome so the inline ⚠️ icon stays purely
-		   typographic — it's a button only so a static role / tabindex
-		   isn't needed for the hover-tooltip handlers. */
-		all: unset;
-		margin-left: 4px;
-		font-size: 11px;
-		line-height: 1;
-		cursor: help;
-	}
-	.trained-warn:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 1px;
-		border-radius: 3px;
-	}
+	/* `.trained-warn` (inline ⚠️ icon) lives in
+	   src/lib/styles/leaderboard-table.css — shared with ModelScoreTable.
+	   Tooltip lives in a fixed-positioned portal sibling of `.tbl-scroll`
+	   so it isn't clipped by the table's overflow-x; JS sets x/y from the
+	   icon's getBoundingClientRect, avoiding the browser-native `title`
+	   delay. */
 	.train-tip {
 		max-width: 260px;
 		padding: 6px 10px;

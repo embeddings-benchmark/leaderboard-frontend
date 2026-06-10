@@ -586,13 +586,21 @@
 	   pre-mounts on idle. The clip-path doesn't take the pane out of
 	   layout (it still consumes its intrinsic height), so we also pin
 	   it absolutely at the top-left when inactive to avoid pushing the
-	   page footer down by the table's height. */
+	   page footer down by the table's height.
+	   `height: 0; overflow: hidden` clamps the absolute box to 0 px so
+	   the prepainted (~3000 px) table doesn't extend document scroll
+	   when a short chart tab (perf_size / perf_time at ~580 px) is
+	   active. Layout still happens under content-visibility: visible,
+	   so first activation stays instant — only the paint of the
+	   already-clipped content is skipped. */
 	.tab-pane[data-prepaint]:not(.active) {
 		content-visibility: visible;
 		clip-path: inset(100%);
 		position: absolute;
 		inset: 0 auto auto 0;
 		width: 100%;
+		height: 0;
+		overflow: hidden;
 		pointer-events: none;
 	}
 	.toolbar-row {
