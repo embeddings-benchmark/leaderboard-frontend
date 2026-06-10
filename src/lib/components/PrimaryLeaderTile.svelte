@@ -67,7 +67,7 @@
 	{#if leaders === 'loading' || leaders === undefined}
 		<div class="prim-grid" aria-busy="true" aria-label="Loading leaders">
 			<div class="prim-row prim-head-row">
-				<span>Model</span>
+				<span>Top Models</span>
 				<span>Size group</span>
 			</div>
 			{#each [0, 1, 2, 3] as i (i)}
@@ -84,7 +84,7 @@
 	{:else}
 		<div class="prim-grid">
 			<div class="prim-row prim-head-row">
-				<span>Model</span>
+				<span>Top Models</span>
 				<span>Size group</span>
 			</div>
 			{#each orderedBuckets as bk (`${bk.min}-${bk.max ?? 'inf'}`)}
