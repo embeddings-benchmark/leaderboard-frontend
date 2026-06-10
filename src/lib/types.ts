@@ -123,10 +123,14 @@ export interface ModelMeta {
 	org: string;
 	url?: string;
 	zeroShotPct: number;
-	activeParamsB: number;
-	totalParamsB: number;
-	embeddingDim: number;
-	maxTokens: number;
+	// Nullable: backend emits `null` for proprietary models that don't
+	// publish param counts.
+	activeParamsB: number | null;
+	totalParamsB: number | null;
+	// Nullable: backend returns `null` for models whose ModelMeta doesn't
+	// pin these down (mostly proprietary entries with no published spec).
+	embeddingDim: number | null;
+	maxTokens: number | null;
 	releaseDate?: string;
 	modelType: ModelType;
 	instructionTuned: boolean;
@@ -155,10 +159,12 @@ export interface SummaryRow {
 	rank: number;
 	model: ModelMeta;
 	zeroShotPct: number;
-	activeParamsB: number;
-	totalParamsB: number;
-	embeddingDim: number;
-	maxTokens: number;
+	// Nullable: see ModelMeta — proprietary models leave param counts /
+	// architectural specs blank.
+	activeParamsB: number | null;
+	totalParamsB: number | null;
+	embeddingDim: number | null;
+	maxTokens: number | null;
 	// `null` when the model is missing any task / task-type cell. Don't average
 	// partial coverage — it would silently outrank fully-evaluated peers.
 	meanTask: number | null;
@@ -227,7 +233,7 @@ export interface LeaderRow {
 	rank: number;
 	model: LeaderModel;
 	meanTask: number | null;
-	totalParamsB: number;
+	totalParamsB: number | null;
 }
 export interface BucketLeader {
 	min: number;

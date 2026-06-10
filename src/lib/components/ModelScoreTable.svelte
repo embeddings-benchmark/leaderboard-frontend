@@ -62,7 +62,8 @@
 	type SortKey = 'rank' | 'model' | 'zeroShot' | 'score' | `subset:${string}`;
 	const sort = createSortState<SortKey>({
 		urlKeys: ['s.scores', 'd.scores'],
-		ascKeys: ['rank', 'model']
+		ascKeys: ['rank', 'model'],
+		defaultIcon: '↕'
 	});
 
 	let sortedRows = $derived.by<ModelScore[]>(() => {
@@ -134,7 +135,7 @@
 					class="tbl-num"
 					aria-sort={sort.aria('zeroShot')}
 					data-tip-title="Zero-shot"
-					data-tip="True when the model declared this task in its training datasets (score is not zero-shot — matches the ⚠️ in PerTaskTab). False when the model declared its training data and this task isn't in it. NA when the model didn't declare its training datasets at all."
+					data-tip="True when the model declared its training data and this task isn't in it (score is zero-shot). ⚠️ when the model declared this task in its training datasets (score is not zero-shot — matches the ⚠️ in PerTaskTab). NA when the model didn't declare its training datasets at all."
 					onpointerenter={showTip}
 					onpointerleave={hideTip}
 					onfocusin={showTip}
@@ -175,9 +176,19 @@
 						{#if s.trainedOn === null}
 							<span class="zs-na">NA</span>
 						{:else if s.trainedOn}
-							<span class="zs-warn">True</span>
+							<button
+								type="button"
+								class="trained-warn"
+								data-tip-title="Trained on this task"
+								data-tip="Model lists this task in its training datasets — score is not zero-shot."
+								aria-label="Trained on this task"
+								onpointerenter={showTip}
+								onpointerleave={hideTip}
+								onfocusin={showTip}
+								onfocusout={hideTip}>⚠️</button
+							>
 						{:else}
-							<span class="zs-clean">False</span>
+							<span class="zs-clean">True</span>
 						{/if}
 					</td>
 					<td
@@ -277,17 +288,15 @@
 	}
 	/* `.rank-pill` lives in src/lib/styles/leaderboard-table.css — shared
 	   with SummaryTable so both views render the rank identically. */
-	/* Zero-shot column — three-state cell: True (trained on), False
-	   (clean), NA (undeclared). */
+	/* Zero-shot column — three-state cell: ⚠️ (trained on, rendered
+	   via `.trained-warn` in leaderboard-table.css), False (clean),
+	   NA (undeclared). */
 	.zs-cell {
 		font-variant-numeric: tabular-nums;
 	}
 	.zs-clean,
 	.zs-na {
 		color: var(--text-subtle);
-	}
-	.zs-warn {
-		cursor: help;
 	}
 	thead th.sub {
 		font-size: 11px;

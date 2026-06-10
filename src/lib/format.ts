@@ -128,16 +128,18 @@ export function modelSearchKey(m: ModelMeta): string {
 
 /**
  * Split a parameter count (in billions) into a value + unit pair, so
- * tables can right-align the number and left-align the unit. ``0`` →
- * ``("—", "")``; ``≥1`` keeps billions; ``<1`` switches to millions.
+ * tables can right-align the number and left-align the unit. ``0`` /
+ * ``null`` / ``undefined`` → ``("—", "")``; ``≥1`` keeps billions;
+ * ``<1`` switches to millions. The backend emits ``null`` for
+ * proprietary models with no declared param count.
  */
-export function fmtParamsValue(b: number): string {
-	if (b === 0) return '—';
+export function fmtParamsValue(b: number | null | undefined): string {
+	if (!b) return '—';
 	if (b >= 1) return b.toFixed(1);
 	return (b * 1000).toFixed(0);
 }
-export function fmtParamsUnit(b: number): string {
-	if (b === 0) return '';
+export function fmtParamsUnit(b: number | null | undefined): string {
+	if (!b) return '';
 	return b >= 1 ? 'B' : 'M';
 }
 

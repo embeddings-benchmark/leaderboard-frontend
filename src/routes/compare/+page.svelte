@@ -409,9 +409,9 @@
 			key: 'params',
 			label: 'Total params (B)',
 			dir: 'min',
-			valueOf: (r) => (r.totalParamsB === 0 ? null : r.totalParamsB),
+			valueOf: (r) => r.totalParamsB || null,
 			format: (r) =>
-				r.totalParamsB === 0
+				!r.totalParamsB
 					? '—'
 					: r.totalParamsB >= 1
 						? r.totalParamsB.toFixed(1)

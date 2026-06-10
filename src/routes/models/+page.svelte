@@ -168,6 +168,7 @@
 		const modelTypesSize = modelTypes.size;
 		const sizeMin = filters.minModelSizeM;
 		const sizeMax = filters.maxModelSizeM;
+		const sizeActive = filters.sizeActive;
 		const langPicked = languagesPicked;
 		const langCount = LANGUAGES.length;
 		const langActive = langCount > 0 && langPicked.size !== langCount;
@@ -180,7 +181,8 @@
 			if (stOnly && !m.sentenceTransformersCompatible) return false;
 			// Empty pick set = "deselect everything" → nothing matches.
 			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
-			if (m.totalParamsB > 0) {
+			if (sizeActive) {
+				if (m.totalParamsB == null || m.totalParamsB <= 0) return false;
 				const paramsM = m.totalParamsB * 1000;
 				if (paramsM < sizeMin) return false;
 				if (paramsM > sizeMax) return false;

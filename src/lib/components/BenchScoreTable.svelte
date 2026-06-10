@@ -32,7 +32,8 @@
 	type SortKey = 'benchmark' | 'rank' | 'meanTask' | 'meanTaskType' | 'zeroShot';
 	const sort = createSortState<SortKey>({
 		urlKeys: ['s.bench', 'd.bench'],
-		ascKeys: ['benchmark', 'rank']
+		ascKeys: ['benchmark', 'rank'],
+		defaultIcon: '↕'
 	});
 
 	let sortedRows = $derived.by<BenchScore[]>(() => {
