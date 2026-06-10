@@ -27,6 +27,10 @@ export interface Benchmark {
 	// `Benchmark.aggregations` upstream — frontend uses it to hide irrelevant
 	// columns (ViDoRe has no per-type breakdown; RTEB has only Mean (Task)).
 	aggregations: BenchmarkAggregation[];
+	// Whether the Zero-shot column is meaningful on this benchmark. Off for
+	// ViDoRe / RTEB where task names aren't tracked in model training-data
+	// annotations so every row would otherwise render as a misleading 100%.
+	showZeroShot?: boolean;
 	// Distinct models with at least one score on this benchmark. Surfaced on
 	// the catalogue / home benchmark cards so the user can size up coverage
 	// without opening each benchmark. Set by the backend from the cached
@@ -189,6 +193,9 @@ export interface BenchmarkSummary {
 	// Mirrors the Benchmark.aggregations declaration so SummaryTable knows
 	// which columns to render without inspecting the score data itself.
 	aggregations: BenchmarkAggregation[];
+	// Mirrors `Benchmark.showZeroShot` — SummaryTable hides the Zero-shot
+	// column when False (ViDoRe / RTEB, where the metric is uniformly 100%).
+	showZeroShot?: boolean;
 }
 
 // `/v1/benchmarks/{name}/per-language` payload — one row per model with

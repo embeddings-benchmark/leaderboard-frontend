@@ -320,6 +320,9 @@
 	let showMeanTaskType = $derived(summary.aggregations?.includes('mean_task_type') ?? false);
 	let showTaskTypes = $derived(summary.aggregations?.includes('task_types') ?? false);
 	let showPublicPrivate = $derived(summary.aggregations?.includes('public_private') ?? false);
+	// ViDoRe / RTEB don't track training-data overlap for their tasks, so
+	// every row would render as a misleading uniform 100% — hide the column.
+	let showZeroShot = $derived(summary.showZeroShot ?? true);
 	// Recompute Mean (Public) / Mean (Private) from the model's per-task scores
 	// using the benchmark's `tasksMeta[].isPublic` flag. This way the means
 	// update live when the user filters the task set, instead of staying frozen
@@ -534,23 +537,25 @@
 							>
 						</button>
 					</th>
-					<th
-						scope="col"
-						class="tbl-num"
-						data-tip-title={INFO.zeroShot.title}
-						data-tip={INFO.zeroShot.text}
-						onpointerenter={showTip}
-						onpointerleave={hideTip}
-						onfocusin={showTip}
-						onfocusout={hideTip}
-						aria-sort={sort.aria('zeroShot')}
-					>
-						<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
-							<span>Zero-shot</span>
-							<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
-							<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
-						</button>
-					</th>
+					{#if showZeroShot}
+						<th
+							scope="col"
+							class="tbl-num"
+							data-tip-title={INFO.zeroShot.title}
+							data-tip={INFO.zeroShot.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('zeroShot')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
+								<span>Zero-shot</span>
+								<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
+								<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
+							</button>
+						</th>
+					{/if}
 					{#if showMeanTask}
 						<th
 							class="tbl-num"
@@ -679,9 +684,11 @@
 									class="unit">{fmtParamsUnit(row.totalParamsB)}</span
 								>{/if}
 						</td>
-						<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
-							{fmtZeroShot(row.zeroShotPct)}
-						</td>
+						{#if showZeroShot}
+							<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
+								{fmtZeroShot(row.zeroShotPct)}
+							</td>
+						{/if}
 						{#if showMeanTask}
 							<td
 								class="tbl-num {heat(row.meanTask, worstMeanTask, bestMeanTask)}"
