@@ -147,7 +147,7 @@
 			case 'model':
 				return { v: row.model.displayName.toLowerCase(), missing: false };
 			case 'totalParams':
-				return { v: row.totalParamsB, missing: row.totalParamsB === 0 };
+				return { v: row.totalParamsB ?? 0, missing: !row.totalParamsB };
 			case 'zeroShot':
 				// -1 is the "unknown" sentinel; treat as missing so it sorts
 				// to the bottom regardless of direction.

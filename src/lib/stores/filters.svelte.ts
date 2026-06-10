@@ -668,7 +668,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		// unsized (proprietary) models — a deliberate "you opted in to
 		// filtering by size, so rows that can't satisfy it shouldn't pass".
 		if (filters.sizeActive) {
-			if (m.totalParamsB <= 0) return false;
+			if (m.totalParamsB == null || m.totalParamsB <= 0) return false;
 			const paramsM = m.totalParamsB * 1000;
 			if (paramsM < filters.minModelSizeM) return false;
 			if (paramsM > filters.maxModelSizeM) return false;

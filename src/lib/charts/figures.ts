@@ -19,8 +19,8 @@ export function performanceSizePlot(
 	pinned: ReadonlySet<string> = new Set()
 ): PlotSpec {
 	const rows = summary.rows.filter(
-		(r): r is BenchmarkSummary['rows'][number] & { meanTask: number } =>
-			r.activeParamsB > 0 && r.meanTask != null
+		(r): r is BenchmarkSummary['rows'][number] & { meanTask: number; activeParamsB: number } =>
+			r.activeParamsB != null && r.activeParamsB > 0 && r.meanTask != null
 	);
 
 	const x = rows.map((r) => r.activeParamsB * 1e9);

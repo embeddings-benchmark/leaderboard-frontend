@@ -182,7 +182,7 @@
 			// Empty pick set = "deselect everything" → nothing matches.
 			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
 			if (sizeActive) {
-				if (m.totalParamsB <= 0) return false;
+				if (m.totalParamsB == null || m.totalParamsB <= 0) return false;
 				const paramsM = m.totalParamsB * 1000;
 				if (paramsM < sizeMin) return false;
 				if (paramsM > sizeMax) return false;
