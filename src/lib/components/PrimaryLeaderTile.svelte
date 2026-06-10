@@ -55,7 +55,8 @@
 						fetchpriority="low"
 					/>
 				{:else}
-					<span class="prim-icon icon-tile icon-tile-text" aria-hidden="true">{benchmark.icon}</span>
+					<span class="prim-icon icon-tile icon-tile-text" aria-hidden="true">{benchmark.icon}</span
+					>
 				{/if}
 			{/if}
 			<span class="prim-title-text">{benchmark.displayName}</span>
