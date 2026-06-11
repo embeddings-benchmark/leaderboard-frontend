@@ -45,8 +45,16 @@
 	import TaskInfoTab from '$lib/components/TaskInfoTab.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.name ?? ''));
+	// Prefer the leaderboard store's value once the store has loaded the
+	// benchmark, otherwise fall back to the loader's prefetched copy. Without
+	// the fallback, a hard refresh flashes "Unknown benchmark" between the
+	// prerendered HTML and the store's $effect resolving.
 	let benchmark = $derived(
-		leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null
+		leaderboard.benchmark?.name === benchmarkName
+			? leaderboard.benchmark
+			: data.benchmark?.name === benchmarkName
+				? data.benchmark
+				: null
 	);
 	// Hero accent follows the canonical modality priority
 	// (`video → audio → image → text`) — matches the BenchmarkCard tint
