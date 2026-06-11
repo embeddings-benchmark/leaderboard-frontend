@@ -17,14 +17,11 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Loader awaits the registry lookup eagerly and streams the (slow)
-	// scores fetch — see the matching note in `+page.ts`.
 	let modelName = $derived(data.modelName);
 	let metaError = $derived(data.modelError);
 
-	// Stream the scores payload — same stale-guard pattern as elsewhere:
-	// the in-flight promise is captured so a rapid model→model nav doesn't
-	// let a slow earlier fetch overwrite the new model's results.
+	// Stale-guard via `data.scores === p` so a slow earlier fetch can't
+	// overwrite a rapid model→model nav.
 	let payload = $state<ModelScores | null>(null);
 	let loadingScores = $state(true);
 	let scoresError = $state<string | null>(null);
@@ -41,9 +38,7 @@
 		});
 	});
 
-	// The scores payload ships a refined `model` (with summary-derived
-	// fields like zeroShotPct). Prefer that once it lands; until then,
-	// fall back to the loader's registry lookup.
+	// Scores payload carries a refined model with summary-derived fields.
 	let model = $derived<ModelMeta | null>(payload?.model ?? data.model);
 
 	let rawRows = $derived.by<BenchScore[]>(() => {

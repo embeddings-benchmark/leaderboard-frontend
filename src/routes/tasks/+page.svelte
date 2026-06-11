@@ -32,10 +32,7 @@
 		'semantic-similarity'
 	] as const;
 
-	// Loader streams the derived data so the page can paint a skeleton on
-	// client-side nav (direct/prerendered visits hydrate with `data.tasks`
-	// already resolved). Sync the resolved value into a local state slot,
-	// guarding against stale promises if the route re-navigates mid-flight.
+	// Stale-guard via `data.tasks === p` on rapid nav.
 	let resolved = $state<TasksData | null>(null);
 	let loadError = $state<string | null>(null);
 	$effect(() => {
@@ -48,9 +45,7 @@
 		});
 	});
 
-	// Safe-empty defaults so downstream `$derived` blocks (sort, filter,
-	// matched, filtered) keep evaluating to empty arrays while the promise
-	// is pending instead of throwing on undefined.
+	// Defaults to empty so downstream derived blocks don't throw on undefined.
 	let ALL_TASKS = $derived(resolved?.tasks ?? []);
 	let SIMPLIFIED_PRESENT = $derived(resolved?.simplifiedPresent ?? []);
 	let MODALITIES = $derived(resolved?.modalities ?? []);
@@ -77,10 +72,6 @@
 	};
 
 	let query = $state('');
-	// Per-facet pick set + URL roundtrip + chip generation factored into
-	// `createFacetFilter`. See the matching block on /benchmarks for the
-	// full pattern; the page still owns the `filtersSeeded` gate, the
-	// URL-write effect, and the chip-aggregation derived.
 	const typeFacet = createFacetFilter({
 		urlParam: 'types',
 		chipKey: 'types',
@@ -110,10 +101,8 @@
 	const modalityFilter = modalityFacet.picked;
 	const domainFilter = domainFacet.picked;
 	const languageFilter = languageFacet.picked;
-	// `$state` (not a plain `let`) so the URL-write effect below sees
-	// `filtersSeeded` flip from false → true and re-runs to register the
-	// SvelteSets as dependencies. Without reactivity here the write effect
-	// stayed bailed in its initial gated branch and never tracked toggles.
+	// $state so the URL-write effect re-runs on the flip and registers the
+	// facet SvelteSets as deps.
 	let filtersSeeded = $state(false);
 	$effect(() => {
 		if (!resolved || filtersSeeded) return;
@@ -121,12 +110,7 @@
 		for (const f of FACETS) f.seed();
 	});
 
-	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
-	// page and back via the browser restores the user's sort choice. Reading
-	// the URL at script-top would diverge between prerender (no query) and
-	// client hydration (real query) → hydration mismatch. Default first, sync
-	// from URL in `onMount` below, and gate the URL-write effects with
-	// `urlHydrated` so they don't nuke the real query before the sync runs.
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
 	const DEFAULT_SORT: SortId = 'models';
 	let sort = $state<SortId>(DEFAULT_SORT);
@@ -156,10 +140,7 @@
 		updateUrl({ view: view === 'cards' ? null : view });
 	});
 
-	// Filter sets → URL. Each facet's `urlValue()` returns `null` when
-	// "off" (full universe) so `updateUrl` deletes the param, otherwise
-	// the encoded list (or `''` for an empty pick set — the user's
-	// "deselect everything" gesture preserved as `?key=`).
+	// Facet URL sync — `urlValue()` returns null to clear or encoded string to set.
 	$effect(() => {
 		if (!urlHydrated || !filtersSeeded) return;
 		updateUrl({
@@ -283,15 +264,10 @@
 		return SIMPLIFIED_RANK[t] ?? SIMPLIFIED_TYPES.length;
 	}
 
-	// Split filter / sort so name-query keystrokes only re-run the cheap
-	// filter pass; the sort only re-runs when sort key/dir or the matched
-	// set identity changes.
+	// Split filter / sort so keystrokes don't trigger a re-sort.
 	let matched = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		// "All on" = filter off (skip the empty-`.some()` problem on rows
-		// with empty modality / domain / type lists). Partial = intersection
-		// check. Empty = the user cleared the category deliberately, so
-		// nothing matches.
+		// All on = filter off; empty pick set = nothing matches.
 		const typeOff = typeFilter.size === SIMPLIFIED_PRESENT.length;
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
@@ -307,8 +283,7 @@
 	});
 	let filtered = $derived.by(() => {
 		const list = [...matched];
-		// Comparator computes ascending cmp; sortDir flips at the end. Name
-		// tie-break stays stable so equal rows don't reshuffle on direction toggle.
+		// Stable tie-break by name; sortDir flips ascending cmp at the end.
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {

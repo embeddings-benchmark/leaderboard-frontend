@@ -12,13 +12,8 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Prefetched on hover via `data-sveltekit-preload-data` — seed
-	// `cachedHttp` so the leaderboard store's `loadBenchmark(name)` call
-	// resolves sync instead of going to the network. Uses `$effect.pre`
-	// (not regular `$effect`) so it ALWAYS runs before the leaderboard
-	// store's load effect, independent of source order. With a plain
-	// `$effect` a future refactor that moved either declaration could
-	// silently let the store's network fetch win the race.
+	// `$effect.pre` ensures this runs before the leaderboard store's load effect
+	// regardless of source order.
 	$effect.pre(() => {
 		if (data.benchmark) primeBenchmarkCache(data.benchmark.name, data.benchmark);
 	});
@@ -46,10 +41,8 @@
 	import TaskInfoTab from '$lib/components/TaskInfoTab.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.name ?? ''));
-	// Prefer the leaderboard store's value once the store has loaded the
-	// benchmark, otherwise fall back to the loader's prefetched copy. Without
-	// the fallback, a hard refresh flashes "Unknown benchmark" between the
-	// prerendered HTML and the store's $effect resolving.
+	// Fallback to the loader's copy prevents a "Unknown benchmark" flash on
+	// hard refresh before the store resolves.
 	let benchmark = $derived(
 		leaderboard.benchmark?.name === benchmarkName
 			? leaderboard.benchmark

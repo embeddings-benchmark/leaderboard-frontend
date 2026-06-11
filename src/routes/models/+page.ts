@@ -2,18 +2,12 @@ import type { PageLoad } from './$types';
 import { loadModels } from '$lib/data/service';
 import type { ModelMeta } from '$lib/types';
 
-// Prerender so ShareMeta's `<title>` + `<meta og:…>` end up in the static
-// HTML for social-media crawlers. The page hydrates with live data on
-// the client via the streamed promise returned below.
+// Prerendered so ShareMeta lands in static HTML.
 export const prerender = true;
 
 export interface ModelsData {
 	models: ModelMeta[];
-	// Languages declared by at least one model, sorted by popularity
-	// (most-tagged first, alphabetical tie-break). Drives the page-local
-	// `languagesPicked` SvelteSet. Always derived here (not on the page)
-	// so the page consumes one resolved shape and the loader does the
-	// one-pass union once at prerender / cache fill.
+	/** Sorted by popularity, alphabetical tie-break. */
 	languages: string[];
 }
 
@@ -28,9 +22,6 @@ async function deriveModelsData(fetchFn?: typeof fetch): Promise<ModelsData> {
 	return { models, languages };
 }
 
-// Returns the derived data as an UNRESOLVED promise so client-side nav
-// paints the shell + skeleton immediately. Prerender awaits the promise
-// before writing static HTML, so direct visits skip the skeleton.
 export const load: PageLoad = ({ fetch }) => {
 	return { models: deriveModelsData(fetch) };
 };

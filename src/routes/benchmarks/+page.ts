@@ -1,8 +1,4 @@
-// /benchmarks loader. Fetches the full benchmark catalog (including hidden
-// entries — the catalog renders them with the "newer version available"
-// hint) and pre-derives the facet sets the sidebar needs. Streamed so the
-// page can paint the shell + skeleton on client-side nav; prerender awaits
-// the promise before writing static HTML.
+// Fetches the catalog (including off-menu entries) and pre-derives sidebar facets.
 import type { PageLoad } from './$types';
 import { loadBenchmarks } from '$lib/data/service';
 import type { Benchmark } from '$lib/types';
@@ -17,9 +13,7 @@ export interface BenchmarksData {
 	languages: string[];
 }
 
-// Order the simplified buckets the same way /tasks does (curated canonical
-// first, then any extras) so users see the familiar "retrieval / classification
-// / …" sequence.
+// Curated order shared with /tasks.
 const CURATED = [
 	'retrieval',
 	'classification',
@@ -32,12 +26,10 @@ async function deriveBenchmarksData(fetchFn?: typeof fetch): Promise<BenchmarksD
 	const list = (await loadBenchmarks(fetchFn)).sort((a, b) =>
 		a.displayName.localeCompare(b.displayName)
 	);
-	// Single pass over the catalog to fill every facet set, instead of
-	// per-facet flatMap+Set traversals.
 	const mods = new Set<string>();
 	const simpTypes = new Set<string>();
 	const doms = new Set<string>();
-	// Count per language so the filter pills sort by popularity.
+	// Per-language count → popularity-sorted pills.
 	const langCount = new Map<string, number>();
 	for (const b of list) {
 		if (b.modalities) for (const m of b.modalities) mods.add(m);

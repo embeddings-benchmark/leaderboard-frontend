@@ -32,10 +32,8 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Stream the loader's `{ models, languages }` shape. On a direct
-	// (prerendered) visit the promise is already resolved; on client-side
-	// nav `{#if !resolved && !loadError}<Skeleton />` paints first while
-	// the load runs. Stale-promise guard mirrors the other index pages.
+	// Stale-guard via `data.models === p` so a slow earlier promise can't
+	// overwrite a fresh nav.
 	let resolved = $state<ModelsData | null>(null);
 	let loadError = $state<string | null>(null);
 	$effect(() => {
@@ -50,17 +48,8 @@
 
 	let ALL_MODELS = $derived<ModelMeta[]>(resolved?.models ?? []);
 
-	// Languages declared by at least one model, derived from the loader's
-	// `{ models, languages }` shape. Lives on the page (not the shared
-	// `filters` store) because /models is the only place that uses this
-	// per-page language pill list. The UI (search input, cap-and-expand,
-	// pills) is rendered inside the shared FilterSidebar — we just pass
-	// the data and handlers in.
+	// Page-local — /models is the only page with this language pill list.
 	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
-	// Uses the same `createFacetFilter` factory as the /benchmarks and
-	// /tasks catalogue facets. Only one facet here (just languages); the
-	// page's other filters all live on the shared `filters` store and
-	// roundtrip through its own `sync()` / `hydrateFromUrl()` machinery.
 	const languageFacet = createFacetFilter({
 		urlParam: 'langs',
 		chipKey: 'langs',
@@ -68,10 +57,8 @@
 		universe: () => LANGUAGES
 	});
 	const languagesPicked = languageFacet.picked;
-	// `$state` (not a plain `let`) so the URL-write effect below sees
-	// the flag flip and re-runs to register `languagesPicked` as a
-	// dependency. Without it the write effect stays bailed at the gate
-	// on every toggle.
+	// $state (not plain let) so the URL-write effect re-runs on the flip and
+	// registers `languagesPicked` as a dep.
 	let languagesSeeded = $state(false);
 	$effect(() => {
 		if (!resolved || languagesSeeded) return;
@@ -100,28 +87,16 @@
 		maxTokens: 'desc',
 		released: 'desc'
 	};
-	// Default sort: newest release first. Surfaces just-shipped models at
-	// the top so visitors see what's current without scrolling. State is
-	// URL-backed (`?s.models=…&d.models=…`) so navigating to a model detail
-	// page and back via the browser restores the user's sort choice. We
-	// can't seed from the URL at script-top — `getParam` reads
-	// `window.location`, which on a prerendered page differs between the
-	// build-time render (no query) and the client hydration (real query),
-	// triggering a hydration mismatch. Defaults first; `onMount` below
-	// syncs from the URL once we're guaranteed to be on the client.
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
 	const DEFAULT_SORT: SortId = 'released';
 	let sort = $state<SortId>(DEFAULT_SORT);
 	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
-	// `urlHydrated` gates the URL-write effects so they don't clobber the
-	// real URL params during the brief window between mount and the
-	// `onMount` URL→state sync below. Without the gate, the first effect
-	// run sees default state and writes "no params" to the URL, which
-	// nukes whatever the user actually navigated to.
+	// Gate URL writes until the onMount URL→state sync has run, otherwise the
+	// default-state write nukes deep-link params.
 	let urlHydrated = $state(false);
 	$effect(() => {
 		if (!urlHydrated) return;
-		// Omit defaults from the URL so the canonical "fresh visit" link is clean.
 		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
 		updateUrl({
 			's.models': isDefault ? null : sort,
@@ -137,36 +112,19 @@
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
 
-	// URL-backed view mode (cards default) and a SortState adapter so the
-	// table's `SortHeader` drives the same sort/sortDir as the dropdown.
-	// Hydrated from the URL in `onMount` below — see the matching note on
-	// `sort` / `sortDir` for why this can't seed at script-top.
 	let view = $state<ViewMode>('cards');
 	$effect(() => {
 		if (!urlHydrated) return;
 		updateUrl({ view: view === 'cards' ? null : view });
 	});
 
-	// Page-local language picks → URL. The shared filters store handles
-	// `?mtypes`, `?mmods`, `?minSize`, etc. via its own sync; languages
-	// here are page-scoped (computed from the loaded registry) so the page
-	// owns the param. Omitted when the picks equal the full universe so
-	// the default visit stays a clean URL.
+	// Page-local `?langs=` sync; shared filters handle their own params.
 	$effect(() => {
-		// `languagesSeeded` gate ensures we don't run between
-		// `urlHydrated = true` (onMount) and the loader's `.then()`
-		// populating LANGUAGES + seeding picks. Without it the effect
-		// would see an empty universe, treat the facet as "off", and
-		// delete a real `?langs=` deep-link param before the seed could
-		// read it. Same pattern as `filtersSeeded` on /benchmarks and
-		// /tasks.
+		// languagesSeeded gate: empty universe pre-seed would delete `?langs=` deep links.
 		if (!urlHydrated || !languagesSeeded) return;
 		updateUrl({ langs: languageFacet.urlValue() });
 	});
 
-	// Client-only URL → state sync. Runs after the prerendered HTML has
-	// hydrated against the defaults, so the initial render matches SSR
-	// and no `hydration_mismatch` fires.
 	onMount(() => {
 		const us = getParam('s.models');
 		const ud = getParam('d.models');
@@ -178,9 +136,7 @@
 			sortDir = ud;
 		}
 		if (uv === 'table') view = 'table';
-		// Apply shared filter params (?minSize, ?maxSize, ?avail, ?inst, ?zs,
-		// ?st, ?mtypes, ?mmods, ?q). /benchmark/[name] runs this implicitly
-		// inside initFor; we have no summary here, so call directly.
+		// No summary here, so call hydrateFromUrl directly.
 		filters.hydrateFromUrl();
 		urlHydrated = true;
 	});
@@ -222,11 +178,7 @@
 		const langPicked = languagesPicked;
 		const langCount = LANGUAGES.length;
 		const langActive = langCount > 0 && langPicked.size !== langCount;
-		// Modality is filtered client-side now (no /models refetch on toggle).
-		// "All on" = filter off; otherwise require at least one declared
-		// modality to be in the picked set. Models with no declared
-		// modalities default to ['text'] (the registry-wide default) so they
-		// match the common case without explicit tagging.
+		// Client-side modality filter; models without declared modalities default to ['text'].
 		const modalitiesPicked = filters.modelModalities;
 		const modalitiesActive = modalitiesPicked.size !== MODEL_MODALITIES.length;
 		return (m: ModelMeta) => {

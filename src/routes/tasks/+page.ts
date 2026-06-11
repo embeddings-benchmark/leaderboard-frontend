@@ -1,8 +1,5 @@
-// /tasks loader. Fetches the full task registry + benchmark menu and runs
-// the per-task occurrence/facet derivation once at prerender time so the
-// static HTML carries the derived `TasksData` shape directly. On client-
-// side navigation the loader replays via `cachedHttp` (already warm from
-// preload-on-hover) and runs the derivation pass in <10ms.
+// Fetches the task registry + menu, runs facet derivation, ships as
+// `TasksData`.
 import type { PageLoad } from './$types';
 import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
 import { flattenMenu } from '$lib/types';
@@ -12,9 +9,7 @@ export const prerender = true;
 
 export interface TaskEntry {
 	name: string;
-	// Lowercased name cached at load — the name-search keystroke filter
-	// runs 1700x per recompute, so a per-entry `.toLowerCase()` would
-	// allocate 1700 strings per stroke. Memoised once here.
+	// Memoised — name-search runs over 1700+ entries per keystroke.
 	nameLower: string;
 	type: string;
 	simplifiedType: string;
@@ -24,8 +19,7 @@ export interface TaskEntry {
 	description: string;
 	benchmarks: string[];
 	mainScore: string;
-	// Distinct models evaluated on this task — backend overlay from the
-	// unified results frame. `0` for tasks the cache hasn't filled in.
+	/** Backend overlay; 0 when the cache isn't filled. */
 	numModels: number;
 }
 
@@ -46,10 +40,6 @@ const SIMPLIFIED_TYPES = [
 	'semantic-similarity'
 ] as const;
 
-// Streamed so client-side nav from another page paints the /tasks shell +
-// skeleton immediately, then swaps in real content when the derivation
-// resolves. Prerender awaits before writing the static HTML, so direct
-// visits skip the skeleton entirely.
 export const load: PageLoad = ({ fetch }) => {
 	return { tasks: deriveTasksData(fetch) };
 };
@@ -65,12 +55,9 @@ async function deriveTasksData(fetchFn?: typeof fetch): Promise<TasksData> {
 			occurrences.set(t, list);
 		}
 	}
-	// Build entries + extract every facet in one pass over the 1700+ task
-	// registry. Fuses what used to be four separate flatMap+Set traversals
-	// into one walk.
+	// Single-pass extraction over the 1700+ task registry.
 	const modSet = new Set<string>();
 	const domSet = new Set<string>();
-	// Count per language so the filter pills sort by popularity.
 	const langCount = new Map<string, number>();
 	const presentSet = new Set<string>();
 	const entries: TaskEntry[] = new Array(tasks.length);
@@ -103,14 +90,12 @@ async function deriveTasksData(fetchFn?: typeof fetch): Promise<TasksData> {
 		for (const x of languages) langCount.set(x, (langCount.get(x) ?? 0) + 1);
 	}
 	entries.sort((a, b) => COLLATOR.compare(a.name, b.name));
-	// Curated order first, then any extras alphabetised.
 	const simplifiedPresent = [
 		...SIMPLIFIED_TYPES.filter((t) => presentSet.has(t)),
 		...[...presentSet].filter((t) => !SIMPLIFIED_TYPES.includes(t as never)).sort()
 	];
 	const modalities = [...modSet].sort();
 	const domains = [...domSet].sort();
-	// Descending by usage count, alphabetical tie-break.
 	const languages = [...langCount.entries()]
 		.sort((a, b) => b[1] - a[1] || COLLATOR.compare(a[0], b[0]))
 		.map(([l]) => l);

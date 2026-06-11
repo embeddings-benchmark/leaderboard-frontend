@@ -1,15 +1,10 @@
-// /tasks/[name] loader. Awaits the cheap fetches (benchmark menu + task
-// metadata) at prerender so the card hero lands ready; streams the heavier
-// /scores fetch so client-side nav can paint the card immediately and fill
-// in the model table when ready.
+// Eagerly awaits menu + task metadata; streams the heavier scores fetch.
 import type { EntryGenerator, PageLoad } from './$types';
 import { loadBenchmarkMenu, loadTask, loadTaskScores, loadTasks } from '$lib/data/service';
 import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
 
-// Streamed promises that reject during prerender crash the build with an
-// unhandled rejection. Wrap the scores fetch in a discriminated-union
-// result so the promise itself never rejects — the page reads `.ok` and
-// renders an inline error fallback for failures.
+// Discriminated union so the streamed promise never rejects — prerender would
+// crash on unhandled rejections.
 export type ScoresResult = { ok: true; data: TaskScores } | { ok: false; error: string };
 
 export const prerender = true;
@@ -30,9 +25,7 @@ export interface TaskPageData {
 
 export const load: PageLoad = async ({ params, fetch }): Promise<TaskPageData> => {
 	const taskName = decodeURIComponent(params.name);
-	// Both small, both prerender-friendly. We catch task-meta failures so a
-	// missing/renamed task still shows the card shell + the menu-derived
-	// "In benchmarks: …" strip instead of a hard error page.
+	// Catch task-meta failures so a missing task still shows the card shell.
 	const [menu, taskResult] = await Promise.all([
 		loadBenchmarkMenu(fetch),
 		loadTask(taskName, fetch).then(

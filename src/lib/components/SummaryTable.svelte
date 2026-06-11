@@ -45,6 +45,50 @@
 		}
 	} as const;
 
+	// Short header labels for the per-task-type columns. Full task type names
+	// (especially the vision / audio ones — "AudioZeroshotClassification",
+	// "Any2AnyMultilingualRetrieval") eat horizontal space and force the
+	// table into awkward horizontal scrolling on benchmarks with many task
+	// types. The abbreviated label sits in the column header; the full
+	// humanized name is still announced via the hover tooltip's title.
+	// Keys mirror the real `tasksMeta[].type` values returned by the API
+	// (see `/v1/tasks`). Anything unmapped falls back to `humanizeType`.
+	const TASK_TYPE_ABBREV: Record<string, string> = {
+		Any2AnyMultilingualRetrieval: 'A2A MultiRetr.',
+		Any2AnyRetrieval: 'A2A Retr.',
+		AudioClassification: 'Aud Class.',
+		AudioClustering: 'Aud Clust.',
+		AudioMultilabelClassification: 'Aud MultiClass.',
+		AudioPairClassification: 'Aud PairClass.',
+		AudioReranking: 'Aud Rerank',
+		AudioZeroshotClassification: 'Aud 0Shot Class.',
+		BitextMining: 'Bitext',
+		Classification: 'Class.',
+		Clustering: 'Clust.',
+		Compositionality: 'Comp.',
+		DocumentUnderstanding: 'Doc Und.',
+		ImageClassification: 'Img Class.',
+		ImageClustering: 'Img Clust.',
+		InstructionReranking: 'Instr Rerank',
+		InstructionRetrieval: 'Instr Retr.',
+		MultilabelClassification: 'MultiClass.',
+		PairClassification: 'PairClass.',
+		Regression: 'Regr.',
+		Reranking: 'Rerank',
+		Retrieval: 'Retr.',
+		STS: 'STS',
+		Summarization: 'Summ.',
+		VideoCentricQA: 'Vid QA',
+		VideoClassification: 'Vid Class.',
+		VideoClustering: 'Vid Clust.',
+		VideoPairClassification: 'Vid PairClass.',
+		VideoZeroshotClassification: 'Vid 0Shot Class.',
+		VisionCentricQA: 'Vis QA',
+		'VisualSTS(eng)': 'V-STS (en)',
+		'VisualSTS(multi)': 'V-STS (multi)',
+		ZeroShotClassification: '0Shot Class.'
+	};
+
 	// Per-column hover descriptions. Keyed by `tasksMeta[i].type` (not the
 	// `summary.taskTypes` form the backend strips) — see `realTaskType` below.
 	const TASK_TYPE_INFO: Record<string, string> = {
@@ -637,21 +681,22 @@
 							{@const k = `tt:${tt}` as SortKey}
 							{@const real = realTaskType.get(tt) ?? tt}
 							{@const desc = TASK_TYPE_INFO[real] ?? TASK_TYPE_INFO[tt]}
-							{@const label = humanizeType(real)}
+							{@const full = humanizeType(real)}
+							{@const label = TASK_TYPE_ABBREV[real] ?? TASK_TYPE_ABBREV[tt] ?? full}
 							<th
 								scope="col"
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
-								data-tip-title={desc ? label : ''}
+								data-tip-title={full}
 								data-tip={desc ?? ''}
-								onpointerenter={desc ? showTip : undefined}
-								onpointerleave={desc ? hideTip : undefined}
-								onfocusin={desc ? showTip : undefined}
-								onfocusout={desc ? hideTip : undefined}
+								onpointerenter={showTip}
+								onpointerleave={hideTip}
+								onfocusin={showTip}
+								onfocusout={hideTip}
 							>
-								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
+								<button class="sort-btn tbl-num" onclick={() => sort.click(k)} title={full}>
 									<span>{label}</span>
-									{#if desc}<InfoDot ariaLabel="What is {label}?" />{/if}
+									<InfoDot ariaLabel="What is {full}?" />
 									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
 								</button>
 							</th>

@@ -25,16 +25,12 @@
 		benchmarkDisplay: string;
 	}
 
-	// Loader awaits menu + task metadata eagerly (both fast); scores stream
-	// so the card can render before the slower table fetch resolves.
 	let taskName = $derived(data.taskName);
 	let allBenchmarks = $derived(data.allBenchmarks);
 	let taskMeta = $derived(data.taskMeta);
 	let metaError = $derived(data.taskMetaError);
 
-	// Stream the scores payload — same stale-guard pattern as elsewhere:
-	// capture the in-flight promise so a rapid task→task nav doesn't let
-	// a slow earlier fetch overwrite the new task's results.
+	// Stale-guard via `data.scores === p` on rapid task→task nav.
 	let scoresPayload = $state<TaskScores | null>(null);
 	let loadingScores = $state(true);
 	let scoresError = $state<string | null>(null);
@@ -51,10 +47,7 @@
 		});
 	});
 
-	// Hosting benchmarks come from the menu (cheap) — we don't need the
-	// scores payload to render the "In benchmarks: …" strip on the card.
-	// Pre-index task membership so we don't re-scan every benchmark's tasks
-	// array (~100 benchmarks × ~100 tasks worth of compares on every nav).
+	// Pre-index task membership for the "In benchmarks: …" strip.
 	let benchTasksSets = $derived(allBenchmarks.map((b) => new Set(b.tasks)));
 	let benchmarks = $derived.by(() => {
 		if (!taskName || allBenchmarks.length === 0) return [];

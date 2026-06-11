@@ -5,12 +5,9 @@
 
 	type TintKey = 'multilingual' | 'retrieval' | 'english';
 
-	// Tagged result instead of a string sentinel — see `LeadersResult` in
-	// `routes/+page.ts`. `undefined` is the "loading" state (parent didn't
-	// pass a value yet, e.g. while the streamed loader promise resolves).
+	// `undefined` = loading.
 	type LeadersResult = BenchmarkLeaders | { error: string };
 	interface Props {
-		// Drives the per-card tint via `data-key`.
 		tintKey: TintKey;
 		label: string;
 		benchmark: Benchmark;
@@ -34,9 +31,7 @@
 		if (max == null) return `>${fmtParams(min)}`;
 		return `${fmtParams(min)}–${fmtParams(max)}`;
 	}
-	// Loader returns buckets ascending by size (smallest → biggest). Reverse
-	// so the largest-model bucket sits at the top — matches the convention
-	// of "best/biggest first" rankings.
+	// Reverse to biggest-first.
 	let orderedBuckets = $derived(leadersData ? [...leadersData.buckets].reverse() : []);
 </script>
 

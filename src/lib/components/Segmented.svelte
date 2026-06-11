@@ -7,8 +7,7 @@
 	}
 	let { ariaLabel, options, value, onChange }: Props = $props();
 
-	// Roving tabindex per WAI-ARIA radiogroup pattern — only the checked
-	// radio sits in the tab sequence; Arrow keys move focus + check.
+	// Roving tabindex per WAI-ARIA radiogroup pattern.
 	let buttons: HTMLButtonElement[] = $state([]);
 
 	function onKeyDown(e: KeyboardEvent) {
@@ -27,8 +26,7 @@
 	}
 </script>
 
-<!-- tabindex=-1 satisfies Svelte's a11y check for keydown-bearing role=radiogroup;
-     real focus lives on the buttons via roving tabindex. -->
+<!-- tabindex=-1 for a11y lint; real focus is on buttons via roving tabindex. -->
 <div class="segmented" role="radiogroup" aria-label={ariaLabel} tabindex="-1" onkeydown={onKeyDown}>
 	{#each options as opt, i (opt.value)}
 		<button

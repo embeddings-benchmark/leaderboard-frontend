@@ -23,10 +23,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Stream the loader's derived data into local state; the {#if !resolved}
-	// branch in the template paints a skeleton until the promise lands on
-	// client-side nav. Prerender awaits the promise so direct visits skip
-	// the skeleton entirely.
+	// Stale-guard via `data.benchmarks === p` on rapid nav.
 	let resolved = $state<BenchmarksData | null>(null);
 	let loadError = $state<string | null>(null);
 	$effect(() => {
@@ -40,12 +37,7 @@
 	});
 
 	let allBenchmarks = $derived<Benchmark[]>(resolved?.all ?? []);
-	// All URL-derived state starts at the prerender-safe defaults; the
-	// `onMount` block below syncs from `window.location` on the client.
-	// `urlHydrated` gates the URL-write `$effect` so it doesn't nuke the
-	// real params before the sync runs. Avoids a hydration_mismatch on
-	// hard-refresh of a URL that carries any of `?q` / `?sort` / `?dir`
-	// / `?view`.
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
 	let query = $state('');
 
 	const SORTS = [
@@ -63,8 +55,7 @@
 		models: 'desc'
 	};
 	const SORT_IDS = SORTS.map((s) => s.id) as readonly SortId[];
-	// Default to "Model count" desc — popularity is the most useful first
-	// impression when browsing the benchmark catalogue.
+	// "Model count" desc surfaces popular benchmarks first.
 	const DEFAULT_SORT: SortId = 'models';
 	let sort = $state<SortId>(DEFAULT_SORT);
 	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
@@ -77,9 +68,6 @@
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
 
-	// URL-backed view mode (cards default) and a SortState adapter that
-	// lets the table's `SortHeader` drive the same sort/sortDir as the
-	// dropdown.
 	let view = $state<ViewMode>('cards');
 	const sortAdapter: SortState<SortId> = {
 		get key() {
@@ -101,10 +89,7 @@
 	};
 
 	$effect(() => {
-		// `filtersSeeded` gate is critical for the deep-link case: between
-		// `urlHydrated = true` (onMount) and the seed effect firing, the
-		// SvelteSets are still empty. Writing the URL here would clear the
-		// real `?mods` / `?doms` / etc. params before the seed reads them.
+		// `filtersSeeded` gate prevents clobbering deep-link facet params before seed.
 		if (!urlHydrated || !filtersSeeded) return;
 		updateUrl({
 			q: query.trim() || null,
@@ -131,25 +116,15 @@
 			sortDir = ud;
 		}
 		if (uv === 'table') view = 'table';
-		// Filter sets land into local SvelteSets later (after `resolved`
-		// resolves) — the `filtersSeeded` $effect below merges URL picks
-		// into the seeded universe.
 		urlHydrated = true;
 	});
 
-	// Reactive universes — read from the streamed loader payload. Each
-	// `createFacetFilter` below holds an arrow-function reference to one
-	// of these so the underlying `$derived` is tracked lazily.
+	// Universes — facets read these lazily via arrow-function accessors.
 	let MODALITIES = $derived<string[]>(resolved?.modalities ?? []);
 	let SIMPLIFIED_TYPES_PRESENT = $derived<string[]>(resolved?.simplifiedTypesPresent ?? []);
 	let DOMAINS = $derived<string[]>(resolved?.domains ?? []);
 	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
 
-	// Per-facet pick set + URL roundtrip + chip generation, factored into
-	// `createFacetFilter`. The page still owns the orchestration: the
-	// `filtersSeeded` gate, the URL-write effect (further down), and the
-	// `chips` derived (which collects per-facet chips into the strip's
-	// array plus prepends a name-query chip).
 	const typeFacet = createFacetFilter({
 		urlParam: 'types',
 		chipKey: 'types',
@@ -175,17 +150,13 @@
 		universe: () => LANGUAGES
 	});
 	const FACETS = [typeFacet, modalityFacet, domainFacet, languageFacet];
-	// Aliases so the FilterFacet props + filter pass below read like the
-	// pre-refactor code (one local name per pick set).
 	const simplifiedTypeFilter = typeFacet.picked;
 	const modalityFilter = modalityFacet.picked;
 	const domainFilter = domainFacet.picked;
 	const languageFilter = languageFacet.picked;
 
-	// `$state` (not a plain `let`) so the URL-write effect above sees
-	// `filtersSeeded` flip from false → true and re-runs to register the
-	// SvelteSets as dependencies. Without reactivity here the write effect
-	// stayed bailed in its initial gated branch and never tracked toggles.
+	// $state so the URL-write effect re-runs on the flip and registers the
+	// facet SvelteSets as deps.
 	let filtersSeeded = $state(false);
 	$effect(() => {
 		if (!resolved || filtersSeeded) return;
@@ -241,10 +212,6 @@
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
 
-	// Active-filter chips. Each narrowed facet contributes a clearable
-	// chip; the strip also renders the shared "Reset all" button when any
-	// chip is present. Name-search (`?q`) doesn't get its own chip — the
-	// search input itself shows the current value.
 	let chips = $derived.by<Chip[]>(() => {
 		const list: Chip[] = [];
 		if (filtersSeeded) {
@@ -267,12 +234,9 @@
 		query = '';
 	}
 
-	// Off-menu benchmarks sort alongside the featured ones — the per-card
-	// "newer version available" hint already distinguishes them.
 	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		// "All on" = filter off; partial = intersection check; empty =
-		// the user deliberately cleared the category, so nothing matches.
+		// All on = filter off; empty pick set = nothing matches.
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const simplifiedOff = simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length;
 		const domainOff = domainFilter.size === DOMAINS.length;

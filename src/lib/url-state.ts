@@ -1,21 +1,5 @@
-/**
- * Tiny URL ↔ state plumbing for shareable leaderboard links.
- *
- * Design:
- * - **Read** once, on the client, at component init via ``readParams()``. We
- *   pull from ``window.location`` rather than SvelteKit's reactive
- *   ``page.url`` because we update the URL with SvelteKit's ``replaceState``
- *   from ``$app/navigation`` to avoid triggering load functions.
- * - **Write** via ``updateUrl({...})`` which patches only the keys provided.
- *   ``null`` / ``''`` removes a param. Net no-op when nothing changes.
- *
- * Param naming: short and namespaced (``q``, ``mtypes``, ``s.summary``).
- * Multi-value sets are comma-joined; consumers split as needed.
- *
- * Loop-safety: the read/write phases are separate effects. ``replaceState``
- * doesn't trigger SvelteKit's load functions (per the docs), so the read
- * effect (which fires only once) never re-runs.
- */
+// URL state plumbing for shareable links. Reads from `window.location`;
+// writes go through `replaceState` so load functions don't re-fire.
 
 import { replaceState } from '$app/navigation';
 
@@ -28,14 +12,8 @@ export function getParam(name: string): string | null {
 	return readParams().get(name);
 }
 
-/**
- * Patch URL params; ``null``/``''``/``undefined`` deletes.
- *
- * We hold a long-lived URL instance and just mutate its `searchParams` so we
- * don't pay the URL parse cost on every filter-store sync. The href can drift
- * if other code calls `pushState`/popstate; we resync from `window.location`
- * whenever the path changes between calls.
- */
+// Patch URL params. `null`/`undefined` deletes; `''` preserved as `?k=`
+// (a deliberate deselect-all gesture, distinct from "no param").
 let _url: URL | null = null;
 let _lastPath = '';
 export function updateUrl(updates: Record<string, string | null | undefined>): void {
@@ -49,12 +27,6 @@ export function updateUrl(updates: Record<string, string | null | undefined>): v
 	let changed = false;
 	for (const [k, v] of Object.entries(updates)) {
 		const existing = url.searchParams.get(k);
-		// `null` / `undefined` = "delete the param".
-		// Empty string `''` is preserved as `?k=` — distinct from "no param".
-		// Filter-set encoders use this so an empty pick set (`?mods=`)
-		// round-trips through a deep link as "user deselected everything"
-		// — a deliberate "exclude everything" gesture — versus "no
-		// narrowing applied" (no param) which seeds with the full universe.
 		if (v == null) {
 			if (existing !== null) {
 				url.searchParams.delete(k);
@@ -66,33 +38,14 @@ export function updateUrl(updates: Record<string, string | null | undefined>): v
 		}
 	}
 	if (changed) {
-		// Use SvelteKit's wrapper instead of native `history.replaceState`
-		// so the router stays in sync. Pass an empty PageState since we
-		// don't use shallow-routing state — just need the URL update.
-		// `resolve()` would re-add the base path, but `url` is already
-		// derived from `window.location.href` which carries it — passing
-		// the URL object directly preserves the current path verbatim
-		// while only mutating its query string.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		replaceState(url, {});
 		_lastPath = url.pathname + url.search + url.hash;
 	}
 }
 
-/**
- * Encode a set of names into a comma-joined param (URL-safe components).
- *
- * Returns `''` (empty string) for an empty input — paired with
- * `updateUrl`'s empty-string handling, this serialises an empty pick
- * set as `?key=` (param present, value empty). Distinct from "no param
- * at all" — the empty-value form preserves the user's deselect-all
- * gesture across a deep link. The filter *logic* (see `isFullSet` in
- * `filters.svelte.ts`) treats both states as "no narrowing applied"
- * so the page isn't blanked, but the URL keeps the checkbox state
- * faithful.
- */
+/** Encode names as a comma-joined URL-safe param; returns `''` for empty input. */
 export function encodeSet(values: Iterable<string>): string {
-	// Single-pass build instead of [...values].filter().map().join() (3 allocs).
 	let out = '';
 	for (const v of values) {
 		if (!v) continue;

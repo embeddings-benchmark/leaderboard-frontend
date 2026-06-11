@@ -1,16 +1,4 @@
 <script lang="ts">
-	// Home page: three primary leader tiles (Multilingual / Retrieval /
-	// English) above four collapsible sections — Language, Modality,
-	// Retrieval, Domain — each driven by the backend's
-	// `HOME_BENCHMARK_ENTRIES` menu. Tabs are gone; the menu's flat
-	// 4-section shape now drives the layout directly.
-	//
-	// Data lands via the +page.ts loader. `data.menu` and `data.primaries`
-	// are returned as unresolved promises so client-side nav from another
-	// page renders the home shell with skeletons immediately, then fills
-	// in as each promise resolves. Prerender awaits both promises before
-	// emitting HTML, so direct visits skip the skeleton entirely.
-
 	import { resolve } from '$app/paths';
 	import MenuSection from '$lib/components/MenuSection.svelte';
 	import PrimaryLeaderTile from '$lib/components/PrimaryLeaderTile.svelte';
@@ -144,10 +132,6 @@
 		display: flex;
 		flex-direction: column;
 	}
-	/* Skeleton placeholders shown while the loader promises are pending
-	   (client-side navigation only — prerender awaits everything). Same
-	   outer shells as the real tiles / sections so the layout doesn't
-	   shift when the data lands. */
 	.prim-skel {
 		display: flex;
 		flex-direction: column;

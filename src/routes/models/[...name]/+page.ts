@@ -1,13 +1,5 @@
-// Prerender every model detail page at build time so per-entity
-// ShareMeta tags land in the static HTML. The route uses `[...name]`
-// (rest param) because model identifiers are `org/name` — SvelteKit
-// passes the raw string through, slashes and all.
-//
-// The loader awaits `loadModel` (cheap registry lookup) eagerly and
-// streams `loadModelScores` (walks every benchmark summary — slow on
-// a cold backend cache). On client-side nav the page paints the card
-// hero immediately and shows a skeleton over the score table until the
-// stream resolves.
+// Prerendered for ShareMeta. Eagerly awaits `loadModel`; streams `loadModelScores`
+// so the card hero paints before the slow scores fetch resolves.
 import type { EntryGenerator, PageLoad } from './$types';
 import { loadModel, loadModels, loadModelScores } from '$lib/data/service';
 import type { ModelMeta, ModelScores } from '$lib/types';
@@ -19,10 +11,8 @@ export const entries: EntryGenerator = async () => {
 	return models.map((m) => ({ name: m.name }));
 };
 
-// Streamed promises that reject during prerender crash the build with an
-// unhandled rejection. Wrap the scores fetch in a discriminated-union
-// result so the promise itself never rejects — the page reads `.ok` and
-// renders the in-card error fallback for failures.
+// Discriminated union so the streamed promise never rejects — prerender would
+// crash on unhandled rejections.
 export type ScoresResult = { ok: true; data: ModelScores } | { ok: false; error: string };
 
 export interface ModelPageData {
@@ -34,8 +24,7 @@ export interface ModelPageData {
 
 export const load: PageLoad = async ({ params, fetch }): Promise<ModelPageData> => {
 	const modelName = decodeURIComponent(params.name);
-	// Catch the metadata fetch so a missing model still renders the card
-	// shell + the streamed error fallback for scores instead of a 500.
+	// Catch so a missing model still renders the card shell instead of a 500.
 	const meta = await loadModel(modelName, fetch).then(
 		(m) => ({ model: m, error: null as string | null }),
 		(e) => ({

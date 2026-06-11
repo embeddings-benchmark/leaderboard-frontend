@@ -1,9 +1,5 @@
 <script lang="ts">
-	// Shared "active filter chips + Reset all" strip used by the
-	// catalogue pages (/benchmarks, /tasks). The benchmark detail page's
-	// FilterContent has its own copy because it pulls from the shared
-	// filter store; this version is for pages whose filter state lives
-	// in local SvelteSets.
+	// Shared chips + Reset all strip for pages with local-state filters.
 	export interface Chip {
 		key: string;
 		label: string;

@@ -7,9 +7,7 @@
 	let { tabs, active, onSelect }: Props = $props();
 
 	let visibleTabs = $derived(tabs.filter((t) => t.visible !== false));
-	// Roving tabindex: only the active tab is in the tab sequence (0), the
-	// others are reachable via Arrow keys (tabindex=-1). Matches the WAI-ARIA
-	// APG tablist pattern.
+	// Roving tabindex per WAI-ARIA tablist pattern.
 	let buttons: HTMLButtonElement[] = $state([]);
 
 	function onKeyDown(e: KeyboardEvent) {
@@ -24,14 +22,12 @@
 		else return;
 		e.preventDefault();
 		onSelect(visibleTabs[next].id);
-		// Wait for the re-render that flips the active tab so the focus
-		// lands on the same DOM node we just selected.
+		// Defer focus until after the re-render swaps the active tab.
 		queueMicrotask(() => buttons[next]?.focus());
 	}
 </script>
 
-<!-- tabindex=-1 satisfies Svelte's a11y check for keydown-bearing role=tablist;
-     real focus lives on the buttons via roving tabindex. -->
+<!-- tabindex=-1 for a11y lint; real focus is on buttons via roving tabindex. -->
 <div class="tabs" role="tablist" tabindex="-1" onkeydown={onKeyDown}>
 	{#each visibleTabs as tab, i (tab.id)}
 		<button
