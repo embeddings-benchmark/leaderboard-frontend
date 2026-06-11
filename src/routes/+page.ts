@@ -45,8 +45,8 @@ export interface ResolvedPrimary extends Primary {
 	leaders: BenchmarkLeaders | 'error';
 }
 
-export const load: PageLoad = () => {
-	const menuPromise = loadBenchmarkMenu();
+export const load: PageLoad = ({ fetch }) => {
+	const menuPromise = loadBenchmarkMenu(fetch);
 	// Primaries depend on the menu shape (we prefer the in-menu copy
 	// before falling back to a direct fetch), so chain off the menu
 	// promise. The chain is its own promise — both ship to the client
@@ -58,7 +58,7 @@ export const load: PageLoad = () => {
 				const fromMenu = byName.get(p.preferred);
 				if (fromMenu) return { ...p, b: fromMenu };
 				try {
-					return { ...p, b: await loadBenchmark(p.preferred) };
+					return { ...p, b: await loadBenchmark(p.preferred, fetch) };
 				} catch {
 					return null;
 				}
@@ -69,7 +69,7 @@ export const load: PageLoad = () => {
 			found.map(
 				async (p): Promise<ResolvedPrimary> => ({
 					...p,
-					leaders: await loadLeaders(p.b.name, SIZE_BUCKETS).catch(() => 'error' as const)
+					leaders: await loadLeaders(p.b.name, SIZE_BUCKETS, fetch).catch(() => 'error' as const)
 				})
 			)
 		);

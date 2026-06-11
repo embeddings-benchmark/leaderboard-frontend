@@ -16,7 +16,7 @@ export const prerender = true;
 // Best-effort: if the backend is unreachable we swallow the error so the
 // page still mounts and its own effect can surface the failure inline
 // (and retry). The pre-warm is purely an optimization.
-export const load: PageLoad = async () => {
-	await loadModels({}).catch(() => undefined);
+export const load: PageLoad = async ({ fetch }) => {
+	await loadModels({}, fetch).catch(() => undefined);
 	return {};
 };

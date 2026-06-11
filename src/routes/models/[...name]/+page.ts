@@ -32,11 +32,11 @@ export interface ModelPageData {
 	scores: Promise<ScoresResult>;
 }
 
-export const load: PageLoad = async ({ params }): Promise<ModelPageData> => {
+export const load: PageLoad = async ({ params, fetch }): Promise<ModelPageData> => {
 	const modelName = decodeURIComponent(params.name);
 	// Catch the metadata fetch so a missing model still renders the card
 	// shell + the streamed error fallback for scores instead of a 500.
-	const meta = await loadModel(modelName).then(
+	const meta = await loadModel(modelName, fetch).then(
 		(m) => ({ model: m, error: null as string | null }),
 		(e) => ({
 			model: null as ModelMeta | null,
@@ -47,7 +47,7 @@ export const load: PageLoad = async ({ params }): Promise<ModelPageData> => {
 		modelName,
 		model: meta.model,
 		modelError: meta.error,
-		scores: loadModelScores(modelName).then(
+		scores: loadModelScores(modelName, fetch).then(
 			(s): ScoresResult => ({ ok: true, data: s }),
 			(e): ScoresResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) })
 		)

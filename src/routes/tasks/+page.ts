@@ -50,12 +50,12 @@ const SIMPLIFIED_TYPES = [
 // skeleton immediately, then swaps in real content when the derivation
 // resolves. Prerender awaits before writing the static HTML, so direct
 // visits skip the skeleton entirely.
-export const load: PageLoad = () => {
-	return { tasks: deriveTasksData() };
+export const load: PageLoad = ({ fetch }) => {
+	return { tasks: deriveTasksData(fetch) };
 };
 
-async function deriveTasksData(): Promise<TasksData> {
-	const [menu, tasks] = await Promise.all([loadBenchmarkMenu(), loadTasks()]);
+async function deriveTasksData(fetchFn?: typeof fetch): Promise<TasksData> {
+	const [menu, tasks] = await Promise.all([loadBenchmarkMenu(fetchFn), loadTasks({}, fetchFn)]);
 	const allBenches = flattenMenu(menu);
 	const occurrences = new Map<string, string[]>();
 	for (const b of allBenches) {

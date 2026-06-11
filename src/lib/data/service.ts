@@ -29,8 +29,15 @@ function noApiError(scope: string): Error {
 // `/metrics`) aren't routed through here, so the prefix is safe.
 const API_BASE = `${API}/v1`;
 
-async function http<T>(path: string): Promise<T> {
-	const res = await fetch(`${API_BASE}${path}`);
+// Loader callers should pass SvelteKit's `event.fetch` so the prerender
+// response is inlined into the rendered HTML/data and hydration reads
+// from the inlined cache instead of re-fetching. Non-loader callers
+// (stores, $effects) omit it and get the global `fetch`, which is what
+// they want.
+type FetchFn = typeof globalThis.fetch;
+
+async function http<T>(path: string, fetchFn: FetchFn = globalThis.fetch): Promise<T> {
+	const res = await fetchFn(`${API_BASE}${path}`);
 	if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`);
 	return (await res.json()) as T;
 }
@@ -55,7 +62,7 @@ function cacheTouch(path: string, value: unknown) {
 	}
 }
 
-async function cachedHttp<T>(path: string): Promise<T> {
+async function cachedHttp<T>(path: string, fetchFn?: FetchFn): Promise<T> {
 	if (responseCache.has(path)) {
 		// Touch to refresh LRU position.
 		const v = responseCache.get(path) as T;
@@ -64,7 +71,7 @@ async function cachedHttp<T>(path: string): Promise<T> {
 	}
 	const existing = inflight.get(path);
 	if (existing) return existing as Promise<T>;
-	const p = http<T>(path)
+	const p = http<T>(path, fetchFn)
 		.then((v) => {
 			cacheTouch(path, v);
 			inflight.delete(path);
@@ -109,11 +116,14 @@ const _enrichedSummaries = new WeakSet<BenchmarkSummary>();
 function enrichSummary(s: BenchmarkSummary): BenchmarkSummary {
 	if (_enrichedSummaries.has(s)) return s;
 	for (const row of s.rows) fillOrgAndDisplay(row.model);
-	// Sort once at the boundary so SummaryTable / PerTaskTab consumers can
-	// pass `summary.taskTypes` / `summary.tasks` through without a per-render
-	// `[...arr].sort()` copy in their derived blocks.
-	s.taskTypes = [...s.taskTypes].sort((a, b) => a.localeCompare(b));
-	s.tasks = [...s.tasks].sort((a, b) => a.localeCompare(b));
+	// Sort + dedupe once at the boundary so SummaryTable / PerTaskTab
+	// consumers can pass `summary.taskTypes` / `summary.tasks` through
+	// without a per-render `[...arr].sort()` copy in their derived blocks.
+	// Dedup matters: at least one benchmark (MTEB(cmn, v1)) ships the same
+	// task twice in its registry list, which crashes keyed `{#each}` blocks
+	// on the task list facet downstream.
+	s.taskTypes = [...new Set(s.taskTypes)].sort((a, b) => a.localeCompare(b));
+	s.tasks = [...new Set(s.tasks)].sort((a, b) => a.localeCompare(b));
 	_enrichedSummaries.add(s);
 	return s;
 }
@@ -139,29 +149,46 @@ function enrichModelScores(s: ModelScores): ModelScores {
 	return s;
 }
 
-export async function loadBenchmarkMenu(): Promise<MenuEntry[]> {
+export async function loadBenchmarkMenu(fetchFn?: FetchFn): Promise<MenuEntry[]> {
 	if (!API) throw noApiError('loadBenchmarkMenu');
-	return cachedHttp<MenuEntry[]>('/benchmarks/menu');
+	return cachedHttp<MenuEntry[]>('/benchmarks/menu', fetchFn);
 }
 
 /** Flat list of every benchmark. `includeHidden=true` also returns
  *  off-menu benchmarks (`display_on_leaderboard=False`) so the
  *  /benchmarks catalogue can render them with the "newer version
  *  available" hint. */
-export async function loadBenchmarks(includeHidden = false): Promise<Benchmark[]> {
+export async function loadBenchmarks(
+	includeHidden = false,
+	fetchFn?: FetchFn
+): Promise<Benchmark[]> {
 	if (!API) throw noApiError('loadBenchmarks');
 	const qs = includeHidden ? '?include_hidden=true' : '';
-	return cachedHttp<Benchmark[]>(`/benchmarks${qs}`);
+	return cachedHttp<Benchmark[]>(`/benchmarks${qs}`, fetchFn);
 }
 
-export async function loadBenchmark(name: string): Promise<Benchmark> {
+export async function loadBenchmark(name: string, fetchFn?: FetchFn): Promise<Benchmark> {
 	if (!API) throw noApiError('loadBenchmark');
-	return cachedHttp<Benchmark>(`/benchmarks/${encodeURIComponent(name)}`);
+	return cachedHttp<Benchmark>(`/benchmarks/${encodeURIComponent(name)}`, fetchFn);
+}
+
+// Pre-populate `cachedHttp` from a value the page received via SvelteKit's
+// `+page.ts` data prop. Used by `/benchmark/[name]` to seed the cache from
+// the loader's return value (prefetched on hover via
+// `data-sveltekit-preload-data`), so the leaderboard store's subsequent
+// `loadBenchmark(name)` call hits sync instead of going to the network.
+//
+// Build-time prerender populates the build process's cache, which doesn't
+// reach the user's browser — this is the bridge that gets the prefetched
+// data into the runtime cache the store actually reads from.
+export function primeBenchmarkCache(name: string, value: Benchmark): void {
+	cacheTouch(`/benchmarks/${encodeURIComponent(name)}`, value);
 }
 
 export async function loadSummary(
 	benchmarkName: string,
-	languages?: ReadonlyArray<string>
+	languages?: ReadonlyArray<string>,
+	fetchFn?: FetchFn
 ): Promise<BenchmarkSummary> {
 	if (!API) throw noApiError('loadSummary');
 	// Path is `/scores` (consistent with /tasks/{name}/scores and
@@ -178,7 +205,8 @@ export async function loadSummary(
 	}
 	return enrichSummary(
 		await cachedHttp<BenchmarkSummary>(
-			`/benchmarks/${encodeURIComponent(benchmarkName)}/scores${qs}`
+			`/benchmarks/${encodeURIComponent(benchmarkName)}/scores${qs}`,
+			fetchFn
 		)
 	);
 }
@@ -189,10 +217,14 @@ export async function loadSummary(
  * an empty rows list when the backend has no per-language data (e.g.
  * a benchmark with no `language` column in its long frame).
  */
-export async function loadPerLanguage(benchmarkName: string): Promise<BenchmarkPerLanguage> {
+export async function loadPerLanguage(
+	benchmarkName: string,
+	fetchFn?: FetchFn
+): Promise<BenchmarkPerLanguage> {
 	if (!API) throw noApiError('loadPerLanguage');
 	return cachedHttp<BenchmarkPerLanguage>(
-		`/benchmarks/${encodeURIComponent(benchmarkName)}/per-language`
+		`/benchmarks/${encodeURIComponent(benchmarkName)}/per-language`,
+		fetchFn
 	);
 }
 
@@ -207,7 +239,8 @@ export async function loadPerLanguage(benchmarkName: string): Promise<BenchmarkP
  */
 export async function loadLeaders(
 	benchmarkName: string,
-	buckets: ReadonlyArray<readonly [number, number | null]>
+	buckets: ReadonlyArray<readonly [number, number | null]>,
+	fetchFn?: FetchFn
 ): Promise<BenchmarkLeaders> {
 	if (!API) throw noApiError('loadLeaders');
 	// Wire format is a JSON-encoded array of [min, max] tuples — the
@@ -218,7 +251,8 @@ export async function loadLeaders(
 	const buf: Array<[number, number | null]> = buckets.map(([lo, hi]) => [lo, hi]);
 	const qs = `buckets=${encodeURIComponent(JSON.stringify(buf))}`;
 	return cachedHttp<BenchmarkLeaders>(
-		`/benchmarks/${encodeURIComponent(benchmarkName)}/leaders?${qs}`
+		`/benchmarks/${encodeURIComponent(benchmarkName)}/leaders?${qs}`,
+		fetchFn
 	);
 }
 
@@ -244,46 +278,53 @@ function buildQuery(params: Record<string, unknown>): string {
 	return q ? `?${q}` : '';
 }
 
-export async function loadTasks(filters: TaskFilters = {}): Promise<TaskMeta[]> {
+export async function loadTasks(filters: TaskFilters = {}, fetchFn?: FetchFn): Promise<TaskMeta[]> {
 	if (!API) throw noApiError('loadTasks');
 	const out = await cachedHttp<TaskMeta[]>(
-		`/tasks${buildQuery(filters as Record<string, unknown>)}`
+		`/tasks${buildQuery(filters as Record<string, unknown>)}`,
+		fetchFn
 	);
 	for (const t of out) normalizeTaskMeta(t);
 	return out;
 }
 
-export async function loadTask(name: string): Promise<TaskMeta> {
+export async function loadTask(name: string, fetchFn?: FetchFn): Promise<TaskMeta> {
 	if (!API) throw noApiError('loadTask');
-	return normalizeTaskMeta(await cachedHttp<TaskMeta>(`/tasks/${encodeURIComponent(name)}`));
-}
-
-export async function loadTaskScores(name: string): Promise<TaskScores> {
-	if (!API) throw noApiError('loadTaskScores');
-	return enrichTaskScores(
-		await cachedHttp<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`)
+	return normalizeTaskMeta(
+		await cachedHttp<TaskMeta>(`/tasks/${encodeURIComponent(name)}`, fetchFn)
 	);
 }
 
-export async function loadModels(filters: ModelFilters = {}): Promise<ModelMeta[]> {
+export async function loadTaskScores(name: string, fetchFn?: FetchFn): Promise<TaskScores> {
+	if (!API) throw noApiError('loadTaskScores');
+	return enrichTaskScores(
+		await cachedHttp<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`, fetchFn)
+	);
+}
+
+export async function loadModels(
+	filters: ModelFilters = {},
+	fetchFn?: FetchFn
+): Promise<ModelMeta[]> {
 	if (!API) throw noApiError('loadModels');
 	const out = await cachedHttp<ModelMeta[]>(
-		`/models${buildQuery(filters as Record<string, unknown>)}`
+		`/models${buildQuery(filters as Record<string, unknown>)}`,
+		fetchFn
 	);
 	for (const m of out) fillOrgAndDisplay(m);
 	return out;
 }
 
-export async function loadModel(name: string): Promise<ModelMeta> {
+export async function loadModel(name: string, fetchFn?: FetchFn): Promise<ModelMeta> {
 	if (!API) throw noApiError('loadModel');
 	return fillOrgAndDisplay(
-		await cachedHttp<ModelMeta>(`/models/${encodeURIComponent(name)}`)
+		await cachedHttp<ModelMeta>(`/models/${encodeURIComponent(name)}`, fetchFn)
 	) as ModelMeta;
 }
 
-export async function loadModelScores(name: string): Promise<ModelScores> {
+export async function loadModelScores(name: string, fetchFn?: FetchFn): Promise<ModelScores> {
 	if (!API) throw noApiError('loadModelScores');
 	return enrichModelScores(
-		await cachedHttp<ModelScores>(`/models/${encodeURIComponent(name)}/scores`)
+		await cachedHttp<ModelScores>(`/models/${encodeURIComponent(name)}/scores`, fetchFn)
 	);
 }

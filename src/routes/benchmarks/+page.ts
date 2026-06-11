@@ -28,8 +28,8 @@ const CURATED = [
 	'semantic-similarity'
 ] as const;
 
-async function deriveBenchmarksData(): Promise<BenchmarksData> {
-	const list = (await loadBenchmarks(true)).sort((a, b) =>
+async function deriveBenchmarksData(fetchFn?: typeof fetch): Promise<BenchmarksData> {
+	const list = (await loadBenchmarks(true, fetchFn)).sort((a, b) =>
 		a.displayName.localeCompare(b.displayName)
 	);
 	// Single pass over the catalog to fill every facet set, instead of
@@ -59,6 +59,6 @@ async function deriveBenchmarksData(): Promise<BenchmarksData> {
 	};
 }
 
-export const load: PageLoad = () => {
-	return { benchmarks: deriveBenchmarksData() };
+export const load: PageLoad = ({ fetch }) => {
+	return { benchmarks: deriveBenchmarksData(fetch) };
 };

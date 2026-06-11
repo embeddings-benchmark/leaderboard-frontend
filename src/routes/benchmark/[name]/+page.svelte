@@ -7,6 +7,20 @@
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import { safeIdle, safeCancelIdle } from '$lib/idle';
+	import { primeBenchmarkCache } from '$lib/data/service';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+
+	// Prefetched on hover via `data-sveltekit-preload-data` — seed
+	// `cachedHttp` so the leaderboard store's `loadBenchmark(name)` call
+	// (in the $effect further down) resolves sync instead of going to the
+	// network. Declared before the leaderboard.select effect so it runs
+	// first in source order — both on first mount and on param-change
+	// reuse of the same component instance.
+	$effect(() => {
+		if (data.benchmark) primeBenchmarkCache(data.benchmark.name, data.benchmark);
+	});
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';

@@ -28,14 +28,14 @@ export interface TaskPageData {
 	scores: Promise<ScoresResult>;
 }
 
-export const load: PageLoad = async ({ params }): Promise<TaskPageData> => {
+export const load: PageLoad = async ({ params, fetch }): Promise<TaskPageData> => {
 	const taskName = decodeURIComponent(params.name);
 	// Both small, both prerender-friendly. We catch task-meta failures so a
 	// missing/renamed task still shows the card shell + the menu-derived
 	// "In benchmarks: …" strip instead of a hard error page.
 	const [menu, taskResult] = await Promise.all([
-		loadBenchmarkMenu(),
-		loadTask(taskName).then(
+		loadBenchmarkMenu(fetch),
+		loadTask(taskName, fetch).then(
 			(t) => ({ meta: t, error: null as string | null }),
 			(e) => ({ meta: null as TaskMeta | null, error: e instanceof Error ? e.message : String(e) })
 		)
@@ -45,7 +45,7 @@ export const load: PageLoad = async ({ params }): Promise<TaskPageData> => {
 		allBenchmarks: flattenMenu(menu),
 		taskMeta: taskResult.meta,
 		taskMetaError: taskResult.error,
-		scores: loadTaskScores(taskName).then(
+		scores: loadTaskScores(taskName, fetch).then(
 			(s): ScoresResult => ({ ok: true, data: s }),
 			(e): ScoresResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) })
 		)
