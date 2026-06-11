@@ -29,7 +29,7 @@ const CURATED = [
 ] as const;
 
 async function deriveBenchmarksData(fetchFn?: typeof fetch): Promise<BenchmarksData> {
-	const list = (await loadBenchmarks(true, fetchFn)).sort((a, b) =>
+	const list = (await loadBenchmarks(fetchFn)).sort((a, b) =>
 		a.displayName.localeCompare(b.displayName)
 	);
 	// Single pass over the catalog to fill every facet set, instead of

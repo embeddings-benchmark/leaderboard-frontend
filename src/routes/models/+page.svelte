@@ -1,8 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { SvelteSet } from 'svelte/reactivity';
-	import { loadModels } from '$lib/data/service';
 	import { safeIdle } from '$lib/idle';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
@@ -27,72 +25,58 @@
 		sortIcon,
 		sortModalities
 	} from '$lib/format';
-	import { decodeSet, encodeSet, getParam, updateUrl } from '$lib/url-state';
+	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
+	import { getParam, updateUrl } from '$lib/url-state';
+	import type { PageData } from './$types';
+	import type { ModelsData } from './+page';
 
-	let ALL_MODELS = $state<ModelMeta[]>([]);
-	let loadingData = $state(true);
+	let { data }: { data: PageData } = $props();
+
+	// Stream the loader's `{ models, languages }` shape. On a direct
+	// (prerendered) visit the promise is already resolved; on client-side
+	// nav `{#if !resolved && !loadError}<Skeleton />` paints first while
+	// the load runs. Stale-promise guard mirrors the other index pages.
+	let resolved = $state<ModelsData | null>(null);
 	let loadError = $state<string | null>(null);
-
-	// Local language filter state. Lives in the page (not the shared
-	// `filters` store) because /models is the only place that uses it.
-	// Same "all on = filter off" semantic as the shared store:
-	// `languagesPicked.size === LANGUAGES.length` ⇒ no narrowing.
-	// The UI (search input, cap-and-expand, pills) is rendered inside
-	// the shared FilterSidebar — we just pass the data and handlers in.
-	let LANGUAGES = $state<string[]>([]);
-	const languagesPicked = new SvelteSet<string>();
-	// Flipped to `true` once the loadModels `.then()` handler has populated
-	// LANGUAGES and seeded `languagesPicked` from the URL (or full universe).
-	// The langs URL-write effect below gates on this so it doesn't fire
-	// during the window where `urlHydrated` is true but LANGUAGES is still
-	// empty — without the gate it would write `langs: null` and nuke any
-	// real `?langs=` deep-link param before the seed reads it.
-	let languagesSeeded = $state(false);
-
-	// Load the full model registry once on mount — the modality filter is
-	// applied locally in `buildPasses()` below, so a modality-picker toggle
-	// just re-runs the in-memory filter (no network roundtrip). The page
-	// loader pre-warms `loadModels({})` so this resolves synchronously from
-	// `cachedHttp` on first paint.
 	$effect(() => {
-		loadingData = true;
+		const p = data.models;
 		loadError = null;
-		loadModels({})
-			.then((m) => {
-				ALL_MODELS = m;
-				// Compute available languages from the loaded models.
-				// `ModelMeta.languages` may be missing (older backends, models
-				// with no declared language scope) — those rows pass the
-				// filter trivially via the "everything checked" default.
-				// Count per language so the filter pills sort by popularity.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langCount = new Map<string, number>();
-				for (const x of m)
-					for (const l of x.languages ?? []) langCount.set(l, (langCount.get(l) ?? 0) + 1);
-				LANGUAGES = [...langCount.entries()]
-					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-					.map(([l]) => l);
-				// Restore explicit `?langs=…` picks from the URL on first
-				// seed; otherwise default to the full universe so
-				// "all on = filter off" applies. Subsequent re-fetches
-				// (none currently — modality narrows locally) would
-				// clobber user picks, which is why this is gated on
-				// `loadingData` being the initial pre-data state.
-				languagesPicked.clear();
-				const urlLangs = getParam('langs');
-				if (urlLangs !== null) {
-					const present = new Set(LANGUAGES);
-					for (const v of decodeSet(urlLangs)) if (present.has(v)) languagesPicked.add(v);
-				} else {
-					for (const l of LANGUAGES) languagesPicked.add(l);
-				}
-				languagesSeeded = true;
-				loadingData = false;
-			})
-			.catch((e) => {
-				loadError = e instanceof Error ? e.message : String(e);
-				loadingData = false;
-			});
+		p.then((r) => {
+			if (data.models === p) resolved = r;
+		}).catch((e) => {
+			if (data.models === p) loadError = e instanceof Error ? e.message : String(e);
+		});
+	});
+
+	let ALL_MODELS = $derived<ModelMeta[]>(resolved?.models ?? []);
+
+	// Languages declared by at least one model, derived from the loader's
+	// `{ models, languages }` shape. Lives on the page (not the shared
+	// `filters` store) because /models is the only place that uses this
+	// per-page language pill list. The UI (search input, cap-and-expand,
+	// pills) is rendered inside the shared FilterSidebar — we just pass
+	// the data and handlers in.
+	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
+	// Uses the same `createFacetFilter` factory as the /benchmarks and
+	// /tasks catalogue facets. Only one facet here (just languages); the
+	// page's other filters all live on the shared `filters` store and
+	// roundtrip through its own `sync()` / `hydrateFromUrl()` machinery.
+	const languageFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipKey: 'langs',
+		chipLabel: 'Lang',
+		universe: () => LANGUAGES
+	});
+	const languagesPicked = languageFacet.picked;
+	// `$state` (not a plain `let`) so the URL-write effect below sees
+	// the flag flip and re-runs to register `languagesPicked` as a
+	// dependency. Without it the write effect stays bailed at the gate
+	// on every toggle.
+	let languagesSeeded = $state(false);
+	$effect(() => {
+		if (!resolved || languagesSeeded) return;
+		languagesSeeded = true;
+		languageFacet.seed();
 	});
 
 	const SORTS = [
@@ -170,15 +154,14 @@
 	// the default visit stays a clean URL.
 	$effect(() => {
 		// `languagesSeeded` gate ensures we don't run between
-		// `urlHydrated = true` (onMount) and the loadModels `.then()`
-		// populating LANGUAGES + seeding picks. Without it, the effect
-		// would see LANGUAGES.length === 0, treat the facet as "off",
-		// and delete a real `?langs=` deep-link param before the seed
-		// could read it. Same pattern as `filtersSeeded` on /benchmarks
-		// and /tasks.
+		// `urlHydrated = true` (onMount) and the loader's `.then()`
+		// populating LANGUAGES + seeding picks. Without it the effect
+		// would see an empty universe, treat the facet as "off", and
+		// delete a real `?langs=` deep-link param before the seed could
+		// read it. Same pattern as `filtersSeeded` on /benchmarks and
+		// /tasks.
 		if (!urlHydrated || !languagesSeeded) return;
-		const off = languagesPicked.size === LANGUAGES.length;
-		updateUrl({ langs: off ? null : encodeSet(languagesPicked) });
+		updateUrl({ langs: languageFacet.urlValue() });
 	});
 
 	// Client-only URL → state sync. Runs after the prerendered HTML has
@@ -291,7 +274,7 @@
 	}
 	function toggleAllLanguages() {
 		if (languagesPicked.size === LANGUAGES.length) languagesPicked.clear();
-		else for (const l of LANGUAGES) languagesPicked.add(l);
+		else languageFacet.reset();
 	}
 
 	// Split filter / sort so name-query keystrokes (which only narrow rows)
@@ -416,7 +399,7 @@
 			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
 		</div>
 
-		{#if loadingData}
+		{#if !resolved && !loadError}
 			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load models: {loadError}</p>
@@ -496,10 +479,7 @@
 		languagesPicked={languagesPicked as unknown as Set<string>}
 		onToggleLanguage={toggleLanguage}
 		onToggleAllLanguages={toggleAllLanguages}
-		onResetLanguages={() => {
-			languagesPicked.clear();
-			for (const l of LANGUAGES) languagesPicked.add(l);
-		}}
+		onResetLanguages={() => languageFacet.reset()}
 	/>
 </div>
 

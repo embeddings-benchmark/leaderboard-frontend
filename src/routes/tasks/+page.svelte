@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { safeIdle } from '$lib/idle';
 	import ActiveFilterStrip, { type Chip } from '$lib/components/ActiveFilterStrip.svelte';
 	import FilterFacet from '$lib/components/FilterFacet.svelte';
@@ -16,7 +15,8 @@
 	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
 	import type { SortState } from '$lib/stores/sort.svelte';
 	import { ariaSort, COLLATOR, sortIcon } from '$lib/format';
-	import { decodeSet, encodeSet, getParam, updateUrl } from '$lib/url-state';
+	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
+	import { getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { PageData } from './$types';
 	import type { TasksData } from './+page';
@@ -77,15 +77,39 @@
 	};
 
 	let query = $state('');
-	// Filter sets start empty and are seeded with the full universe once the
-	// loader promise resolves — `size === universe.length` is the "no filter
-	// applied" signal (see "all on = filter off" in CLAUDE.md). The seed
-	// runs once on first resolution; subsequent reseeds would clobber the
-	// user's picks.
-	const typeFilter = new SvelteSet<string>();
-	const modalityFilter = new SvelteSet<string>();
-	const domainFilter = new SvelteSet<string>();
-	const languageFilter = new SvelteSet<string>();
+	// Per-facet pick set + URL roundtrip + chip generation factored into
+	// `createFacetFilter`. See the matching block on /benchmarks for the
+	// full pattern; the page still owns the `filtersSeeded` gate, the
+	// URL-write effect, and the chip-aggregation derived.
+	const typeFacet = createFacetFilter({
+		urlParam: 'types',
+		chipKey: 'types',
+		chipLabel: 'Type',
+		universe: () => SIMPLIFIED_PRESENT
+	});
+	const modalityFacet = createFacetFilter({
+		urlParam: 'mods',
+		chipKey: 'mods',
+		chipLabel: 'Modality',
+		universe: () => MODALITIES
+	});
+	const domainFacet = createFacetFilter({
+		urlParam: 'doms',
+		chipKey: 'doms',
+		chipLabel: 'Domain',
+		universe: () => DOMAINS
+	});
+	const languageFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipKey: 'langs',
+		chipLabel: 'Lang',
+		universe: () => LANGUAGES
+	});
+	const FACETS = [typeFacet, modalityFacet, domainFacet, languageFacet];
+	const typeFilter = typeFacet.picked;
+	const modalityFilter = modalityFacet.picked;
+	const domainFilter = domainFacet.picked;
+	const languageFilter = languageFacet.picked;
 	// `$state` (not a plain `let`) so the URL-write effect below sees
 	// `filtersSeeded` flip from false → true and re-runs to register the
 	// SvelteSets as dependencies. Without reactivity here the write effect
@@ -94,21 +118,7 @@
 	$effect(() => {
 		if (!resolved || filtersSeeded) return;
 		filtersSeeded = true;
-		// Restore explicit picks from the URL when present; otherwise seed
-		// with the full universe so "all on = filter off" stays the default.
-		const seed = (set: SvelteSet<string>, universe: readonly string[], param: string) => {
-			const raw = getParam(param);
-			if (raw !== null) {
-				const present = new Set(universe);
-				for (const v of decodeSet(raw)) if (present.has(v)) set.add(v);
-			} else {
-				for (const v of universe) set.add(v);
-			}
-		};
-		seed(typeFilter, resolved.simplifiedPresent, 'types');
-		seed(modalityFilter, resolved.modalities, 'mods');
-		seed(domainFilter, resolved.domains, 'doms');
-		seed(languageFilter, resolved.languages, 'langs');
+		for (const f of FACETS) f.seed();
 	});
 
 	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
@@ -146,17 +156,17 @@
 		updateUrl({ view: view === 'cards' ? null : view });
 	});
 
-	// Filter sets → URL. Each set is omitted from the URL when it equals
-	// the full universe (the "all on = filter off" default) so a clean
-	// catalog visit stays a clean URL. Reads `.size` and the universe
-	// lengths reactively so toggles flow through.
+	// Filter sets → URL. Each facet's `urlValue()` returns `null` when
+	// "off" (full universe) so `updateUrl` deletes the param, otherwise
+	// the encoded list (or `''` for an empty pick set — the user's
+	// "deselect everything" gesture preserved as `?key=`).
 	$effect(() => {
 		if (!urlHydrated || !filtersSeeded) return;
 		updateUrl({
-			types: typeFilter.size === SIMPLIFIED_PRESENT.length ? null : encodeSet(typeFilter),
-			mods: modalityFilter.size === MODALITIES.length ? null : encodeSet(modalityFilter),
-			doms: domainFilter.size === DOMAINS.length ? null : encodeSet(domainFilter),
-			langs: languageFilter.size === LANGUAGES.length ? null : encodeSet(languageFilter)
+			types: typeFacet.urlValue(),
+			mods: modalityFacet.urlValue(),
+			doms: domainFacet.urlValue(),
+			langs: languageFacet.urlValue()
 		});
 	});
 
@@ -211,19 +221,19 @@
 	}
 	function toggleAllTypes() {
 		if (typeFilter.size === SIMPLIFIED_PRESENT.length) typeFilter.clear();
-		else for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
+		else typeFacet.reset();
 	}
 	function toggleAllDomains() {
 		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
-		else for (const v of DOMAINS) domainFilter.add(v);
+		else domainFacet.reset();
 	}
 	function toggleAllModalities() {
 		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
-		else for (const v of MODALITIES) modalityFilter.add(v);
+		else modalityFacet.reset();
 	}
 	function toggleAllLanguages() {
 		if (languageFilter.size === LANGUAGES.length) languageFilter.clear();
-		else for (const v of LANGUAGES) languageFilter.add(v);
+		else languageFacet.reset();
 	}
 	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
@@ -233,45 +243,9 @@
 	let chips = $derived.by<Chip[]>(() => {
 		const list: Chip[] = [];
 		if (filtersSeeded) {
-			if (!allTypes) {
-				list.push({
-					key: 'types',
-					label: `Type · ${typeFilter.size}/${SIMPLIFIED_PRESENT.length}`,
-					clear: () => {
-						typeFilter.clear();
-						for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
-					}
-				});
-			}
-			if (!allModalities) {
-				list.push({
-					key: 'mods',
-					label: `Modality · ${modalityFilter.size}/${MODALITIES.length}`,
-					clear: () => {
-						modalityFilter.clear();
-						for (const v of MODALITIES) modalityFilter.add(v);
-					}
-				});
-			}
-			if (!allDomains) {
-				list.push({
-					key: 'doms',
-					label: `Domain · ${domainFilter.size}/${DOMAINS.length}`,
-					clear: () => {
-						domainFilter.clear();
-						for (const v of DOMAINS) domainFilter.add(v);
-					}
-				});
-			}
-			if (!allLanguages) {
-				list.push({
-					key: 'langs',
-					label: `Lang · ${languageFilter.size}/${LANGUAGES.length}`,
-					clear: () => {
-						languageFilter.clear();
-						for (const v of LANGUAGES) languageFilter.add(v);
-					}
-				});
+			for (const f of FACETS) {
+				const c = f.chip();
+				if (c) list.push(c);
 			}
 		}
 		if (query.trim()) {
@@ -284,14 +258,7 @@
 		return list;
 	});
 	function resetAll() {
-		typeFilter.clear();
-		for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
-		modalityFilter.clear();
-		for (const v of MODALITIES) modalityFilter.add(v);
-		domainFilter.clear();
-		for (const v of DOMAINS) domainFilter.add(v);
-		languageFilter.clear();
-		for (const v of LANGUAGES) languageFilter.add(v);
+		for (const f of FACETS) f.reset();
 		query = '';
 	}
 

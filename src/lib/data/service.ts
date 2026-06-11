@@ -154,17 +154,24 @@ export async function loadBenchmarkMenu(fetchFn?: FetchFn): Promise<MenuEntry[]>
 	return cachedHttp<MenuEntry[]>('/benchmarks/menu', fetchFn);
 }
 
-/** Flat list of every benchmark. `includeHidden=true` also returns
- *  off-menu benchmarks (`display_on_leaderboard=False`) so the
- *  /benchmarks catalogue can render them with the "newer version
- *  available" hint. */
-export async function loadBenchmarks(
-	includeHidden = false,
-	fetchFn?: FetchFn
-): Promise<Benchmark[]> {
+/** Flat list of every benchmark — including off-menu (`display_on_leaderboard=False`)
+ *  entries so the /benchmarks catalogue can render them with the
+ *  "newer version available" hint. The backend's `/benchmarks` returns
+ *  the full set unconditionally now; there used to be an
+ *  `?include_hidden=true` toggle, but the visible-only variant has no
+ *  remaining consumer. */
+export async function loadBenchmarks(fetchFn?: FetchFn): Promise<Benchmark[]> {
 	if (!API) throw noApiError('loadBenchmarks');
-	const qs = includeHidden ? '?include_hidden=true' : '';
-	return cachedHttp<Benchmark[]>(`/benchmarks${qs}`, fetchFn);
+	const out = await cachedHttp<Benchmark[]>(`/benchmarks`, fetchFn);
+	// The bulk `/benchmarks` endpoint returns the same per-benchmark
+	// shape as `/benchmarks/{name}`, so prime each entry's per-name
+	// cache slot. The benchmark-detail prerender (`+page.ts` entries
+	// generator) already pays for this bulk fetch to enumerate routes;
+	// without priming, each per-route `load()` would re-fetch the same
+	// data from the per-name endpoint — turning a cold prerender into
+	// 1 + N network calls. Priming collapses that to 1.
+	for (const b of out) cacheTouch(`/benchmarks/${encodeURIComponent(b.name)}`, b);
+	return out;
 }
 
 export async function loadBenchmark(name: string, fetchFn?: FetchFn): Promise<Benchmark> {

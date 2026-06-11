@@ -14,11 +14,12 @@
 
 	// Prefetched on hover via `data-sveltekit-preload-data` — seed
 	// `cachedHttp` so the leaderboard store's `loadBenchmark(name)` call
-	// (in the $effect further down) resolves sync instead of going to the
-	// network. Declared before the leaderboard.select effect so it runs
-	// first in source order — both on first mount and on param-change
-	// reuse of the same component instance.
-	$effect(() => {
+	// resolves sync instead of going to the network. Uses `$effect.pre`
+	// (not regular `$effect`) so it ALWAYS runs before the leaderboard
+	// store's load effect, independent of source order. With a plain
+	// `$effect` a future refactor that moved either declaration could
+	// silently let the store's network fetch win the race.
+	$effect.pre(() => {
 		if (data.benchmark) primeBenchmarkCache(data.benchmark.name, data.benchmark);
 	});
 

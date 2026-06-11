@@ -51,12 +51,10 @@ export function updateUrl(updates: Record<string, string | null | undefined>): v
 		const existing = url.searchParams.get(k);
 		// `null` / `undefined` = "delete the param".
 		// Empty string `''` is preserved as `?k=` — distinct from "no param".
-		// Filter-set encoders use this so an empty pick set
-		// (`?mods=`) round-trips through a deep link as "user deselected
-		// everything", separate from "no narrowing applied" (no param).
-		// The filter *logic* still treats an empty pick set as "no
-		// narrowing" (so the page isn't blanked); the URL just records
-		// the user's actual checkbox state.
+		// Filter-set encoders use this so an empty pick set (`?mods=`)
+		// round-trips through a deep link as "user deselected everything"
+		// — a deliberate "exclude everything" gesture — versus "no
+		// narrowing applied" (no param) which seeds with the full universe.
 		if (v == null) {
 			if (existing !== null) {
 				url.searchParams.delete(k);

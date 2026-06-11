@@ -40,9 +40,15 @@ const SIZE_BUCKETS: ReadonlyArray<readonly [number, number | null]> = [
 	[5000, null]
 ];
 
+// Tagged result instead of a string sentinel — matches the `ScoresResult`
+// shape used by /tasks/[name] and /models/[...name]. Downstream code
+// branches on the `error` key rather than comparing against the literal
+// `'error'`.
+export type LeadersResult = BenchmarkLeaders | { error: string };
+
 export interface ResolvedPrimary extends Primary {
 	b: Benchmark;
-	leaders: BenchmarkLeaders | 'error';
+	leaders: LeadersResult;
 }
 
 export const load: PageLoad = ({ fetch }) => {
@@ -69,7 +75,9 @@ export const load: PageLoad = ({ fetch }) => {
 			found.map(
 				async (p): Promise<ResolvedPrimary> => ({
 					...p,
-					leaders: await loadLeaders(p.b.name, SIZE_BUCKETS, fetch).catch(() => 'error' as const)
+					leaders: await loadLeaders(p.b.name, SIZE_BUCKETS, fetch).catch(
+						(e): LeadersResult => ({ error: e instanceof Error ? e.message : String(e) })
+					)
 				})
 			)
 		);

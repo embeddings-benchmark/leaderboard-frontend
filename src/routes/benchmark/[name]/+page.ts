@@ -11,7 +11,7 @@ import type { Benchmark } from '$lib/types';
 export const prerender = true;
 
 export const entries: EntryGenerator = async () => {
-	const benches = await loadBenchmarks(true);
+	const benches = await loadBenchmarks();
 	return benches.map((b) => ({ name: b.name }));
 };
 
