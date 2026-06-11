@@ -489,20 +489,15 @@ function createFilters() {
 export const filters = createFilters();
 
 function isFullSet(selected: Set<string>, available: string[]): boolean {
-	// "Full" = every currently-visible item is picked, so no narrowing
-	// is being applied. We deliberately do NOT treat selected=empty as
-	// "no filter": when the user clears every chip in a category they
-	// want to see nothing match (an explicit "exclude everything" gesture).
-	//
-	// HOWEVER, when there's nothing to filter in the first place
-	// (`available` is empty — e.g. RTEB exposes taskTypes=[]), there are
-	// no chips, no narrowing is possible, and returning false here would
-	// flip `fullView` off and cause `applyFilters` to drop every task
-	// (the .has(...) check on the empty selected set is always false →
-	// `!fullTypes && !filters.taskTypes.has(...) → return false`). Treat
-	// "no facet" as "no narrowing" so the data passes through.
+	// "Full" = no narrowing is being applied. Two cases qualify:
+	//   1. Empty universe — nothing to filter on. (`taskTypes=[]` on
+	//      benchmarks like RTEB.)
+	//   2. The pick set contains every available item.
+	// An empty pick set is NOT full — it's a deliberate "exclude
+	// everything" gesture; the filter pass drops every row regardless
+	// of how many options the universe holds.
 	if (available.length === 0) return true;
-	//
+	if (selected.size === 0) return false;
 	// Why not the cheaper `selected.size === available.length` shortcut?
 	// After a server-scoped summary refetch (e.g. language filter
 	// trims the task-type list from 9 → 8 by dropping
@@ -511,7 +506,6 @@ function isFullSet(selected: Set<string>, available: string[]): boolean {
 	// contain different elements — the shortcut would falsely report
 	// "no narrowing" and applyFilters would trust the API, leaving the
 	// user's explicitly-deselected column visible.
-	if (selected.size === 0) return false;
 	return available.every((x) => selected.has(x));
 }
 
@@ -607,6 +601,20 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 }
 
 export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
+	// Empty pick set on a facet with any available items = "exclude
+	// everything" (the inverse of "all on = filter off"). The server-
+	// driven language facet doesn't naturally express this — the backend
+	// treats an empty `?languages=` as "no filter applied" — so enforce
+	// the drop client-side here.
+	if (filters.availableLanguages.length > 0 && filters.languages.size === 0) {
+		return {
+			...summary,
+			rows: [],
+			tasks: [],
+			tasksMeta: [],
+			taskTypes: []
+		};
+	}
 	// Visible tasks: pass type / domain / modality / explicit task selection.
 	// Language is intentionally NOT in this list — the backend already
 	// returns a language-scoped summary (via `?languages=` on /scores),
@@ -618,6 +626,21 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
 	const narrow = narrowTasks(summary, lenient);
 	const { fullView, visibleTasks, taskTypesOut, taskNamesOut, tasksByType, perRowAgg } = narrow;
+
+	// When every task has been filtered out (e.g. user deselected every
+	// item in a multi-option facet, or all picks intersected to nothing),
+	// drop the model rows too. Otherwise the table keeps rendering model
+	// names with all-`—` aggregates, which reads as "results still shown"
+	// even though the explicit narrowing should have produced none.
+	if (!fullView && visibleTasks.length === 0) {
+		return {
+			...summary,
+			rows: [],
+			tasks: [],
+			tasksMeta: [],
+			taskTypes: []
+		};
+	}
 
 	const q = filters.nameQuery.trim().toLowerCase();
 	// "Did the user pick something that narrows the row set, other than

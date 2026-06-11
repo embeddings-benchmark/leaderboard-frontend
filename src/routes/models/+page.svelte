@@ -41,6 +41,13 @@
 	// the shared FilterSidebar — we just pass the data and handlers in.
 	let LANGUAGES = $state<string[]>([]);
 	const languagesPicked = new SvelteSet<string>();
+	// Flipped to `true` once the loadModels `.then()` handler has populated
+	// LANGUAGES and seeded `languagesPicked` from the URL (or full universe).
+	// The langs URL-write effect below gates on this so it doesn't fire
+	// during the window where `urlHydrated` is true but LANGUAGES is still
+	// empty — without the gate it would write `langs: null` and nuke any
+	// real `?langs=` deep-link param before the seed reads it.
+	let languagesSeeded = $state(false);
 
 	// Load the full model registry once on mount — the modality filter is
 	// applied locally in `buildPasses()` below, so a modality-picker toggle
@@ -79,6 +86,7 @@
 				} else {
 					for (const l of LANGUAGES) languagesPicked.add(l);
 				}
+				languagesSeeded = true;
 				loadingData = false;
 			})
 			.catch((e) => {
@@ -161,8 +169,15 @@
 	// owns the param. Omitted when the picks equal the full universe so
 	// the default visit stays a clean URL.
 	$effect(() => {
-		if (!urlHydrated) return;
-		const off = LANGUAGES.length === 0 || languagesPicked.size === LANGUAGES.length;
+		// `languagesSeeded` gate ensures we don't run between
+		// `urlHydrated = true` (onMount) and the loadModels `.then()`
+		// populating LANGUAGES + seeding picks. Without it, the effect
+		// would see LANGUAGES.length === 0, treat the facet as "off",
+		// and delete a real `?langs=` deep-link param before the seed
+		// could read it. Same pattern as `filtersSeeded` on /benchmarks
+		// and /tasks.
+		if (!urlHydrated || !languagesSeeded) return;
+		const off = languagesPicked.size === LANGUAGES.length;
 		updateUrl({ langs: off ? null : encodeSet(languagesPicked) });
 	});
 

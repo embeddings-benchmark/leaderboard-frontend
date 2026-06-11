@@ -101,7 +101,11 @@
 	};
 
 	$effect(() => {
-		if (!urlHydrated) return;
+		// `filtersSeeded` gate is critical for the deep-link case: between
+		// `urlHydrated = true` (onMount) and the seed effect firing, the
+		// SvelteSets are still empty. Writing the URL here would clear the
+		// real `?mods` / `?doms` / etc. params before the seed reads them.
+		if (!urlHydrated || !filtersSeeded) return;
 		// Each filter set is omitted from the URL when it equals the full
 		// universe (the "all on = filter off" default), so a fresh visit
 		// stays a clean URL. Re-read filtered sizes — derived sources track

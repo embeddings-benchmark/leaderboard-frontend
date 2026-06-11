@@ -49,7 +49,15 @@ export function updateUrl(updates: Record<string, string | null | undefined>): v
 	let changed = false;
 	for (const [k, v] of Object.entries(updates)) {
 		const existing = url.searchParams.get(k);
-		if (v == null || v === '') {
+		// `null` / `undefined` = "delete the param".
+		// Empty string `''` is preserved as `?k=` — distinct from "no param".
+		// Filter-set encoders use this so an empty pick set
+		// (`?mods=`) round-trips through a deep link as "user deselected
+		// everything", separate from "no narrowing applied" (no param).
+		// The filter *logic* still treats an empty pick set as "no
+		// narrowing" (so the page isn't blanked); the URL just records
+		// the user's actual checkbox state.
+		if (v == null) {
 			if (existing !== null) {
 				url.searchParams.delete(k);
 				changed = true;
@@ -73,8 +81,19 @@ export function updateUrl(updates: Record<string, string | null | undefined>): v
 	}
 }
 
-/** Encode a set of names into a comma-joined param (URL-safe components). */
-export function encodeSet(values: Iterable<string>): string | null {
+/**
+ * Encode a set of names into a comma-joined param (URL-safe components).
+ *
+ * Returns `''` (empty string) for an empty input — paired with
+ * `updateUrl`'s empty-string handling, this serialises an empty pick
+ * set as `?key=` (param present, value empty). Distinct from "no param
+ * at all" — the empty-value form preserves the user's deselect-all
+ * gesture across a deep link. The filter *logic* (see `isFullSet` in
+ * `filters.svelte.ts`) treats both states as "no narrowing applied"
+ * so the page isn't blanked, but the URL keeps the checkbox state
+ * faithful.
+ */
+export function encodeSet(values: Iterable<string>): string {
 	// Single-pass build instead of [...values].filter().map().join() (3 allocs).
 	let out = '';
 	for (const v of values) {
@@ -82,7 +101,7 @@ export function encodeSet(values: Iterable<string>): string | null {
 		if (out) out += ',';
 		out += encodeURIComponent(v);
 	}
-	return out || null;
+	return out;
 }
 
 /** Inverse of ``encodeSet`` — returns ``[]`` for missing / empty values. */

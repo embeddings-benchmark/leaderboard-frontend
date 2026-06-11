@@ -152,14 +152,18 @@ const HUME_V1 = makeBenchmark({
 
 const MIEB_MULTILINGUAL = makeBenchmark({
 	name: 'MIEB(Multilingual)',
-	description: 'Multilingual Image Embedding Benchmark.'
+	description: 'Multilingual Image Embedding Benchmark.',
+	modalities: ['image']
 });
-const MIEB_ENG = makeBenchmark({ name: 'MIEB(eng)' });
-const MIEB_LITE = makeBenchmark({ name: 'MIEB(lite)' });
-const MIEB_IMG = makeBenchmark({ name: 'MIEB(Img)' });
+const MIEB_ENG = makeBenchmark({ name: 'MIEB(eng)', modalities: ['image'] });
+const MIEB_LITE = makeBenchmark({ name: 'MIEB(lite)', modalities: ['image'] });
+const MIEB_IMG = makeBenchmark({ name: 'MIEB(Img)', modalities: ['image'] });
 
-const MAEB_BETA = makeBenchmark({ name: 'MAEB(beta)' });
-const MAEB_AUDIO_ONLY = makeBenchmark({ name: 'MAEB(beta, audio-only)' });
+const MAEB_BETA = makeBenchmark({ name: 'MAEB(beta)', modalities: ['audio'] });
+const MAEB_AUDIO_ONLY = makeBenchmark({
+	name: 'MAEB(beta, audio-only)',
+	modalities: ['audio']
+});
 
 const MTEB_CODE = makeBenchmark({ name: 'MTEB(Code, v1)' });
 const MTEB_LAW = makeBenchmark({ name: 'MTEB(Law, v1)' });
