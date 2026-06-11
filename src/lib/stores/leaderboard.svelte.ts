@@ -4,8 +4,6 @@ import { DEFAULT_BENCHMARK_NAME } from '$lib/data/defaults';
 
 interface LeaderboardState {
 	selected: string;
-	benchmark: Benchmark | null;
-	summary: BenchmarkSummary | null;
 	loading: boolean;
 	// True while a language-scoped summary refetch is queued or in
 	// flight. Distinct from `loading` (which only flips for the initial
@@ -18,12 +16,16 @@ interface LeaderboardState {
 function createLeaderboardStore() {
 	const state = $state<LeaderboardState>({
 		selected: DEFAULT_BENCHMARK_NAME,
-		benchmark: null,
-		summary: null,
 		loading: false,
 		refetching: false,
 		error: null
 	});
+	// Heavy API payloads — reassigned wholesale (never deep-mutated after
+	// service-layer enrichSummary), so deep $state proxying would walk every
+	// row + scoresByTask map for nothing. $state.raw keeps the reassignment
+	// reactive at the field level while leaving the payload itself untouched.
+	let benchmark = $state.raw<Benchmark | null>(null);
+	let summary = $state.raw<BenchmarkSummary | null>(null);
 
 	let inflight = 0;
 	// Language-scoped refetch tracker: `(benchmark, sorted-langs)` key so
@@ -49,10 +51,10 @@ function createLeaderboardStore() {
 		state.loading = true;
 		state.error = null;
 		try {
-			const [benchmark, summary] = await Promise.all([loadBenchmark(name), loadSummary(name)]);
+			const [b, s] = await Promise.all([loadBenchmark(name), loadSummary(name)]);
 			if (id !== inflight) return;
-			state.benchmark = benchmark;
-			state.summary = summary;
+			benchmark = b;
+			summary = s;
 		} catch (e) {
 			if (id !== inflight) return;
 			state.error = e instanceof Error ? e.message : String(e);
@@ -96,9 +98,9 @@ function createLeaderboardStore() {
 		langKey = key;
 		const id = ++langInflight;
 		try {
-			const summary = await loadSummary(name, lang.length ? lang : undefined);
+			const s = await loadSummary(name, lang.length ? lang : undefined);
 			if (id !== langInflight || state.selected !== name) return;
-			state.summary = summary;
+			summary = s;
 		} catch (e) {
 			if (id !== langInflight) return;
 			state.error = e instanceof Error ? e.message : String(e);
@@ -112,10 +114,10 @@ function createLeaderboardStore() {
 			return state.selected;
 		},
 		get benchmark() {
-			return state.benchmark;
+			return benchmark;
 		},
 		get summary() {
-			return state.summary;
+			return summary;
 		},
 		get loading() {
 			return state.loading;

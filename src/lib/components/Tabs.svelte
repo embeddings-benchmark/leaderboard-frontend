@@ -5,22 +5,47 @@
 		onSelect: (id: T) => void;
 	}
 	let { tabs, active, onSelect }: Props = $props();
+
+	let visibleTabs = $derived(tabs.filter((t) => t.visible !== false));
+	// Roving tabindex: only the active tab is in the tab sequence (0), the
+	// others are reachable via Arrow keys (tabindex=-1). Matches the WAI-ARIA
+	// APG tablist pattern.
+	let buttons: HTMLButtonElement[] = $state([]);
+
+	function onKeyDown(e: KeyboardEvent) {
+		const i = visibleTabs.findIndex((t) => t.id === active);
+		if (i === -1) return;
+		const n = visibleTabs.length;
+		let next = -1;
+		if (e.key === 'ArrowLeft') next = (i - 1 + n) % n;
+		else if (e.key === 'ArrowRight') next = (i + 1) % n;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = n - 1;
+		else return;
+		e.preventDefault();
+		onSelect(visibleTabs[next].id);
+		// Wait for the re-render that flips the active tab so the focus
+		// lands on the same DOM node we just selected.
+		queueMicrotask(() => buttons[next]?.focus());
+	}
 </script>
 
-<div class="tabs" role="tablist">
-	{#each tabs as tab (tab.id)}
-		{#if tab.visible !== false}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={active === tab.id}
-				class="tab"
-				class:active={active === tab.id}
-				onclick={() => onSelect(tab.id)}
-			>
-				{tab.label}
-			</button>
-		{/if}
+<!-- tabindex=-1 satisfies Svelte's a11y check for keydown-bearing role=tablist;
+     real focus lives on the buttons via roving tabindex. -->
+<div class="tabs" role="tablist" tabindex="-1" onkeydown={onKeyDown}>
+	{#each visibleTabs as tab, i (tab.id)}
+		<button
+			bind:this={buttons[i]}
+			type="button"
+			role="tab"
+			aria-selected={active === tab.id}
+			tabindex={active === tab.id ? 0 : -1}
+			class="tab"
+			class:active={active === tab.id}
+			onclick={() => onSelect(tab.id)}
+		>
+			{tab.label}
+		</button>
 	{/each}
 </div>
 

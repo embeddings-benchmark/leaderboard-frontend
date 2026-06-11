@@ -1,8 +1,6 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
-	import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
 	import { safeIdle } from '$lib/idle';
-	import { flattenMenu } from '$lib/types';
 	import FilterFacet from '$lib/components/FilterFacet.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
@@ -18,25 +16,10 @@
 	import { ariaSort, COLLATOR, sortIcon } from '$lib/format';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import type { PageData } from './$types';
+	import type { TasksData } from './+page';
 
-	interface TaskEntry {
-		name: string;
-		// Lowercased name cached at load — the name-search keystroke filter
-		// runs 1700x per recompute, so a per-entry `.toLowerCase()` would
-		// allocate 1700 strings per stroke. Memoised once here.
-		nameLower: string;
-		type: string;
-		simplifiedType: string;
-		languages: string[];
-		domains: string[];
-		modalities: string[];
-		description: string;
-		benchmarks: string[];
-		mainScore: string;
-		// Distinct models evaluated on this task — backend overlay from the
-		// unified results frame. `0` for tasks the cache hasn't filled in.
-		numModels: number;
-	}
+	let { data }: { data: PageData } = $props();
 
 	// Curated order — matches the `.type-pill[data-stype=…]` palette below.
 	const SIMPLIFIED_TYPES = [
@@ -47,97 +30,30 @@
 		'semantic-similarity'
 	] as const;
 
-	let ALL_TASKS = $state<TaskEntry[]>([]);
-	let SIMPLIFIED_PRESENT = $state<string[]>([]);
-	let MODALITIES = $state<string[]>([]);
-	let DOMAINS = $state<string[]>([]);
-	let LANGUAGES = $state<string[]>([]);
-	let loadingData = $state(true);
+	// Loader streams the derived data so the page can paint a skeleton on
+	// client-side nav (direct/prerendered visits hydrate with `data.tasks`
+	// already resolved). Sync the resolved value into a local state slot,
+	// guarding against stale promises if the route re-navigates mid-flight.
+	let resolved = $state<TasksData | null>(null);
 	let loadError = $state<string | null>(null);
-
 	$effect(() => {
-		(async () => {
-			try {
-				// /tasks returns the full task registry; we cross-reference the menu
-				// to know which benchmarks each task appears in.
-				const [menu, tasks] = await Promise.all([loadBenchmarkMenu(), loadTasks()]);
-				const allBenches = flattenMenu(menu);
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const occurrences = new Map<string, string[]>();
-				for (const b of allBenches) {
-					for (const t of b.tasks) {
-						const list = occurrences.get(t) ?? [];
-						list.push(b.name);
-						occurrences.set(t, list);
-					}
-				}
-				// Build entries + extract every facet in one pass over the
-				// 1700+ task registry. The original code ran four separate
-				// `flatMap()` passes (one per facet), each allocating a fresh
-				// intermediate array; this fuses them into a single walk.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const modSet = new Set<string>();
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const domSet = new Set<string>();
-				// Count per language so the filter pills sort by popularity.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langCount = new Map<string, number>();
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const presentSet = new Set<string>();
-				const entries: TaskEntry[] = new Array(tasks.length);
-				for (let i = 0; i < tasks.length; i++) {
-					const m = tasks[i];
-					const simplifiedType = m.simplifiedType ?? m.type?.toLowerCase() ?? '';
-					const modalities =
-						m.modalities ??
-						((m as unknown as { modality?: string }).modality
-							? [(m as unknown as { modality: string }).modality]
-							: []);
-					const languages = m.languages ?? [];
-					const domains = m.domains ?? [];
-					entries[i] = {
-						name: m.name,
-						nameLower: m.name.toLowerCase(),
-						type: m.type,
-						simplifiedType,
-						languages,
-						domains,
-						modalities,
-						description: m.description ?? '',
-						benchmarks: occurrences.get(m.name) ?? [],
-						mainScore: m.mainScore ?? '',
-						numModels: m.numModels ?? 0
-					};
-					presentSet.add(simplifiedType);
-					for (const x of modalities) modSet.add(x);
-					for (const x of domains) domSet.add(x);
-					for (const x of languages) langCount.set(x, (langCount.get(x) ?? 0) + 1);
-				}
-				entries.sort((a, b) => COLLATOR.compare(a.name, b.name));
-				ALL_TASKS = entries;
-				// Curated order first, then any extras alphabetised.
-				SIMPLIFIED_PRESENT = [
-					...SIMPLIFIED_TYPES.filter((t) => presentSet.has(t)),
-					...[...presentSet].filter((t) => !SIMPLIFIED_TYPES.includes(t as never)).sort()
-				];
-
-				MODALITIES = [...modSet].sort();
-				DOMAINS = [...domSet].sort();
-				// Descending by usage count, alphabetical tie-break.
-				LANGUAGES = [...langCount.entries()]
-					.sort((a, b) => b[1] - a[1] || COLLATOR.compare(a[0], b[0]))
-					.map(([l]) => l);
-				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
-				for (const v of MODALITIES) modalityFilter.add(v);
-				for (const v of DOMAINS) domainFilter.add(v);
-				for (const v of LANGUAGES) languageFilter.add(v);
-				loadingData = false;
-			} catch (e) {
-				loadError = e instanceof Error ? e.message : String(e);
-				loadingData = false;
-			}
-		})();
+		const p = data.tasks;
+		loadError = null;
+		p.then((r) => {
+			if (data.tasks === p) resolved = r;
+		}).catch((e) => {
+			if (data.tasks === p) loadError = e instanceof Error ? e.message : String(e);
+		});
 	});
+
+	// Safe-empty defaults so downstream `$derived` blocks (sort, filter,
+	// matched, filtered) keep evaluating to empty arrays while the promise
+	// is pending instead of throwing on undefined.
+	let ALL_TASKS = $derived(resolved?.tasks ?? []);
+	let SIMPLIFIED_PRESENT = $derived(resolved?.simplifiedPresent ?? []);
+	let MODALITIES = $derived(resolved?.modalities ?? []);
+	let DOMAINS = $derived(resolved?.domains ?? []);
+	let LANGUAGES = $derived(resolved?.languages ?? []);
 
 	const SORTS = [
 		{ id: 'models', label: 'Model count' },
@@ -159,10 +75,24 @@
 	};
 
 	let query = $state('');
+	// Filter sets start empty and are seeded with the full universe once the
+	// loader promise resolves — `size === universe.length` is the "no filter
+	// applied" signal (see "all on = filter off" in CLAUDE.md). The seed
+	// runs once on first resolution; subsequent reseeds would clobber the
+	// user's picks.
 	const typeFilter = new SvelteSet<string>();
 	const modalityFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 	const languageFilter = new SvelteSet<string>();
+	let filtersSeeded = false;
+	$effect(() => {
+		if (!resolved || filtersSeeded) return;
+		filtersSeeded = true;
+		for (const v of resolved.simplifiedPresent) typeFilter.add(v);
+		for (const v of resolved.modalities) modalityFilter.add(v);
+		for (const v of resolved.domains) domainFilter.add(v);
+		for (const v of resolved.languages) languageFilter.add(v);
+	});
 
 	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
 	// page and back via the browser restores the user's sort choice.
@@ -429,12 +359,12 @@
 				</button>
 			</div>
 			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
-			{#if !loadingData && !loadError}
+			{#if resolved && !loadError}
 				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
 			{/if}
 		</div>
 
-		{#if loadingData}
+		{#if !resolved && !loadError}
 			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load tasks: {loadError}</p>

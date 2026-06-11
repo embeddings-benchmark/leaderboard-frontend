@@ -143,6 +143,21 @@ Don't move the tooltip back inside a `<th>`. If a new table needs the same behav
 - Use `$derived(expr)` for values, `$derived.by(() => { ... })` for blocks. `$derived(() => fn())` is a bug — it stores the function as the value (don't use this form).
 - `let foo = $state(prop)` produces the "captures initial value" warning; wrap with `untrack(() => prop ?? default)` when you really want a one-shot snapshot of a prop into local state. There are multiple examples (`RangeSlider`, `FilterContent`).
 - `$effect`s that batch state writes must not also read those same fields inside the same effect — see the `filters.initFor` note above.
+- **`$state.raw` for large reassigned objects.** Heavy API payloads (`benchmark`, `summary`, `availableTasks`, the `available*` lists in `filters.svelte.ts`) are stored with `$state.raw` because they're replaced wholesale and never deep-mutated. Deep `$state` would walk every row + `scoresByTask` entry for nothing. Rule of thumb: if a field is only ever `field = newValue` (no `field.foo = …`, no `field.push(…)`), it belongs in `$state.raw`. SvelteSets and per-cell scalars stay in deep `$state`.
+- **Treat `$effect` as an escape hatch, not a data fetcher.** Don't write `$effect(() => { someAsync().then((v) => (state = v)) })` or its `untrack`-wrapped cousins to start fetches from a reactive context — that's the pattern the home page used to have, and it's a Svelte anti-pattern (effects are for syncing external systems, not initializing state). Use a `+page.ts` `load` function instead; the data arrives as a `data` prop and the page reads it via `$props()`.
+
+## SvelteKit load / data flow
+
+- **Pre-warmer loads are best-effort.** `models/+page.ts` and `tasks/+page.ts` call `loadModels()` / `loadTasks()` purely to fill the shared `cachedHttp` LRU before the page mounts. They `.catch(() => undefined)` so a backend hiccup doesn't blank the prerendered HTML or block client-side nav — the page does its own fetch on mount and surfaces real errors there.
+- **Stream loader data with `{#await}`.** The home page's `+page.ts` returns `data.menu` and `data.primaries` as **unresolved promises**, not awaited values. At prerender SvelteKit awaits both before writing HTML (so direct visits land with data baked in); on client-side nav the shell renders immediately and `{#await} … {:then} … {:catch}` fills in the content + skeleton + error fallback. If you add a new long-running fetch to a route loader, follow the same shape — don't `await` and block.
+- **`PageLoad` annotations.** Every `export const load` in a `+page.ts` should be typed with `PageLoad` from `./$types`. Entries generators use `EntryGenerator`. These give param/url/data type checking for free.
+- **Service-layer caching is the load fast path.** `cachedHttp` in `service.ts` is keyed by URL with in-flight dedupe; route loaders that just call `loadFoo()` are already cache-coherent. Don't re-cache or duplicate fetches at the loader layer.
+
+## Accessibility patterns to follow
+
+- **`{#each}` keys must be content-derived, not array indices.** Use the row's `name` / `id` / a composite like `${seg.type}:${i}:${seg.text}` (see `MarkdownText.svelte`). Bare `(i)` keys defeat keyed-each surgical updates and break when the source list reorders.
+- **Composite-widget keyboard nav.** `Tabs.svelte` (`role="tablist"`) and `Segmented.svelte` (`role="radiogroup"`) implement the WAI-ARIA APG pattern: roving `tabindex` (the active item is `0`, the rest are `-1`), `keydown` on the wrapper handles Arrow / Home / End, then `queueMicrotask(() => buttons[next]?.focus())` so focus re-lands after the re-render. The wrapper itself carries `tabindex="-1"` to satisfy Svelte's a11y lint for keydown-bearing interactive roles. Any new tabset / segmented control should mirror this pattern.
+- **Icon-only buttons need `aria-label`.** `title` is not reliably announced by screen readers — `SearchInput`'s clear button, sort icons, pin buttons, share/scroll-to-top all carry an explicit `aria-label`. Don't rely on `title` alone.
 
 ## Style / interaction patterns to reuse
 

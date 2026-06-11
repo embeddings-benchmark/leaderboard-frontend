@@ -123,6 +123,17 @@ function enrichTaskScores(s: TaskScores): TaskScores {
 	return s;
 }
 
+// Older / sparser task records ship some array fields as `null`, but the
+// TS type optimistically declares them as `string[]`. Coerce to empty
+// arrays at the boundary so every downstream consumer can call `.length`
+// / `.some()` without a guard.
+function normalizeTaskMeta(t: TaskMeta): TaskMeta {
+	t.languages ??= [];
+	t.domains ??= [];
+	t.modalities ??= [];
+	return t;
+}
+
 function enrichModelScores(s: ModelScores): ModelScores {
 	fillOrgAndDisplay(s.model);
 	return s;
@@ -235,12 +246,16 @@ function buildQuery(params: Record<string, unknown>): string {
 
 export async function loadTasks(filters: TaskFilters = {}): Promise<TaskMeta[]> {
 	if (!API) throw noApiError('loadTasks');
-	return cachedHttp<TaskMeta[]>(`/tasks${buildQuery(filters as Record<string, unknown>)}`);
+	const out = await cachedHttp<TaskMeta[]>(
+		`/tasks${buildQuery(filters as Record<string, unknown>)}`
+	);
+	for (const t of out) normalizeTaskMeta(t);
+	return out;
 }
 
 export async function loadTask(name: string): Promise<TaskMeta> {
 	if (!API) throw noApiError('loadTask');
-	return cachedHttp<TaskMeta>(`/tasks/${encodeURIComponent(name)}`);
+	return normalizeTaskMeta(await cachedHttp<TaskMeta>(`/tasks/${encodeURIComponent(name)}`));
 }
 
 export async function loadTaskScores(name: string): Promise<TaskScores> {

@@ -52,12 +52,6 @@ interface FiltersState {
 	modalities: SvelteSet<string>;
 	languages: SvelteSet<string>;
 	tasks: SvelteSet<string>;
-	// available choices (per benchmark)
-	availableTaskTypes: string[];
-	availableDomains: string[];
-	availableModalities: string[];
-	availableLanguages: string[];
-	availableTasks: TaskMeta[];
 	// Size slider bounds derived from the loaded summary. Fall back to the
 	// global SIZE_MIN_M / SIZE_MAX_M when no benchmark is loaded.
 	availableMinModelSizeM: number;
@@ -81,11 +75,6 @@ function defaultState(): FiltersState {
 		modalities: new SvelteSet(),
 		languages: new SvelteSet(),
 		tasks: new SvelteSet(),
-		availableTaskTypes: [],
-		availableDomains: [],
-		availableModalities: [],
-		availableLanguages: [],
-		availableTasks: [],
 		availableMinModelSizeM: SIZE_MIN_M,
 		availableMaxModelSizeM: SIZE_MAX_M
 	};
@@ -93,6 +82,16 @@ function defaultState(): FiltersState {
 
 function createFilters() {
 	const state = $state<FiltersState>(defaultState());
+	// Per-benchmark available-* lists are reassigned wholesale by `initFor`
+	// (the loop iterating `summary.tasksMeta` builds fresh arrays/sets and
+	// only the top-level reference is stored). $state.raw skips proxying the
+	// underlying array — `availableTasks` is hundreds of TaskMeta entries on
+	// Multilingual, and every cell render reads `.length` or iterates these.
+	let availableTaskTypes = $state.raw<string[]>([]);
+	let availableDomains = $state.raw<string[]>([]);
+	let availableModalities = $state.raw<string[]>([]);
+	let availableLanguages = $state.raw<string[]>([]);
+	let availableTasks = $state.raw<TaskMeta[]>([]);
 	// Track the benchmark whose available-* + picks we've already seeded.
 	// Subsequent `initFor` calls for the SAME benchmark (e.g. a
 	// language-scoped summary refetch) refresh the available-* lists
@@ -153,16 +152,16 @@ function createFilters() {
 		// Single batch of writes; we deliberately never read state.* here, so this
 		// stays a write-only operation when called from inside a $effect — no
 		// implicit subscription, no re-fire loop.
-		state.availableTaskTypes = summary.taskTypes;
-		state.availableTasks = summary.tasksMeta;
-		state.availableDomains = sortedDomains;
-		state.availableModalities = sortedModalities;
+		availableTaskTypes = summary.taskTypes;
+		availableTasks = summary.tasksMeta;
+		availableDomains = sortedDomains;
+		availableModalities = sortedModalities;
 		// Available languages are only reseeded when the benchmark changes;
 		// staying constant across same-benchmark refetches lets the
 		// language-filter `requestSummaryForLanguages` effect track its
 		// own dedupe key correctly.
 		if (isNewBenchmark) {
-			state.availableLanguages = sortedLanguages;
+			availableLanguages = sortedLanguages;
 		}
 		state.availableMinModelSizeM = niceLow;
 		state.availableMaxModelSizeM = niceHigh;
@@ -299,20 +298,13 @@ function createFilters() {
 					state.modelModalities.size === MODEL_MODALITIES.length
 						? null
 						: encodeSet(state.modelModalities),
-				tt:
-					state.taskTypes.size === state.availableTaskTypes.length
-						? null
-						: encodeSet(state.taskTypes),
+				tt: state.taskTypes.size === availableTaskTypes.length ? null : encodeSet(state.taskTypes),
 				lang:
-					state.languages.size === state.availableLanguages.length
-						? null
-						: encodeSet(state.languages),
-				dom: state.domains.size === state.availableDomains.length ? null : encodeSet(state.domains),
+					state.languages.size === availableLanguages.length ? null : encodeSet(state.languages),
+				dom: state.domains.size === availableDomains.length ? null : encodeSet(state.domains),
 				mods:
-					state.modalities.size === state.availableModalities.length
-						? null
-						: encodeSet(state.modalities),
-				tks: state.tasks.size === state.availableTasks.length ? null : encodeSet(state.tasks)
+					state.modalities.size === availableModalities.length ? null : encodeSet(state.modalities),
+				tks: state.tasks.size === availableTasks.length ? null : encodeSet(state.tasks)
 			})
 		);
 	}
@@ -351,12 +343,12 @@ function createFilters() {
 	}
 
 	function resetCustomize() {
-		replaceSet(state.taskTypes, state.availableTaskTypes);
-		replaceSet(state.domains, state.availableDomains);
-		replaceSet(state.modalities, state.availableModalities);
-		replaceSet(state.languages, state.availableLanguages);
+		replaceSet(state.taskTypes, availableTaskTypes);
+		replaceSet(state.domains, availableDomains);
+		replaceSet(state.modalities, availableModalities);
+		replaceSet(state.languages, availableLanguages);
 		state.tasks.clear();
-		for (const t of state.availableTasks) state.tasks.add(t.name);
+		for (const t of availableTasks) state.tasks.add(t.name);
 		sync();
 	}
 
@@ -460,19 +452,19 @@ function createFilters() {
 			return state.tasks;
 		},
 		get availableTaskTypes() {
-			return state.availableTaskTypes;
+			return availableTaskTypes;
 		},
 		get availableDomains() {
-			return state.availableDomains;
+			return availableDomains;
 		},
 		get availableModalities() {
-			return state.availableModalities;
+			return availableModalities;
 		},
 		get availableLanguages() {
-			return state.availableLanguages;
+			return availableLanguages;
 		},
 		get availableTasks() {
-			return state.availableTasks;
+			return availableTasks;
 		},
 		get availableMinModelSizeM() {
 			return state.availableMinModelSizeM;

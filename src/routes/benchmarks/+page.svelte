@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
-	import { loadBenchmarks } from '$lib/data/service';
 	import type { Benchmark } from '$lib/types';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
 	import BenchmarksTable from '$lib/components/BenchmarksTable.svelte';
@@ -17,10 +16,28 @@
 	import { ariaSort, sortIcon } from '$lib/format';
 	import type { SortState } from '$lib/stores/sort.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import type { PageData } from './$types';
+	import type { BenchmarksData } from './+page';
 
-	let allBenchmarks = $state<Benchmark[]>([]);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
+	let { data }: { data: PageData } = $props();
+
+	// Stream the loader's derived data into local state; the {#if !resolved}
+	// branch in the template paints a skeleton until the promise lands on
+	// client-side nav. Prerender awaits the promise so direct visits skip
+	// the skeleton entirely.
+	let resolved = $state<BenchmarksData | null>(null);
+	let loadError = $state<string | null>(null);
+	$effect(() => {
+		const p = data.benchmarks;
+		loadError = null;
+		p.then((r) => {
+			if (data.benchmarks === p) resolved = r;
+		}).catch((e) => {
+			if (data.benchmarks === p) loadError = e instanceof Error ? e.message : String(e);
+		});
+	});
+
+	let allBenchmarks = $derived<Benchmark[]>(resolved?.all ?? []);
 	let query = $state(getParam('q') ?? '');
 
 	const SORTS = [
@@ -92,17 +109,27 @@
 		});
 	});
 
-	// Filter sets are seeded with every value so the default state is
-	// "everything on"; `filteredAll` treats `size === ALL.length` as filter-off
-	// so rows with empty modality / type / domain lists stay visible.
-	let MODALITIES = $state<string[]>([]);
-	let SIMPLIFIED_TYPES_PRESENT = $state<string[]>([]);
-	let DOMAINS = $state<string[]>([]);
-	let LANGUAGES = $state<string[]>([]);
+	// Filter sets are seeded with every value once the loader promise lands
+	// so the default state is "everything on"; `filteredAll` treats
+	// `size === ALL.length` as filter-off so rows with empty modality / type
+	// / domain lists stay visible.
+	let MODALITIES = $derived<string[]>(resolved?.modalities ?? []);
+	let SIMPLIFIED_TYPES_PRESENT = $derived<string[]>(resolved?.simplifiedTypesPresent ?? []);
+	let DOMAINS = $derived<string[]>(resolved?.domains ?? []);
+	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
 	const modalityFilter = new SvelteSet<string>();
 	const simplifiedTypeFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 	const languageFilter = new SvelteSet<string>();
+	let filtersSeeded = false;
+	$effect(() => {
+		if (!resolved || filtersSeeded) return;
+		filtersSeeded = true;
+		for (const v of resolved.modalities) modalityFilter.add(v);
+		for (const v of resolved.simplifiedTypesPresent) simplifiedTypeFilter.add(v);
+		for (const v of resolved.domains) domainFilter.add(v);
+		for (const v of resolved.languages) languageFilter.add(v);
+	});
 	let domainQuery = $state('');
 	let languageQuery = $state('');
 	let visibleDomains = $derived.by(() => {
@@ -150,59 +177,6 @@
 	let allSimplifiedTypes = $derived(simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
-
-	$effect(() => {
-		loadBenchmarks(true)
-			.then((list) => {
-				allBenchmarks = list.sort((a, b) => a.displayName.localeCompare(b.displayName));
-				// Single pass over the catalog to fill all 3 facet sets, instead of
-				// three separate flatMap+Set traversals. Plain Set is correct
-				// here — used as a local accumulator, never read reactively.
-				/* eslint-disable svelte/prefer-svelte-reactivity */
-				const mods = new Set<string>();
-				const simpTypes = new Set<string>();
-				const doms = new Set<string>();
-				// Count per language so the filter pills sort by popularity.
-				const langCount = new Map<string, number>();
-				/* eslint-enable svelte/prefer-svelte-reactivity */
-				for (const b of list) {
-					if (b.modalities) for (const m of b.modalities) mods.add(m);
-					if (b.simplifiedTaskTypes) for (const t of b.simplifiedTaskTypes) simpTypes.add(t);
-					if (b.domains) for (const d of b.domains) doms.add(d);
-					if (b.languages)
-						for (const l of b.languages) langCount.set(l, (langCount.get(l) ?? 0) + 1);
-				}
-				MODALITIES = [...mods].sort();
-				// Order the simplified buckets the same way /tasks does (curated
-				// canonical first, then any extras) so users see the familiar
-				// "retrieval / classification / …" sequence.
-				const CURATED = [
-					'retrieval',
-					'classification',
-					'pair-classification',
-					'clustering',
-					'semantic-similarity'
-				];
-				SIMPLIFIED_TYPES_PRESENT = [
-					...CURATED.filter((t) => simpTypes.has(t)),
-					...[...simpTypes].filter((t) => !CURATED.includes(t)).sort()
-				];
-				DOMAINS = [...doms].sort();
-				// Descending by usage count, alphabetical tie-break.
-				LANGUAGES = [...langCount.entries()]
-					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-					.map(([l]) => l);
-				for (const v of MODALITIES) modalityFilter.add(v);
-				for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
-				for (const v of DOMAINS) domainFilter.add(v);
-				for (const v of LANGUAGES) languageFilter.add(v);
-				loading = false;
-			})
-			.catch((e) => {
-				error = e instanceof Error ? e.message : String(e);
-				loading = false;
-			});
-	});
 
 	// Off-menu benchmarks sort alongside the featured ones — the per-card
 	// "newer version available" hint already distinguishes them.
@@ -299,10 +273,10 @@
 			</span>
 		</div>
 
-		{#if loading}
+		{#if !resolved && !loadError}
 			<SkeletonGrid />
-		{:else if error}
-			<p class="muted">Failed to load: {error}</p>
+		{:else if loadError}
+			<p class="muted">Failed to load: {loadError}</p>
 		{:else if filteredAll.length === 0}
 			<p class="muted">No benchmark matches that search.</p>
 		{:else if view === 'table'}

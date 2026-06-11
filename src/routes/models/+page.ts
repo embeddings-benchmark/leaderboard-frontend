@@ -1,3 +1,4 @@
+import type { PageLoad } from './$types';
 import { loadModels } from '$lib/data/service';
 
 // Prerender so ShareMeta's `<title>` + `<meta og:…>` end up in the static
@@ -11,7 +12,11 @@ export const prerender = true;
 // The page's reactive effect re-issues the same call on mount and gets
 // an instant cache hit. Modality-filter refetches still go through the
 // component effect — those re-fire when the user toggles the picker.
-export const load = async () => {
-	await loadModels({});
+//
+// Best-effort: if the backend is unreachable we swallow the error so the
+// page still mounts and its own effect can surface the failure inline
+// (and retry). The pre-warm is purely an optimization.
+export const load: PageLoad = async () => {
+	await loadModels({}).catch(() => undefined);
 	return {};
 };

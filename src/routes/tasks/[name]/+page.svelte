@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { loadBenchmarkMenu, loadTask, loadTaskScores } from '$lib/data/service';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { languageLabel } from '$lib/data/languages';
@@ -16,9 +14,10 @@
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
-	import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
+	import type { TaskMeta, TaskScores } from '$lib/types';
+	import type { PageData } from './$types';
 
-	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
+	let { data }: { data: PageData } = $props();
 
 	interface TaskWithBenchmark {
 		meta: TaskMeta;
@@ -26,60 +25,30 @@
 		benchmarkDisplay: string;
 	}
 
-	// Three independent fetches — the card renders as soon as taskMeta and
-	// menu land (both sub-ms), while the (potentially slow) scores call
-	// streams in behind a skeleton.
-	let allBenchmarks = $state<Benchmark[]>([]);
-	let taskMeta = $state<TaskMeta | null>(null);
-	let metaError = $state<string | null>(null);
+	// Loader awaits menu + task metadata eagerly (both fast); scores stream
+	// so the card can render before the slower table fetch resolves.
+	let taskName = $derived(data.taskName);
+	let allBenchmarks = $derived(data.allBenchmarks);
+	let taskMeta = $derived(data.taskMeta);
+	let metaError = $derived(data.taskMetaError);
+
+	// Stream the scores payload — same stale-guard pattern as elsewhere:
+	// capture the in-flight promise so a rapid task→task nav doesn't let
+	// a slow earlier fetch overwrite the new task's results.
 	let scoresPayload = $state<TaskScores | null>(null);
 	let loadingScores = $state(true);
 	let scoresError = $state<string | null>(null);
-
 	$effect(() => {
-		(async () => {
-			const menu = await loadBenchmarkMenu();
-			allBenchmarks = flattenMenu(menu);
-		})();
-	});
-
-	// Card metadata: /tasks/{name} — fast endpoint that just returns the
-	// TaskMeta. Cleared and re-fetched whenever the URL param changes.
-	$effect(() => {
-		const name = taskName;
-		if (!name) return;
-		taskMeta = null;
-		metaError = null;
-		loadTask(name)
-			.then((t) => {
-				taskMeta = t;
-			})
-			.catch((e) => {
-				console.error('loadTask', e);
-				metaError = e instanceof Error ? e.message : String(e);
-			});
-	});
-
-	// Scores table: /tasks/{name}/scores — slower (cold builds iterate every
-	// per-task result). Lives in its own state with its own loading flag so
-	// the card stays visible while we wait.
-	$effect(() => {
-		const name = taskName;
-		if (!name) return;
+		const p = data.scores;
 		scoresPayload = null;
 		scoresError = null;
 		loadingScores = true;
-		loadTaskScores(name)
-			.then((s) => {
-				scoresPayload = s;
-			})
-			.catch((e) => {
-				console.error('loadTaskScores', e);
-				scoresError = e instanceof Error ? e.message : String(e);
-			})
-			.finally(() => {
-				loadingScores = false;
-			});
+		p.then((r) => {
+			if (data.scores !== p) return;
+			if (r.ok) scoresPayload = r.data;
+			else scoresError = r.error;
+			loadingScores = false;
+		});
 	});
 
 	// Hosting benchmarks come from the menu (cheap) — we don't need the

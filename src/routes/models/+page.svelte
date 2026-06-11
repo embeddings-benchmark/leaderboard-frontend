@@ -41,15 +41,15 @@
 	let LANGUAGES = $state<string[]>([]);
 	const languagesPicked = new SvelteSet<string>();
 
+	// Load the full model registry once on mount — the modality filter is
+	// applied locally in `buildPasses()` below, so a modality-picker toggle
+	// just re-runs the in-memory filter (no network roundtrip). The page
+	// loader pre-warms `loadModels({})` so this resolves synchronously from
+	// `cachedHttp` on first paint.
 	$effect(() => {
-		// Re-fetch whenever the modality picker (now in the FilterSidebar)
-		// changes. When all modalities are selected we omit the param so the
-		// server returns the full registry from its hot cache slot.
-		const all = filters.modelModalities.size === MODEL_MODALITIES.length;
-		const mods = all ? undefined : [...filters.modelModalities];
 		loadingData = true;
 		loadError = null;
-		loadModels(mods ? { modalities: mods } : {})
+		loadModels({})
 			.then((m) => {
 				ALL_MODELS = m;
 				// Compute available languages from the loaded models.
@@ -172,6 +172,13 @@
 		const langPicked = languagesPicked;
 		const langCount = LANGUAGES.length;
 		const langActive = langCount > 0 && langPicked.size !== langCount;
+		// Modality is filtered client-side now (no /models refetch on toggle).
+		// "All on" = filter off; otherwise require at least one declared
+		// modality to be in the picked set. Models with no declared
+		// modalities default to ['text'] (the registry-wide default) so they
+		// match the common case without explicit tagging.
+		const modalitiesPicked = filters.modelModalities;
+		const modalitiesActive = modalitiesPicked.size !== MODEL_MODALITIES.length;
 		return (m: ModelMeta) => {
 			if (q && !modelSearchKey(m).includes(q)) return false;
 			if (availability === 'open' && !m.openWeights) return false;
@@ -181,6 +188,17 @@
 			if (stOnly && !m.sentenceTransformersCompatible) return false;
 			// Empty pick set = "deselect everything" → nothing matches.
 			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
+			if (modalitiesActive) {
+				const mods = m.modalities ?? ['text'];
+				let any = false;
+				for (const x of mods) {
+					if (modalitiesPicked.has(x)) {
+						any = true;
+						break;
+					}
+				}
+				if (!any) return false;
+			}
 			if (sizeActive) {
 				if (m.totalParamsB == null || m.totalParamsB <= 0) return false;
 				const paramsM = m.totalParamsB * 1000;
