@@ -73,15 +73,8 @@ export function slug(name: string): string {
 	return encodeURIComponent(name);
 }
 
-// Variant of `slug` that preserves forward slashes — for HuggingFace-style
-// `org/displayName` identifiers used by the `/models/[...name]` and
-// `/tasks/[name]` routes, where rendering the path literally (rather than
-// `%2F`-encoded) keeps the URL readable for users and shareable as-is.
-//
-// Strip leading/trailing slashes before encoding — SvelteKit's `resolve()`
-// rejects rest-param values that start or end with `/` (would emit
-// `/foo//bar`), and a handful of upstream model records have stray edge
-// slashes in `adaptedFrom` / `supersededBy`.
+// Preserves `/` in HuggingFace-style `org/name`. Strips edge slashes — SvelteKit's
+// `resolve()` rejects rest-param values with leading/trailing slashes.
 export function modelPath(name: string): string {
 	return name
 		.replace(/^\/+|\/+$/g, '')

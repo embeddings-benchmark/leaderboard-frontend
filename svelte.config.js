@@ -52,6 +52,19 @@ const config = {
 			// present after hydration, so we downgrade the build error to a warning
 			// instead of failing prerender.
 			handleMissingId: 'warn',
+			// The GitHub Pages build lives at `embeddings-benchmark.github.io/leaderboard-frontend`
+			// — same origin as the sibling mteb docs site at `embeddings-benchmark.github.io/mteb/`,
+			// which the top-bar links to. SvelteKit's crawler treats those same-origin URLs
+			// as internal, strips the origin, then crashes because `/mteb/` doesn't start with
+			// `paths.base`. Anything outside our base is a sibling site — log and skip.
+			handleHttpError: ({ path, referrer, message }) => {
+				const base = process.env.BASE_PATH || '';
+				if (base && !path.startsWith(base)) {
+					console.warn(`Skipping sibling-origin link ${path} (referenced from ${referrer})`);
+					return;
+				}
+				throw new Error(message);
+			},
 			// Production origin baked into every prerendered URL. `page.url.origin`
 			// resolves to this during `vite build`, which is what ends up in
 			// `og:image` / `og:url` / canonical-link tags on the static HTML.
