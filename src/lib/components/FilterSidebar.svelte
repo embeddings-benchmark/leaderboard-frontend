@@ -16,6 +16,7 @@
 		languagesPicked?: Set<string>;
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
+		onResetLanguages?: () => void;
 		// When provided, replaces the default FilterContent body — used
 		// by the /benchmarks catalogue page which filters benchmarks
 		// (not benchmark contents) and so has its own facet state
@@ -30,6 +31,7 @@
 		languagesPicked,
 		onToggleLanguage,
 		onToggleAllLanguages,
+		onResetLanguages,
 		children
 	}: Props = $props();
 
@@ -80,6 +82,7 @@
 				{languagesPicked}
 				{onToggleLanguage}
 				{onToggleAllLanguages}
+				{onResetLanguages}
 			/>
 		{/if}
 	{/if}

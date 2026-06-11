@@ -473,6 +473,12 @@ function createFilters() {
 			return state.availableMaxModelSizeM;
 		},
 		initFor,
+		// Public so pages without a benchmark summary (e.g. /models) can sync
+		// model-side filter params from the URL on mount. On /benchmark/[name]
+		// this runs implicitly inside initFor; everywhere else, the caller has
+		// to invoke it explicitly. Reads directly from state so it doesn't
+		// trigger the sync→URL-write effect during hydration.
+		hydrateFromUrl,
 		resetModelFilters,
 		resetCustomize,
 		toggleInSet,

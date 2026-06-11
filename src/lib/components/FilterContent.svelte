@@ -10,6 +10,7 @@
 		type Availability,
 		type InstructionMode
 	} from '$lib/stores/filters.svelte';
+	import ActiveFilterStrip from './ActiveFilterStrip.svelte';
 	import FilterFacet from './FilterFacet.svelte';
 	import HoverPortal from './HoverPortal.svelte';
 	import InfoDot from './InfoDot.svelte';
@@ -116,6 +117,10 @@
 		languagesPicked?: Set<string>;
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
+		// Reset the page-local language pick set back to "all selected".
+		// Distinct from `onToggleAllLanguages` (which flips between empty
+		// and full): `resetAll` always wants the full-selected state.
+		onResetLanguages?: () => void;
 	}
 	let {
 		defaultModelOpen = true,
@@ -126,7 +131,8 @@
 		languageOptions,
 		languagesPicked,
 		onToggleLanguage,
-		onToggleAllLanguages
+		onToggleAllLanguages,
+		onResetLanguages
 	}: Props = $props();
 
 	let modelLangQuery = $state('');
@@ -232,6 +238,23 @@
 				key: 'mmod',
 				label: `Modality · ${filters.modelModalities.size}/${MODEL_MODALITIES.length}`,
 				clear: () => filters.setAll('modelModalities', MODEL_MODALITIES, true)
+			});
+		}
+		// Page-local Language pick set — only present on /models (passed via
+		// `languagesPicked` / `languageOptions` / `onResetLanguages`). Without
+		// this chip the active strip stays empty when the user has only
+		// narrowed languages, which also hides the "Reset all" button.
+		if (
+			languagesPicked &&
+			languageOptions &&
+			languageOptions.length > 0 &&
+			languagesPicked.size !== languageOptions.length &&
+			onResetLanguages
+		) {
+			list.push({
+				key: 'mlang',
+				label: `Lang · ${languagesPicked.size}/${languageOptions.length}`,
+				clear: () => onResetLanguages()
 			});
 		}
 		return list;
@@ -351,6 +374,10 @@
 		filters.resetCustomize();
 		filters.resetModelFilters();
 		filters.nameQuery = '';
+		// /models holds its language picks page-locally — call its
+		// reset-to-full callback so "Reset all" wipes the language
+		// narrowing too. No-op on pages that don't pass the callback.
+		onResetLanguages?.();
 	}
 
 	// Tip portal for filter group-labels (mirrors the SummaryTable pattern
@@ -379,19 +406,7 @@
 </script>
 
 <div class="filter-content">
-	{#if chips.length > 0}
-		<div class="active-strip">
-			<div class="chips">
-				{#each chips as c (c.key)}
-					<button type="button" class="active-chip" onclick={c.clear} title="Click to clear">
-						<span>{c.label}</span>
-						<span class="x" aria-hidden="true">×</span>
-					</button>
-				{/each}
-			</div>
-			<button type="button" class="reset-all" onclick={resetAll}>Reset all</button>
-		</div>
-	{/if}
+	<ActiveFilterStrip {chips} onResetAll={resetAll} />
 
 	{#snippet modelGroups()}
 		<div class="group">
@@ -684,73 +699,6 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-	}
-
-	/* Active filter chips ----------------------------------------------------- */
-	/* `flex-shrink: 0` — sibling of `.block` inside the flex column;
-	   without it the wrap content would clip silently. */
-	.active-strip {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 6px;
-		padding: 10px 12px;
-		background: var(--primary-soft);
-		border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
-		border-radius: 10px;
-		flex-shrink: 0;
-	}
-	.chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-		flex: 1;
-		min-width: 0;
-	}
-	/* Selected-filter chip — sits on the page surface, so use the soft
-	   primary fill (theme-aware via app.css) instead of pure white,
-	   which read as a glaring patch in dark mode. Hover still flips to
-	   the full primary tint as a "clear this filter" affordance. */
-	.active-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 3px 8px 3px 10px;
-		background: var(--primary-soft);
-		border: 1px solid var(--primary);
-		border-radius: 999px;
-		font-size: 11px;
-		font-weight: 500;
-		color: var(--primary-strong);
-		cursor: pointer;
-		max-width: 100%;
-		transition:
-			background 0.12s,
-			color 0.12s;
-	}
-	.active-chip:hover {
-		background: var(--primary);
-		color: var(--surface);
-	}
-	.active-chip .x {
-		font-size: 14px;
-		line-height: 1;
-		opacity: 0.8;
-		font-weight: 600;
-	}
-	.reset-all {
-		background: none;
-		border: none;
-		font-size: 11px;
-		font-weight: 600;
-		color: var(--primary-strong);
-		cursor: pointer;
-		text-decoration: underline;
-		text-underline-offset: 2px;
-		padding: 0 2px;
-	}
-	.reset-all:hover {
-		color: var(--text);
 	}
 
 	/* Block sections ---------------------------------------------------------- */

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { loadModels } from '$lib/data/service';
@@ -26,7 +27,7 @@
 		sortIcon,
 		sortModalities
 	} from '$lib/format';
-	import { getParam, updateUrl } from '$lib/url-state';
+	import { decodeSet, encodeSet, getParam, updateUrl } from '$lib/url-state';
 
 	let ALL_MODELS = $state<ModelMeta[]>([]);
 	let loadingData = $state(true);
@@ -64,8 +65,20 @@
 				LANGUAGES = [...langCount.entries()]
 					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
 					.map(([l]) => l);
+				// Restore explicit `?langs=…` picks from the URL on first
+				// seed; otherwise default to the full universe so
+				// "all on = filter off" applies. Subsequent re-fetches
+				// (none currently — modality narrows locally) would
+				// clobber user picks, which is why this is gated on
+				// `loadingData` being the initial pre-data state.
 				languagesPicked.clear();
-				for (const l of LANGUAGES) languagesPicked.add(l);
+				const urlLangs = getParam('langs');
+				if (urlLangs !== null) {
+					const present = new Set(LANGUAGES);
+					for (const v of decodeSet(urlLangs)) if (present.has(v)) languagesPicked.add(v);
+				} else {
+					for (const l of LANGUAGES) languagesPicked.add(l);
+				}
 				loadingData = false;
 			})
 			.catch((e) => {
@@ -98,19 +111,24 @@
 	// Default sort: newest release first. Surfaces just-shipped models at
 	// the top so visitors see what's current without scrolling. State is
 	// URL-backed (`?s.models=…&d.models=…`) so navigating to a model detail
-	// page and back via the browser restores the user's sort choice.
+	// page and back via the browser restores the user's sort choice. We
+	// can't seed from the URL at script-top — `getParam` reads
+	// `window.location`, which on a prerendered page differs between the
+	// build-time render (no query) and the client hydration (real query),
+	// triggering a hydration mismatch. Defaults first; `onMount` below
+	// syncs from the URL once we're guaranteed to be on the client.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
 	const DEFAULT_SORT: SortId = 'released';
-	const _urlSort = getParam('s.models');
-	const _urlDir = getParam('d.models');
-	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
-		? (_urlSort as SortId)
-		: DEFAULT_SORT;
-	let sort = $state<SortId>(initialSort);
-	let sortDir = $state<SortDir>(
-		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
-	);
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	// `urlHydrated` gates the URL-write effects so they don't clobber the
+	// real URL params during the brief window between mount and the
+	// `onMount` URL→state sync below. Without the gate, the first effect
+	// run sees default state and writes "no params" to the URL, which
+	// nukes whatever the user actually navigated to.
+	let urlHydrated = $state(false);
 	$effect(() => {
+		if (!urlHydrated) return;
 		// Omit defaults from the URL so the canonical "fresh visit" link is clean.
 		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
 		updateUrl({
@@ -129,10 +147,44 @@
 
 	// URL-backed view mode (cards default) and a SortState adapter so the
 	// table's `SortHeader` drives the same sort/sortDir as the dropdown.
-	const initialView = getParam('view');
-	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	// Hydrated from the URL in `onMount` below — see the matching note on
+	// `sort` / `sortDir` for why this can't seed at script-top.
+	let view = $state<ViewMode>('cards');
 	$effect(() => {
+		if (!urlHydrated) return;
 		updateUrl({ view: view === 'cards' ? null : view });
+	});
+
+	// Page-local language picks → URL. The shared filters store handles
+	// `?mtypes`, `?mmods`, `?minSize`, etc. via its own sync; languages
+	// here are page-scoped (computed from the loaded registry) so the page
+	// owns the param. Omitted when the picks equal the full universe so
+	// the default visit stays a clean URL.
+	$effect(() => {
+		if (!urlHydrated) return;
+		const off = LANGUAGES.length === 0 || languagesPicked.size === LANGUAGES.length;
+		updateUrl({ langs: off ? null : encodeSet(languagesPicked) });
+	});
+
+	// Client-only URL → state sync. Runs after the prerendered HTML has
+	// hydrated against the defaults, so the initial render matches SSR
+	// and no `hydration_mismatch` fires.
+	onMount(() => {
+		const us = getParam('s.models');
+		const ud = getParam('d.models');
+		const uv = getParam('view');
+		if (us && SORT_IDS.has(us as SortId)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		// Apply shared filter params (?minSize, ?maxSize, ?avail, ?inst, ?zs,
+		// ?st, ?mtypes, ?mmods, ?q). /benchmark/[name] runs this implicitly
+		// inside initFor; we have no summary here, so call directly.
+		filters.hydrateFromUrl();
+		urlHydrated = true;
 	});
 	const sortAdapter: SortState<SortId> = {
 		get key() {
@@ -429,6 +481,10 @@
 		languagesPicked={languagesPicked as unknown as Set<string>}
 		onToggleLanguage={toggleLanguage}
 		onToggleAllLanguages={toggleAllLanguages}
+		onResetLanguages={() => {
+			languagesPicked.clear();
+			for (const l of LANGUAGES) languagesPicked.add(l);
+		}}
 	/>
 </div>
 

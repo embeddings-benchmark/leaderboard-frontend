@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { Benchmark } from '$lib/types';
+	import ActiveFilterStrip, { type Chip } from '$lib/components/ActiveFilterStrip.svelte';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
 	import BenchmarksTable from '$lib/components/BenchmarksTable.svelte';
 	import FilterFacet from '$lib/components/FilterFacet.svelte';
@@ -15,7 +17,7 @@
 	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
 	import { ariaSort, sortIcon } from '$lib/format';
 	import type { SortState } from '$lib/stores/sort.svelte';
-	import { getParam, updateUrl } from '$lib/url-state';
+	import { decodeSet, encodeSet, getParam, updateUrl } from '$lib/url-state';
 	import type { PageData } from './$types';
 	import type { BenchmarksData } from './+page';
 
@@ -38,7 +40,13 @@
 	});
 
 	let allBenchmarks = $derived<Benchmark[]>(resolved?.all ?? []);
-	let query = $state(getParam('q') ?? '');
+	// All URL-derived state starts at the prerender-safe defaults; the
+	// `onMount` block below syncs from `window.location` on the client.
+	// `urlHydrated` gates the URL-write `$effect` so it doesn't nuke the
+	// real params before the sync runs. Avoids a hydration_mismatch on
+	// hard-refresh of a URL that carries any of `?q` / `?sort` / `?dir`
+	// / `?view`.
+	let query = $state('');
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
@@ -58,16 +66,9 @@
 	// Default to "Model count" desc — popularity is the most useful first
 	// impression when browsing the benchmark catalogue.
 	const DEFAULT_SORT: SortId = 'models';
-	const initialSort = getParam('sort');
-	const initialDir = getParam('dir');
-	const seedSort: SortId =
-		initialSort && (SORT_IDS as readonly string[]).includes(initialSort)
-			? (initialSort as SortId)
-			: DEFAULT_SORT;
-	let sort = $state<SortId>(seedSort);
-	let sortDir = $state<SortDir>(
-		initialDir === 'asc' || initialDir === 'desc' ? initialDir : NATURAL_DIR[seedSort]
-	);
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	let urlHydrated = $state(false);
 	function onSortKeyChange(next: SortId) {
 		sort = next;
 		sortDir = NATURAL_DIR[next];
@@ -79,8 +80,7 @@
 	// URL-backed view mode (cards default) and a SortState adapter that
 	// lets the table's `SortHeader` drive the same sort/sortDir as the
 	// dropdown.
-	const initialView = getParam('view');
-	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	let view = $state<ViewMode>('cards');
 	const sortAdapter: SortState<SortId> = {
 		get key() {
 			return sort;
@@ -101,12 +101,44 @@
 	};
 
 	$effect(() => {
+		if (!urlHydrated) return;
+		// Each filter set is omitted from the URL when it equals the full
+		// universe (the "all on = filter off" default), so a fresh visit
+		// stays a clean URL. Re-read filtered sizes — derived sources track
+		// SvelteSet `size` reactively.
+		const modsOff = modalityFilter.size === MODALITIES.length;
+		const typesOff = simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length;
+		const domsOff = domainFilter.size === DOMAINS.length;
+		const langsOff = languageFilter.size === LANGUAGES.length;
 		updateUrl({
 			q: query.trim() || null,
 			sort: sort === DEFAULT_SORT ? null : sort,
 			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir,
-			view: view === 'cards' ? null : view
+			view: view === 'cards' ? null : view,
+			mods: modsOff ? null : encodeSet(modalityFilter),
+			types: typesOff ? null : encodeSet(simplifiedTypeFilter),
+			doms: domsOff ? null : encodeSet(domainFilter),
+			langs: langsOff ? null : encodeSet(languageFilter)
 		});
+	});
+
+	onMount(() => {
+		const uq = getParam('q');
+		const us = getParam('sort');
+		const ud = getParam('dir');
+		const uv = getParam('view');
+		if (uq) query = uq;
+		if (us && (SORT_IDS as readonly string[]).includes(us)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		// Filter sets land into local SvelteSets later (after `resolved`
+		// resolves) — the `filtersSeeded` $effect below merges URL picks
+		// into the seeded universe.
+		urlHydrated = true;
 	});
 
 	// Filter sets are seeded with every value once the loader promise lands
@@ -121,14 +153,29 @@
 	const simplifiedTypeFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 	const languageFilter = new SvelteSet<string>();
-	let filtersSeeded = false;
+	// `$state` (not a plain `let`) so the URL-write effect above sees
+	// `filtersSeeded` flip from false → true and re-runs to register the
+	// SvelteSets as dependencies. Without reactivity here the write effect
+	// stayed bailed in its initial gated branch and never tracked toggles.
+	let filtersSeeded = $state(false);
 	$effect(() => {
 		if (!resolved || filtersSeeded) return;
 		filtersSeeded = true;
-		for (const v of resolved.modalities) modalityFilter.add(v);
-		for (const v of resolved.simplifiedTypesPresent) simplifiedTypeFilter.add(v);
-		for (const v of resolved.domains) domainFilter.add(v);
-		for (const v of resolved.languages) languageFilter.add(v);
+		// Restore explicit picks from the URL when present; otherwise seed
+		// with the full universe so "all on = filter off" stays the default.
+		const seed = (set: SvelteSet<string>, universe: readonly string[], param: string) => {
+			const raw = getParam(param);
+			if (raw !== null) {
+				const present = new Set(universe);
+				for (const v of decodeSet(raw)) if (present.has(v)) set.add(v);
+			} else {
+				for (const v of universe) set.add(v);
+			}
+		};
+		seed(modalityFilter, resolved.modalities, 'mods');
+		seed(simplifiedTypeFilter, resolved.simplifiedTypesPresent, 'types');
+		seed(domainFilter, resolved.domains, 'doms');
+		seed(languageFilter, resolved.languages, 'langs');
 	});
 	let domainQuery = $state('');
 	let languageQuery = $state('');
@@ -177,6 +224,75 @@
 	let allSimplifiedTypes = $derived(simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
+
+	// Active-filter chips. Each narrowed facet contributes a clearable
+	// chip; the strip also renders the shared "Reset all" button when any
+	// chip is present. Name-search (`?q`) doesn't get its own chip — the
+	// search input itself shows the current value.
+	let chips = $derived.by<Chip[]>(() => {
+		const list: Chip[] = [];
+		if (filtersSeeded) {
+			if (!allSimplifiedTypes) {
+				list.push({
+					key: 'types',
+					label: `Type · ${simplifiedTypeFilter.size}/${SIMPLIFIED_TYPES_PRESENT.length}`,
+					clear: () => {
+						simplifiedTypeFilter.clear();
+						for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
+					}
+				});
+			}
+			if (!allModalities) {
+				list.push({
+					key: 'mods',
+					label: `Modality · ${modalityFilter.size}/${MODALITIES.length}`,
+					clear: () => {
+						modalityFilter.clear();
+						for (const v of MODALITIES) modalityFilter.add(v);
+					}
+				});
+			}
+			if (!allDomains) {
+				list.push({
+					key: 'doms',
+					label: `Domain · ${domainFilter.size}/${DOMAINS.length}`,
+					clear: () => {
+						domainFilter.clear();
+						for (const v of DOMAINS) domainFilter.add(v);
+					}
+				});
+			}
+			if (!allLanguages) {
+				list.push({
+					key: 'langs',
+					label: `Lang · ${languageFilter.size}/${LANGUAGES.length}`,
+					clear: () => {
+						languageFilter.clear();
+						for (const v of LANGUAGES) languageFilter.add(v);
+					}
+				});
+			}
+		}
+		if (query.trim()) {
+			list.push({
+				key: 'q',
+				label: `Name: "${query.trim()}"`,
+				clear: () => (query = '')
+			});
+		}
+		return list;
+	});
+	function resetAll() {
+		simplifiedTypeFilter.clear();
+		for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
+		modalityFilter.clear();
+		for (const v of MODALITIES) modalityFilter.add(v);
+		domainFilter.clear();
+		for (const v of DOMAINS) domainFilter.add(v);
+		languageFilter.clear();
+		for (const v of LANGUAGES) languageFilter.add(v);
+		query = '';
+	}
 
 	// Off-menu benchmarks sort alongside the featured ones — the per-card
 	// "newer version available" hint already distinguishes them.
@@ -297,6 +413,7 @@
 	</main>
 
 	<FilterSidebar>
+		<ActiveFilterStrip {chips} onResetAll={resetAll} />
 		<!-- `type-fill` paints checked chips in the shared primary tint
 		     across every facet on this page, instead of the per-stype
 		     colour /tasks uses for its Task group. -->

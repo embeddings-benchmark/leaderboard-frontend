@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { safeIdle } from '$lib/idle';
+	import ActiveFilterStrip, { type Chip } from '$lib/components/ActiveFilterStrip.svelte';
 	import FilterFacet from '$lib/components/FilterFacet.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
@@ -14,7 +16,7 @@
 	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
 	import type { SortState } from '$lib/stores/sort.svelte';
 	import { ariaSort, COLLATOR, sortIcon } from '$lib/format';
-	import { getParam, updateUrl } from '$lib/url-state';
+	import { decodeSet, encodeSet, getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { PageData } from './$types';
 	import type { TasksData } from './+page';
@@ -84,30 +86,44 @@
 	const modalityFilter = new SvelteSet<string>();
 	const domainFilter = new SvelteSet<string>();
 	const languageFilter = new SvelteSet<string>();
-	let filtersSeeded = false;
+	// `$state` (not a plain `let`) so the URL-write effect below sees
+	// `filtersSeeded` flip from false → true and re-runs to register the
+	// SvelteSets as dependencies. Without reactivity here the write effect
+	// stayed bailed in its initial gated branch and never tracked toggles.
+	let filtersSeeded = $state(false);
 	$effect(() => {
 		if (!resolved || filtersSeeded) return;
 		filtersSeeded = true;
-		for (const v of resolved.simplifiedPresent) typeFilter.add(v);
-		for (const v of resolved.modalities) modalityFilter.add(v);
-		for (const v of resolved.domains) domainFilter.add(v);
-		for (const v of resolved.languages) languageFilter.add(v);
+		// Restore explicit picks from the URL when present; otherwise seed
+		// with the full universe so "all on = filter off" stays the default.
+		const seed = (set: SvelteSet<string>, universe: readonly string[], param: string) => {
+			const raw = getParam(param);
+			if (raw !== null) {
+				const present = new Set(universe);
+				for (const v of decodeSet(raw)) if (present.has(v)) set.add(v);
+			} else {
+				for (const v of universe) set.add(v);
+			}
+		};
+		seed(typeFilter, resolved.simplifiedPresent, 'types');
+		seed(modalityFilter, resolved.modalities, 'mods');
+		seed(domainFilter, resolved.domains, 'doms');
+		seed(languageFilter, resolved.languages, 'langs');
 	});
 
 	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
-	// page and back via the browser restores the user's sort choice.
+	// page and back via the browser restores the user's sort choice. Reading
+	// the URL at script-top would diverge between prerender (no query) and
+	// client hydration (real query) → hydration mismatch. Default first, sync
+	// from URL in `onMount` below, and gate the URL-write effects with
+	// `urlHydrated` so they don't nuke the real query before the sync runs.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
 	const DEFAULT_SORT: SortId = 'models';
-	const _urlSort = getParam('s.tasks');
-	const _urlDir = getParam('d.tasks');
-	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
-		? (_urlSort as SortId)
-		: DEFAULT_SORT;
-	let sort = $state<SortId>(initialSort);
-	let sortDir = $state<SortDir>(
-		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
-	);
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	let urlHydrated = $state(false);
 	$effect(() => {
+		if (!urlHydrated) return;
 		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
 		updateUrl({
 			's.tasks': isDefault ? null : sort,
@@ -124,10 +140,38 @@
 	}
 
 	// View mode: card grid (default) vs sortable table.
-	const initialView = getParam('view');
-	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	let view = $state<ViewMode>('cards');
 	$effect(() => {
+		if (!urlHydrated) return;
 		updateUrl({ view: view === 'cards' ? null : view });
+	});
+
+	// Filter sets → URL. Each set is omitted from the URL when it equals
+	// the full universe (the "all on = filter off" default) so a clean
+	// catalog visit stays a clean URL. Reads `.size` and the universe
+	// lengths reactively so toggles flow through.
+	$effect(() => {
+		if (!urlHydrated || !filtersSeeded) return;
+		updateUrl({
+			types: typeFilter.size === SIMPLIFIED_PRESENT.length ? null : encodeSet(typeFilter),
+			mods: modalityFilter.size === MODALITIES.length ? null : encodeSet(modalityFilter),
+			doms: domainFilter.size === DOMAINS.length ? null : encodeSet(domainFilter),
+			langs: languageFilter.size === LANGUAGES.length ? null : encodeSet(languageFilter)
+		});
+	});
+
+	onMount(() => {
+		const us = getParam('s.tasks');
+		const ud = getParam('d.tasks');
+		const uv = getParam('view');
+		if (us && SORT_IDS.has(us as SortId)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		urlHydrated = true;
 	});
 
 	const sortAdapter: SortState<SortId> = {
@@ -185,6 +229,71 @@
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
+
+	let chips = $derived.by<Chip[]>(() => {
+		const list: Chip[] = [];
+		if (filtersSeeded) {
+			if (!allTypes) {
+				list.push({
+					key: 'types',
+					label: `Type · ${typeFilter.size}/${SIMPLIFIED_PRESENT.length}`,
+					clear: () => {
+						typeFilter.clear();
+						for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
+					}
+				});
+			}
+			if (!allModalities) {
+				list.push({
+					key: 'mods',
+					label: `Modality · ${modalityFilter.size}/${MODALITIES.length}`,
+					clear: () => {
+						modalityFilter.clear();
+						for (const v of MODALITIES) modalityFilter.add(v);
+					}
+				});
+			}
+			if (!allDomains) {
+				list.push({
+					key: 'doms',
+					label: `Domain · ${domainFilter.size}/${DOMAINS.length}`,
+					clear: () => {
+						domainFilter.clear();
+						for (const v of DOMAINS) domainFilter.add(v);
+					}
+				});
+			}
+			if (!allLanguages) {
+				list.push({
+					key: 'langs',
+					label: `Lang · ${languageFilter.size}/${LANGUAGES.length}`,
+					clear: () => {
+						languageFilter.clear();
+						for (const v of LANGUAGES) languageFilter.add(v);
+					}
+				});
+			}
+		}
+		if (query.trim()) {
+			list.push({
+				key: 'q',
+				label: `Name: "${query.trim()}"`,
+				clear: () => (query = '')
+			});
+		}
+		return list;
+	});
+	function resetAll() {
+		typeFilter.clear();
+		for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
+		modalityFilter.clear();
+		for (const v of MODALITIES) modalityFilter.add(v);
+		domainFilter.clear();
+		for (const v of DOMAINS) domainFilter.add(v);
+		languageFilter.clear();
+		for (const v of LANGUAGES) languageFilter.add(v);
+		query = '';
+	}
 
 	let domainQuery = $state('');
 	let visibleDomains = $derived.by(() => {
@@ -394,6 +503,7 @@
 	</main>
 
 	<FilterSidebar>
+		<ActiveFilterStrip {chips} onResetAll={resetAll} />
 		<!-- `data-stype` drives the per-stype checked-state tint
 		     defined in this page's local CSS (Task group is the one
 		     facet here that uses the per-category palette rather than

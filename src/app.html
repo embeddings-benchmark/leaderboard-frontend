@@ -63,6 +63,12 @@
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
-		%sveltekit.body%
+		<!-- The body marker is wrapped in a `display: contents` div per SvelteKit's
+		     recommendation — some browser extensions inject siblings into body and
+		     that interferes with hydration. The wrapper is transparent to layout.
+		     Do NOT reference the literal body-marker token in this comment: it's a
+		     simple string-substitution and would be replaced inside the comment too,
+		     breaking the HTML. -->
+		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>
