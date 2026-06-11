@@ -14,15 +14,11 @@ concurrency:
 jobs:
   vitest:
     runs-on: ubuntu-latest
+    env:
+      PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL || 'https://mteb-leaderboard-backend.hf.space' }}
+      PUBLIC_SITE_URL: ${{ vars.HF_SITE_URL || 'https://mteb-leaderboardv3.hf.space' }}
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/common
       - name: vitest
-        # `$env/static/public` types are generated from env vars present
-        # at `svelte-kit sync` time (vitest goes through the same import
-        # graph as the app). Seed the public vars so the import resolves;
-        # values don't need to be reachable.
-        env:
-          PUBLIC_API_URL: https://mteb-leaderboard-backend.hf.space
-          PUBLIC_SITE_URL: https://mteb-leaderboardv3.hf.space
         run: npm run test:unit

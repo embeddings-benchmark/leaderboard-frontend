@@ -1,18 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
-// End-to-end coverage for the URL ⇄ active-chip ⇄ Reset-all roundtrip on
-// every page that exposes the active-filter strip.
-//
-// Each scenario asserts the full loop:
-//   1. Toggle a facet item OFF.
-//   2. A chip appears in the active strip with the expected label.
-//   3. The "Reset all" button becomes visible.
-//   4. The URL gains the facet's query param.
-//   5. Deep-linking that URL fresh restores the same filtered state
-//      (item unchecked, chip + URL preserved).
-//   6. Clicking "Reset all" wipes every chip, clears the URL params, and
-//      restores the original visible-card count.
+// Filter ⇄ chip ⇄ URL ⇄ Reset all roundtrip coverage.
 
 function activeStrip(page: Page): Locator {
 	return page.locator('.active-strip');
@@ -27,24 +16,19 @@ function modalityCheckbox(page: Page, modality: string): Locator {
 	return page.locator(`aside.sidebar label.pill[data-modality="${modality}"] input[type=checkbox]`);
 }
 function sidebarCheckbox(page: Page, label: string): Locator {
-	// Match the pill whose visible `<span>` text equals `label` (exact, so
-	// e.g. "Web" doesn't match "Webex"). The modality pills layer an icon
-	// SVG over the checkbox that intercepts pointer events, so callers
-	// click with `{ force: true }` to bypass the actionability check.
+	// Exact span match (e.g. "Web" doesn't match "Webex"); pills intercept
+	// pointer events so callers force-click the underlying checkbox.
 	return page
 		.locator('aside.sidebar label.pill')
 		.filter({ has: page.locator(`span:text-is("${label}")`) })
 		.locator('input[type=checkbox]');
 }
 async function togglePill(locator: Locator) {
-	// Bypass actionability — see comment on `sidebarCheckbox`.
 	await locator.click({ force: true });
 }
 
 async function waitForCatalogue(page: Page) {
-	// The streamed loader paints a skeleton first; wait for at least one
-	// real card so we know `filtersSeeded` has flipped and the URL-write
-	// effect is live.
+	// Wait until at least one real card paints so `filtersSeeded` has flipped.
 	await expect(page.locator('a[href*="/benchmark/"]').first()).toBeVisible({ timeout: 15_000 });
 }
 
@@ -144,16 +128,9 @@ test.describe('/benchmarks filter URL roundtrip', () => {
 	});
 
 	test('deselecting every modality persists "all off" via ?mods=', async ({ page }) => {
-		// "Empty pick set" is a deliberate narrowing ("exclude
-		// everything"), not the default "all on" state. The URL must
-		// distinguish them — empty pick set serialises as `?mods=`
-		// (param present, value empty) so deep-links round-trip
-		// faithfully. Without the empty-value handling in url-state.ts,
-		// deselecting every option would silently fall back to "all on"
-		// after a reload.
+		// Empty pick set must serialise as `?mods=` (distinct from "no param").
 		await page.goto('/benchmarks');
 		await waitForCatalogue(page);
-		// Universe is {audio, image, text} in the mock (no video benchmarks).
 		await togglePill(modalityCheckbox(page, 'audio'));
 		await togglePill(modalityCheckbox(page, 'image'));
 		await togglePill(modalityCheckbox(page, 'text'));
@@ -201,9 +178,6 @@ test.describe('/benchmarks filter URL roundtrip', () => {
 });
 
 test.describe('/tasks filter URL roundtrip', () => {
-	// The mock task registry has a single entry, so deselecting any
-	// facet's lone item drops the catalogue to zero — sufficient to
-	// exercise the chip + URL + restore + Reset all loop end-to-end.
 	test('type toggle: chip + URL + deep-link restore + Reset all', async ({ page }) => {
 		await page.goto('/tasks');
 		await expect(page.locator('a[href*="/tasks/"]').first()).toBeVisible({ timeout: 15_000 });
@@ -234,11 +208,6 @@ test.describe('/tasks filter URL roundtrip', () => {
 });
 
 test.describe('/models filter URL roundtrip', () => {
-	// Mixed coverage on this page: model-type lives in the singleton
-	// filters store (writes ?mtypes via sync), languages lives in a
-	// page-local SvelteSet (writes ?langs via a page $effect). Both go
-	// through the shared ActiveFilterStrip surfaced by FilterContent.
-
 	async function waitForModels(page: Page) {
 		await expect(page.locator('a[href*="/models/"]').first()).toBeVisible({ timeout: 15_000 });
 	}
@@ -322,8 +291,6 @@ test.describe('/models filter URL roundtrip', () => {
 		await page.goto('/models');
 		await waitForModels(page);
 
-		// The search input on /models is `ModelSearchBar`, bound to
-		// `filters.nameQuery` from the shared store (URL param `?q`).
 		const search = page.getByPlaceholder(/search/i).first();
 		await search.fill('cross');
 		await expect(page).toHaveURL(/[?&]q=cross/);
@@ -342,14 +309,9 @@ test.describe('/models filter URL roundtrip', () => {
 });
 
 test.describe('/benchmark/[name] filter URL roundtrip (shared store path)', () => {
-	// Covers the FilterContent → ActiveFilterStrip code path. The detail
-	// page shares its filter state with /models via the singleton store,
-	// so verifying availability here also smoke-tests the shared sync.
 	test('availability toggle: chip + URL + restore + Reset all', async ({ page }) => {
 		const url = '/benchmark/' + encodeURIComponent('MTEB(eng, v2)');
 		await page.goto(url);
-		// Segmented renders <button role="radio"> — wait for the
-		// availability radiogroup to settle.
 		const openRadio = page.getByRole('radio', { name: 'Open', exact: true }).first();
 		await expect(openRadio).toBeVisible({ timeout: 20_000 });
 
@@ -364,24 +326,12 @@ test.describe('/benchmark/[name] filter URL roundtrip (shared store path)', () =
 		await expect(activeChips(page)).toContainText('Open only');
 
 		await resetAll(page).click();
-		// URL strips ?avail= even if other auto-synced params remain.
 		await expect(page).not.toHaveURL(/[?&]avail=/);
 		await expect(activeChips(page).filter({ hasText: 'Open only' })).toHaveCount(0);
 	});
 });
 
 test.describe('/benchmark/[name] empty pick set drops every row', () => {
-	// "Empty pick set = exclude everything" applies uniformly across
-	// every benchmark-scope facet, regardless of universe size. The
-	// drop happens via two cooperating paths:
-	//   • Client-side facets (modality / domain / task type / tasks):
-	//     `isFullSet` returns false → `narrowTasks` filters out every
-	//     task → `visibleTasks.length === 0` in `applyFilters` short-
-	//     circuits to empty rows.
-	//   • Language facet (server-driven, where empty `?languages=` is
-	//     historically "no filter"): explicit drop at the top of
-	//     `applyFilters`.
-
 	const url = '/benchmark/' + encodeURIComponent('MTEB(eng, v2)');
 
 	async function waitForTable(page: Page) {
@@ -415,9 +365,7 @@ test.describe('/benchmark/[name] empty pick set drops every row', () => {
 	});
 
 	test('deselecting every modality drops every row (single-option universe)', async ({ page }) => {
-		// MTEB(eng, v2) has only one task modality ("text"). Even on a
-		// single-option universe, deselect-all is treated as "exclude
-		// everything" — the page-wide rule.
+		// Single-option universe is still subject to the "deselect-all drops" rule.
 		await page.goto(url);
 		await waitForTable(page);
 		await openScope(page);
@@ -442,9 +390,7 @@ test.describe('/benchmark/[name] empty pick set drops every row', () => {
 	});
 
 	test('deselecting every language drops every row', async ({ page }) => {
-		// Language is server-driven (empty `?languages=` returns the
-		// full summary), so `applyFilters` adds an explicit client-side
-		// drop for the empty-pick case.
+		// Language is server-scoped — empty pick set needs an explicit client drop.
 		await page.goto(url);
 		await waitForTable(page);
 		await openScope(page);
@@ -462,8 +408,6 @@ test.describe('/benchmark/[name] empty pick set drops every row', () => {
 	});
 });
 
-// Render sanity check — catches a future regression where the chip
-// markup drops the "× clear" indicator or the label format changes.
 test('active chip layout: label + × indicator', async ({ page }) => {
 	await page.goto('/benchmarks');
 	await waitForCatalogue(page);

@@ -13,10 +13,7 @@
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
 		onResetLanguages?: () => void;
-		// When provided, replaces the default FilterContent body — used
-		// by the /benchmarks catalogue page which filters benchmarks
-		// (not benchmark contents) and so has its own facet state
-		// outside the global filters store.
+		/** When provided, replaces FilterContent — used by /benchmarks. */
 		children?: Snippet;
 	}
 	let {
@@ -31,8 +28,7 @@
 		children
 	}: Props = $props();
 
-	// Collapsed on narrow viewports so the drawer doesn't overlap content;
-	// SSR has no `window` so it stays expanded until hydration.
+	// Collapsed on narrow viewports; SSR stays expanded until hydration.
 	let collapsed = $state(
 		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 	);

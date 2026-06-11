@@ -117,9 +117,7 @@
 		languagesPicked?: Set<string>;
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
-		// Reset the page-local language pick set back to "all selected".
-		// Distinct from `onToggleAllLanguages` (which flips between empty
-		// and full): `resetAll` always wants the full-selected state.
+		/** Restore the page-local language pick set to "all selected". */
 		onResetLanguages?: () => void;
 	}
 	let {
@@ -240,10 +238,7 @@
 				clear: () => filters.setAll('modelModalities', MODEL_MODALITIES, true)
 			});
 		}
-		// Page-local Language pick set — only present on /models (passed via
-		// `languagesPicked` / `languageOptions` / `onResetLanguages`). Without
-		// this chip the active strip stays empty when the user has only
-		// narrowed languages, which also hides the "Reset all" button.
+		// Page-local Language facet (only on /models).
 		if (
 			languagesPicked &&
 			languageOptions &&
@@ -374,9 +369,7 @@
 		filters.resetCustomize();
 		filters.resetModelFilters();
 		filters.nameQuery = '';
-		// /models holds its language picks page-locally — call its
-		// reset-to-full callback so "Reset all" wipes the language
-		// narrowing too. No-op on pages that don't pass the callback.
+		// No-op on pages that don't own a page-local language facet.
 		onResetLanguages?.();
 	}
 
