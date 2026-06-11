@@ -38,7 +38,7 @@ jobs:
         env:
           BASE_PATH: /${{ github.event.repository.name }}
           PUBLIC_API_URL: https://mteb-leaderboard-backend.hf.space
-          PUBLIC_SITE_URL: https://mteb-leaderboardv3.hf.space
+          PUBLIC_SITE_URL: https://embeddings-benchmark.github.io
         run: npm run build
 
       - name: Upload Pages artifact
