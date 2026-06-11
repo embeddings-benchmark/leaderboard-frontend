@@ -38,6 +38,19 @@ const MOCK_TASKS: TaskMeta[] = [
 		domains: ['General'],
 		modalities: ['text'],
 		description: 'Mock retrieval task for e2e'
+	},
+	{
+		// Second task with a distinct simplifiedType so toggling one
+		// type off in the /tasks filter doesn't collapse the universe
+		// to an empty set (which would round-trip as "no narrowing" via
+		// the URL encoder).
+		name: 'MockClassificationTask',
+		type: 'Classification',
+		simplifiedType: 'classification',
+		languages: ['English'],
+		domains: ['General'],
+		modalities: ['text'],
+		description: 'Mock classification task for e2e'
 	}
 ];
 const MOCK_MODELS: ModelMeta[] = [
@@ -54,7 +67,31 @@ const MOCK_MODELS: ModelMeta[] = [
 		instructionTuned: false,
 		openWeights: true,
 		sentenceTransformersCompatible: true,
-		modalities: ['text']
+		modalities: ['text'],
+		// Multiple declared languages so the page's local
+		// `languagesPicked` SvelteSet has a real universe to filter
+		// against — needed by the /models language URL-roundtrip test.
+		languages: ['English', 'Spanish', 'French']
+	},
+	{
+		// Second model with a distinct model type ('cross-encoder') so
+		// the Model-type filter toggle on /models produces a non-empty
+		// remaining set, and the URL-roundtrip + Reset all path is
+		// meaningful.
+		name: 'mock-org/mock-cross-encoder',
+		displayName: 'mock-cross-encoder',
+		org: 'mock-org',
+		zeroShotPct: 100,
+		activeParamsB: 0.05,
+		totalParamsB: 0.05,
+		embeddingDim: 0,
+		maxTokens: 512,
+		modelType: 'cross-encoder',
+		instructionTuned: false,
+		openWeights: false,
+		sentenceTransformersCompatible: false,
+		modalities: ['text'],
+		languages: ['English']
 	}
 ];
 

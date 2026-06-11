@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { loadModel, loadModelScores, loadTasks } from '$lib/data/service';
+	import { loadTasks } from '$lib/data/service';
 	import type { ModelMeta, ModelScores } from '$lib/types';
 	import BenchScoreTable, { type BenchScore } from '$lib/components/BenchScoreTable.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
@@ -14,55 +13,33 @@
 	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
+	import type { PageData } from './$types';
 
-	let modelName = $derived(decodeURIComponent(page.params.name ?? ''));
+	let { data }: { data: PageData } = $props();
 
-	// Card metadata loads on its own — fast (single MODEL_REGISTRY lookup).
-	// Scores load separately because they walk every benchmark summary, which
-	// can take minutes when the per-benchmark caches are cold.
-	let model = $state<ModelMeta | null>(null);
-	let metaError = $state<string | null>(null);
+	let modelName = $derived(data.modelName);
+	let metaError = $derived(data.modelError);
+
+	// Stale-guard via `data.scores === p` so a slow earlier fetch can't
+	// overwrite a rapid model→model nav.
 	let payload = $state<ModelScores | null>(null);
 	let loadingScores = $state(true);
 	let scoresError = $state<string | null>(null);
-
 	$effect(() => {
-		const name = modelName;
-		if (!name) return;
-		model = null;
-		metaError = null;
-		loadModel(name)
-			.then((m) => {
-				model = m;
-			})
-			.catch((e) => {
-				console.error('loadModel', e);
-				metaError = e instanceof Error ? e.message : String(e);
-			});
-	});
-
-	$effect(() => {
-		const name = modelName;
-		if (!name) return;
+		const p = data.scores;
 		payload = null;
 		scoresError = null;
 		loadingScores = true;
-		loadModelScores(name)
-			.then((p) => {
-				payload = p;
-				// Score payload also includes the freshest model meta — keep it
-				// in sync so the card reflects any zero-shot %, etc. that needs
-				// summary context.
-				if (p?.model) model = p.model;
-			})
-			.catch((e) => {
-				console.error('loadModelScores', e);
-				scoresError = e instanceof Error ? e.message : String(e);
-			})
-			.finally(() => {
-				loadingScores = false;
-			});
+		p.then((r) => {
+			if (data.scores !== p) return;
+			if (r.ok) payload = r.data;
+			else scoresError = r.error;
+			loadingScores = false;
+		});
 	});
+
+	// Scores payload carries a refined model with summary-derived fields.
+	let model = $derived<ModelMeta | null>(payload?.model ?? data.model);
 
 	let rawRows = $derived.by<BenchScore[]>(() => {
 		if (!payload) return [];

@@ -4,13 +4,9 @@ import { DEFAULT_BENCHMARK_NAME } from '$lib/data/defaults';
 
 interface LeaderboardState {
 	selected: string;
-	benchmark: Benchmark | null;
-	summary: BenchmarkSummary | null;
 	loading: boolean;
-	// True while a language-scoped summary refetch is queued or in
-	// flight. Distinct from `loading` (which only flips for the initial
-	// benchmark load): callers can show a thin progress bar over the
-	// existing table without dimming the rows the user is reading.
+	// Language-scoped refetch; distinct from `loading` so the existing table
+	// stays visible behind a progress bar.
 	refetching: boolean;
 	error: string | null;
 }
@@ -18,20 +14,17 @@ interface LeaderboardState {
 function createLeaderboardStore() {
 	const state = $state<LeaderboardState>({
 		selected: DEFAULT_BENCHMARK_NAME,
-		benchmark: null,
-		summary: null,
 		loading: false,
 		refetching: false,
 		error: null
 	});
+	// $state.raw — reassigned wholesale, never deep-mutated.
+	let benchmark = $state.raw<Benchmark | null>(null);
+	let summary = $state.raw<BenchmarkSummary | null>(null);
 
 	let inflight = 0;
-	// Language-scoped refetch tracker: `(benchmark, sorted-langs)` key so
-	// repeated triggers with the same picks no-op, and stale fetches lose
-	// to fresh ones via the counter. A debounce on top swallows rapid
-	// checkbox toggles — the server-side polars filter + summary rebuild
-	// is non-trivial on huge benchmarks (Multilingual), so we want to
-	// fire only when the user stops clicking.
+	// Debounced + dedupe-keyed language refetch — the server rebuild is heavy
+	// on Multilingual.
 	let langInflight = 0;
 	let langKey = '';
 	let langDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -49,10 +42,10 @@ function createLeaderboardStore() {
 		state.loading = true;
 		state.error = null;
 		try {
-			const [benchmark, summary] = await Promise.all([loadBenchmark(name), loadSummary(name)]);
+			const [b, s] = await Promise.all([loadBenchmark(name), loadSummary(name)]);
 			if (id !== inflight) return;
-			state.benchmark = benchmark;
-			state.summary = summary;
+			benchmark = b;
+			summary = s;
 		} catch (e) {
 			if (id !== inflight) return;
 			state.error = e instanceof Error ? e.message : String(e);
@@ -61,26 +54,14 @@ function createLeaderboardStore() {
 		}
 	}
 
-	// Refetch the summary scoped to ``languages`` (or unfiltered when
-	// empty / undefined). Called from the benchmark page when the user
-	// narrows the language filter — the server recomputes per-task /
-	// mean scores over the picked subset and we swap the new summary
-	// into state. Subsequent toggles back to the same selection hit
-	// the LRU `cachedHttp` slot (and the backend per-(name, langs)
-	// cache) — no rebuild.
-	//
-	// Debounced: rapid checkbox flips coalesce into one fetch after the
-	// user settles. Reverting to an earlier still-cached combo within
-	// the debounce window flushes through immediately via the dedupe key.
+	// Debounced refetch of the summary scoped to `languages` (empty = unfiltered).
 	function requestSummaryForLanguages(languages?: ReadonlyArray<string>) {
 		const name = state.selected;
 		const lang = languages && languages.length ? Array.from(new Set(languages)).sort() : [];
 		const key = `${name}::${lang.join(',')}`;
 		if (key === langKey) return;
 		if (langDebounceTimer) clearTimeout(langDebounceTimer);
-		// Flip the refetching flag immediately (not after the debounce)
-		// so the UI shows the progress bar as soon as the user clicks
-		// a chip — otherwise the 300ms debounce window feels unresponsive.
+		// Flip the flag pre-debounce so the progress bar appears on click.
 		state.refetching = true;
 		langDebounceTimer = setTimeout(() => {
 			langDebounceTimer = null;
@@ -96,9 +77,9 @@ function createLeaderboardStore() {
 		langKey = key;
 		const id = ++langInflight;
 		try {
-			const summary = await loadSummary(name, lang.length ? lang : undefined);
+			const s = await loadSummary(name, lang.length ? lang : undefined);
 			if (id !== langInflight || state.selected !== name) return;
-			state.summary = summary;
+			summary = s;
 		} catch (e) {
 			if (id !== langInflight) return;
 			state.error = e instanceof Error ? e.message : String(e);
@@ -112,10 +93,10 @@ function createLeaderboardStore() {
 			return state.selected;
 		},
 		get benchmark() {
-			return state.benchmark;
+			return benchmark;
 		},
 		get summary() {
-			return state.summary;
+			return summary;
 		},
 		get loading() {
 			return state.loading;

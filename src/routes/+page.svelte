@@ -1,120 +1,11 @@
 <script lang="ts">
-	// Home page: three primary leader tiles (Multilingual / Retrieval /
-	// English) above four collapsible sections — Language, Modality,
-	// Retrieval, Domain — each driven by the backend's
-	// `HOME_BENCHMARK_ENTRIES` menu. Tabs are gone; the menu's flat
-	// 4-section shape now drives the layout directly.
-
-	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { loadBenchmark, loadBenchmarkMenu, loadLeaders } from '$lib/data/service';
-	import { flattenMenu, type Benchmark, type BenchmarkLeaders, type MenuEntry } from '$lib/types';
 	import MenuSection from '$lib/components/MenuSection.svelte';
 	import PrimaryLeaderTile from '$lib/components/PrimaryLeaderTile.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
+	import type { PageData } from './$types';
 
-	let menu = $state<MenuEntry[]>([]);
-	let loading = $state(true);
-
-	$effect(() => {
-		loadBenchmarkMenu().then((m) => {
-			menu = m;
-			loading = false;
-		});
-	});
-
-	// Primary tiles — eyebrow label decoupled from benchmark name so
-	// "General" can cover both MTEB(Multilingual) and MTEB(eng).
-	type Primary = {
-		key: 'multilingual' | 'retrieval' | 'english';
-		label: string;
-		preferred: string;
-	};
-	const PRIMARIES: Primary[] = [
-		{ key: 'multilingual', label: 'General', preferred: 'MTEB(Multilingual, v2)' },
-		{ key: 'retrieval', label: 'Retrieval', preferred: 'RTEB(beta)' },
-		{ key: 'english', label: 'General', preferred: 'MTEB(eng, v2)' }
-	];
-
-	let flat = $derived(flattenMenu(menu));
-
-	let byName = $derived(new Map(flat.map((b) => [b.name, b])));
-	function pick(name: string): Benchmark | undefined {
-		return byName.get(name);
-	}
-
-	// Featured tiles are independent of the curated menu: pick from the
-	// menu when present, but if a primary benchmark was removed from the
-	// home menu we still want it on the home page, so fetch it directly.
-	// `primaryFetched` caches the per-name fallback result so the effect
-	// doesn't re-fire endlessly.
-	let primaryFetched = $state<Record<string, Benchmark | 'loading' | 'error'>>({});
-
-	$effect(() => {
-		const present = byName;
-		untrack(() => {
-			for (const p of PRIMARIES) {
-				if (present.has(p.preferred)) continue;
-				if (primaryFetched[p.preferred]) continue;
-				primaryFetched[p.preferred] = 'loading';
-				loadBenchmark(p.preferred)
-					.then((b) => {
-						primaryFetched[p.preferred] = b;
-					})
-					.catch(() => {
-						primaryFetched[p.preferred] = 'error';
-					});
-			}
-		});
-	});
-
-	// Resolve lazily so the layout still renders if a name is missing.
-	let primaries = $derived(
-		PRIMARIES.map((p) => {
-			const fromMenu = pick(p.preferred);
-			if (fromMenu) return { ...p, b: fromMenu };
-			const fallback = primaryFetched[p.preferred];
-			if (fallback && fallback !== 'loading' && fallback !== 'error') {
-				return { ...p, b: fallback };
-			}
-			return { ...p, b: undefined };
-		}).filter((p) => !!p.b) as Array<Primary & { b: Benchmark }>
-	);
-
-	// Size buckets in MILLIONS of parameters (wire format expected by
-	// `/benchmarks/{name}/leaders?buckets=…`). `null` second element
-	// = open-ended top bucket. Chip labels switch units at ≥1000M.
-	const SIZE_BUCKETS: ReadonlyArray<readonly [number, number | null]> = [
-		[0, 500],
-		[500, 1000],
-		[1000, 5000],
-		[5000, null]
-	];
-
-	// Per-benchmark leaders cache for the primary hero tiles.
-	let primaryLeaders = $state<Record<string, BenchmarkLeaders | 'loading' | 'error'>>({});
-
-	$effect(() => {
-		const ps = primaries;
-		untrack(() => {
-			for (const p of ps) {
-				if (primaryLeaders[p.b.name]) continue;
-				primaryLeaders[p.b.name] = 'loading';
-				loadLeaders(p.b.name, SIZE_BUCKETS)
-					.then((r) => {
-						primaryLeaders[p.b.name] = r;
-					})
-					.catch(() => {
-						primaryLeaders[p.b.name] = 'error';
-					});
-			}
-		});
-	});
-
-	// Sections in the order the backend declares them (matches the
-	// HOME_BENCHMARK_ENTRIES order: Language → Modality → Retrieval →
-	// Domain).
-	let sections = $derived(menu);
+	let { data }: { data: PageData } = $props();
 </script>
 
 <ShareMeta
@@ -128,14 +19,14 @@
 		<a class="all-link" href={resolve('/benchmarks')}>See all benchmarks →</a>
 	</header>
 
-	{#if loading}
-		<section class="primary" aria-busy="true" aria-label="Loading featured leaderboards">
-			<div class="section-head">
-				<span class="eyebrow-chip">Featured</span>
-			</div>
-			<div class="primary-grid">
+	<section class="primary" aria-label="Featured leaderboards">
+		<div class="section-head">
+			<span class="eyebrow-chip">Featured</span>
+		</div>
+		<div class="primary-grid">
+			{#await data.primaries}
 				{#each [0, 1, 2] as i (i)}
-					<div class="prim-skel">
+					<div class="prim-skel" aria-busy="true" aria-label="Loading featured leaderboard">
 						<div class="skel" style="width: 80px; height: 11px;"></div>
 						<div class="skel" style="width: 60%; height: 19px; margin-top: 8px;"></div>
 						<div class="skel" style="width: 40%; height: 11px; margin-top: 4px;"></div>
@@ -149,31 +40,42 @@
 						</div>
 					</div>
 				{/each}
-			</div>
-		</section>
-	{:else}
-		<section class="primary" aria-label="Featured leaderboards">
-			<div class="section-head">
-				<span class="eyebrow-chip">Featured</span>
-			</div>
-			<div class="primary-grid">
+			{:then primaries}
 				{#each primaries as p (p.key)}
-					<PrimaryLeaderTile
-						tintKey={p.key}
-						label={p.label}
-						benchmark={p.b}
-						leaders={primaryLeaders[p.b.name]}
-					/>
+					<PrimaryLeaderTile tintKey={p.key} label={p.label} benchmark={p.b} leaders={p.leaders} />
 				{/each}
-			</div>
-		</section>
+			{:catch}
+				<p class="load-error" role="status">
+					Couldn't load featured leaderboards. The backend may be unavailable — try refreshing in a
+					moment.
+				</p>
+			{/await}
+		</div>
+	</section>
 
-		<div class="sections">
-			{#each sections as s (s.name)}
+	<div class="sections">
+		{#await data.menu}
+			{#each [0, 1, 2, 3] as i (i)}
+				<div class="menu-skel" aria-busy="true" aria-label="Loading benchmark sections">
+					<div class="skel" style="width: 160px; height: 14px;"></div>
+					<div class="menu-skel-grid">
+						{#each [0, 1, 2] as r (r)}
+							<div class="skel menu-skel-card"></div>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		{:then menu}
+			{#each menu as s (s.name)}
 				<MenuSection entry={s} />
 			{/each}
-		</div>
-	{/if}
+		{:catch}
+			<p class="load-error" role="status">
+				Couldn't load benchmark sections. The backend may be unavailable — try refreshing in a
+				moment.
+			</p>
+		{/await}
+	</div>
 </main>
 
 <style>
@@ -230,8 +132,6 @@
 		display: flex;
 		flex-direction: column;
 	}
-	/* Skeleton placeholder for a PrimaryLeaderTile — same outer shell so
-	   the layout doesn't shift when the real tiles land. */
 	.prim-skel {
 		display: flex;
 		flex-direction: column;
@@ -252,6 +152,31 @@
 		align-items: center;
 		gap: 10px;
 		padding: 6px 4px;
+	}
+	.menu-skel {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 18px 0;
+	}
+	.menu-skel-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 14px;
+	}
+	.menu-skel-card {
+		height: 130px;
+		border-radius: 14px;
+	}
+	.load-error {
+		grid-column: 1 / -1;
+		margin: 8px 0 0;
+		padding: 14px 16px;
+		font-size: 13px;
+		color: var(--text-muted);
+		background: var(--surface-muted);
+		border: 1px solid var(--border);
+		border-radius: 10px;
 	}
 
 	@media (max-width: 980px) {

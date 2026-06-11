@@ -5,17 +5,14 @@
 	interface Props {
 		hideScope?: boolean;
 		flatModel?: boolean;
-		// /models filters models by capability, not by per-benchmark
-		// training overlap — the Zero-shot segmented control is
-		// benchmark-scoped, so it's hidden there.
+		/** Zero-shot is benchmark-scoped; /models hides it. */
 		hideZeroShot?: boolean;
-		// Optional inline Language facet — forwarded to FilterContent.
-		// Only /models passes these; on every other page the block is
-		// omitted because there's no language data to bind to.
+		/** Inline Language facet — only /models passes these. */
 		languageOptions?: string[];
 		languagesPicked?: Set<string>;
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
+		onResetLanguages?: () => void;
 		// When provided, replaces the default FilterContent body — used
 		// by the /benchmarks catalogue page which filters benchmarks
 		// (not benchmark contents) and so has its own facet state
@@ -30,6 +27,7 @@
 		languagesPicked,
 		onToggleLanguage,
 		onToggleAllLanguages,
+		onResetLanguages,
 		children
 	}: Props = $props();
 
@@ -80,6 +78,7 @@
 				{languagesPicked}
 				{onToggleLanguage}
 				{onToggleAllLanguages}
+				{onResetLanguages}
 			/>
 		{/if}
 	{/if}

@@ -1,7 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { SvelteSet } from 'svelte/reactivity';
-	import { loadModels } from '$lib/data/service';
 	import { safeIdle } from '$lib/idle';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
@@ -26,52 +25,45 @@
 		sortIcon,
 		sortModalities
 	} from '$lib/format';
+	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import type { PageData } from './$types';
+	import type { ModelsData } from './+page';
 
-	let ALL_MODELS = $state<ModelMeta[]>([]);
-	let loadingData = $state(true);
+	let { data }: { data: PageData } = $props();
+
+	// Stale-guard via `data.models === p` so a slow earlier promise can't
+	// overwrite a fresh nav.
+	let resolved = $state<ModelsData | null>(null);
 	let loadError = $state<string | null>(null);
-
-	// Local language filter state. Lives in the page (not the shared
-	// `filters` store) because /models is the only place that uses it.
-	// Same "all on = filter off" semantic as the shared store:
-	// `languagesPicked.size === LANGUAGES.length` ⇒ no narrowing.
-	// The UI (search input, cap-and-expand, pills) is rendered inside
-	// the shared FilterSidebar — we just pass the data and handlers in.
-	let LANGUAGES = $state<string[]>([]);
-	const languagesPicked = new SvelteSet<string>();
-
 	$effect(() => {
-		// Re-fetch whenever the modality picker (now in the FilterSidebar)
-		// changes. When all modalities are selected we omit the param so the
-		// server returns the full registry from its hot cache slot.
-		const all = filters.modelModalities.size === MODEL_MODALITIES.length;
-		const mods = all ? undefined : [...filters.modelModalities];
-		loadingData = true;
+		const p = data.models;
 		loadError = null;
-		loadModels(mods ? { modalities: mods } : {})
-			.then((m) => {
-				ALL_MODELS = m;
-				// Compute available languages from the loaded models.
-				// `ModelMeta.languages` may be missing (older backends, models
-				// with no declared language scope) — those rows pass the
-				// filter trivially via the "everything checked" default.
-				// Count per language so the filter pills sort by popularity.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langCount = new Map<string, number>();
-				for (const x of m)
-					for (const l of x.languages ?? []) langCount.set(l, (langCount.get(l) ?? 0) + 1);
-				LANGUAGES = [...langCount.entries()]
-					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-					.map(([l]) => l);
-				languagesPicked.clear();
-				for (const l of LANGUAGES) languagesPicked.add(l);
-				loadingData = false;
-			})
-			.catch((e) => {
-				loadError = e instanceof Error ? e.message : String(e);
-				loadingData = false;
-			});
+		p.then((r) => {
+			if (data.models === p) resolved = r;
+		}).catch((e) => {
+			if (data.models === p) loadError = e instanceof Error ? e.message : String(e);
+		});
+	});
+
+	let ALL_MODELS = $derived<ModelMeta[]>(resolved?.models ?? []);
+
+	// Page-local — /models is the only page with this language pill list.
+	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
+	const languageFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipKey: 'langs',
+		chipLabel: 'Lang',
+		universe: () => LANGUAGES
+	});
+	const languagesPicked = languageFacet.picked;
+	// $state (not plain let) so the URL-write effect re-runs on the flip and
+	// registers `languagesPicked` as a dep.
+	let languagesSeeded = $state(false);
+	$effect(() => {
+		if (!resolved || languagesSeeded) return;
+		languagesSeeded = true;
+		languageFacet.seed();
 	});
 
 	const SORTS = [
@@ -95,23 +87,16 @@
 		maxTokens: 'desc',
 		released: 'desc'
 	};
-	// Default sort: newest release first. Surfaces just-shipped models at
-	// the top so visitors see what's current without scrolling. State is
-	// URL-backed (`?s.models=…&d.models=…`) so navigating to a model detail
-	// page and back via the browser restores the user's sort choice.
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
 	const DEFAULT_SORT: SortId = 'released';
-	const _urlSort = getParam('s.models');
-	const _urlDir = getParam('d.models');
-	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
-		? (_urlSort as SortId)
-		: DEFAULT_SORT;
-	let sort = $state<SortId>(initialSort);
-	let sortDir = $state<SortDir>(
-		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
-	);
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	// Gate URL writes until the onMount URL→state sync has run, otherwise the
+	// default-state write nukes deep-link params.
+	let urlHydrated = $state(false);
 	$effect(() => {
-		// Omit defaults from the URL so the canonical "fresh visit" link is clean.
+		if (!urlHydrated) return;
 		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
 		updateUrl({
 			's.models': isDefault ? null : sort,
@@ -127,12 +112,33 @@
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
 
-	// URL-backed view mode (cards default) and a SortState adapter so the
-	// table's `SortHeader` drives the same sort/sortDir as the dropdown.
-	const initialView = getParam('view');
-	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	let view = $state<ViewMode>('cards');
 	$effect(() => {
+		if (!urlHydrated) return;
 		updateUrl({ view: view === 'cards' ? null : view });
+	});
+
+	// Page-local `?langs=` sync; shared filters handle their own params.
+	$effect(() => {
+		// languagesSeeded gate: empty universe pre-seed would delete `?langs=` deep links.
+		if (!urlHydrated || !languagesSeeded) return;
+		updateUrl({ langs: languageFacet.urlValue() });
+	});
+
+	onMount(() => {
+		const us = getParam('s.models');
+		const ud = getParam('d.models');
+		const uv = getParam('view');
+		if (us && SORT_IDS.has(us as SortId)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		// No summary here, so call hydrateFromUrl directly.
+		filters.hydrateFromUrl();
+		urlHydrated = true;
 	});
 	const sortAdapter: SortState<SortId> = {
 		get key() {
@@ -172,6 +178,9 @@
 		const langPicked = languagesPicked;
 		const langCount = LANGUAGES.length;
 		const langActive = langCount > 0 && langPicked.size !== langCount;
+		// Client-side modality filter; models without declared modalities default to ['text'].
+		const modalitiesPicked = filters.modelModalities;
+		const modalitiesActive = modalitiesPicked.size !== MODEL_MODALITIES.length;
 		return (m: ModelMeta) => {
 			if (q && !modelSearchKey(m).includes(q)) return false;
 			if (availability === 'open' && !m.openWeights) return false;
@@ -181,6 +190,17 @@
 			if (stOnly && !m.sentenceTransformersCompatible) return false;
 			// Empty pick set = "deselect everything" → nothing matches.
 			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
+			if (modalitiesActive) {
+				const mods = m.modalities ?? ['text'];
+				let any = false;
+				for (const x of mods) {
+					if (modalitiesPicked.has(x)) {
+						any = true;
+						break;
+					}
+				}
+				if (!any) return false;
+			}
 			if (sizeActive) {
 				if (m.totalParamsB == null || m.totalParamsB <= 0) return false;
 				const paramsM = m.totalParamsB * 1000;
@@ -206,7 +226,7 @@
 	}
 	function toggleAllLanguages() {
 		if (languagesPicked.size === LANGUAGES.length) languagesPicked.clear();
-		else for (const l of LANGUAGES) languagesPicked.add(l);
+		else languageFacet.reset();
 	}
 
 	// Split filter / sort so name-query keystrokes (which only narrow rows)
@@ -331,7 +351,7 @@
 			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
 		</div>
 
-		{#if loadingData}
+		{#if !resolved && !loadError}
 			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load models: {loadError}</p>
@@ -411,6 +431,7 @@
 		languagesPicked={languagesPicked as unknown as Set<string>}
 		onToggleLanguage={toggleLanguage}
 		onToggleAllLanguages={toggleAllLanguages}
+		onResetLanguages={() => languageFacet.reset()}
 	/>
 </div>
 

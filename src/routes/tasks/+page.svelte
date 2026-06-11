@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { SvelteSet } from 'svelte/reactivity';
-	import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
+	import { onMount } from 'svelte';
 	import { safeIdle } from '$lib/idle';
-	import { flattenMenu } from '$lib/types';
+	import ActiveFilterStrip, { type Chip } from '$lib/components/ActiveFilterStrip.svelte';
 	import FilterFacet from '$lib/components/FilterFacet.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
@@ -16,27 +15,13 @@
 	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
 	import type { SortState } from '$lib/stores/sort.svelte';
 	import { ariaSort, COLLATOR, sortIcon } from '$lib/format';
+	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import type { PageData } from './$types';
+	import type { TasksData } from './+page';
 
-	interface TaskEntry {
-		name: string;
-		// Lowercased name cached at load — the name-search keystroke filter
-		// runs 1700x per recompute, so a per-entry `.toLowerCase()` would
-		// allocate 1700 strings per stroke. Memoised once here.
-		nameLower: string;
-		type: string;
-		simplifiedType: string;
-		languages: string[];
-		domains: string[];
-		modalities: string[];
-		description: string;
-		benchmarks: string[];
-		mainScore: string;
-		// Distinct models evaluated on this task — backend overlay from the
-		// unified results frame. `0` for tasks the cache hasn't filled in.
-		numModels: number;
-	}
+	let { data }: { data: PageData } = $props();
 
 	// Curated order — matches the `.type-pill[data-stype=…]` palette below.
 	const SIMPLIFIED_TYPES = [
@@ -47,97 +32,25 @@
 		'semantic-similarity'
 	] as const;
 
-	let ALL_TASKS = $state<TaskEntry[]>([]);
-	let SIMPLIFIED_PRESENT = $state<string[]>([]);
-	let MODALITIES = $state<string[]>([]);
-	let DOMAINS = $state<string[]>([]);
-	let LANGUAGES = $state<string[]>([]);
-	let loadingData = $state(true);
+	// Stale-guard via `data.tasks === p` on rapid nav.
+	let resolved = $state<TasksData | null>(null);
 	let loadError = $state<string | null>(null);
-
 	$effect(() => {
-		(async () => {
-			try {
-				// /tasks returns the full task registry; we cross-reference the menu
-				// to know which benchmarks each task appears in.
-				const [menu, tasks] = await Promise.all([loadBenchmarkMenu(), loadTasks()]);
-				const allBenches = flattenMenu(menu);
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const occurrences = new Map<string, string[]>();
-				for (const b of allBenches) {
-					for (const t of b.tasks) {
-						const list = occurrences.get(t) ?? [];
-						list.push(b.name);
-						occurrences.set(t, list);
-					}
-				}
-				// Build entries + extract every facet in one pass over the
-				// 1700+ task registry. The original code ran four separate
-				// `flatMap()` passes (one per facet), each allocating a fresh
-				// intermediate array; this fuses them into a single walk.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const modSet = new Set<string>();
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const domSet = new Set<string>();
-				// Count per language so the filter pills sort by popularity.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langCount = new Map<string, number>();
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const presentSet = new Set<string>();
-				const entries: TaskEntry[] = new Array(tasks.length);
-				for (let i = 0; i < tasks.length; i++) {
-					const m = tasks[i];
-					const simplifiedType = m.simplifiedType ?? m.type?.toLowerCase() ?? '';
-					const modalities =
-						m.modalities ??
-						((m as unknown as { modality?: string }).modality
-							? [(m as unknown as { modality: string }).modality]
-							: []);
-					const languages = m.languages ?? [];
-					const domains = m.domains ?? [];
-					entries[i] = {
-						name: m.name,
-						nameLower: m.name.toLowerCase(),
-						type: m.type,
-						simplifiedType,
-						languages,
-						domains,
-						modalities,
-						description: m.description ?? '',
-						benchmarks: occurrences.get(m.name) ?? [],
-						mainScore: m.mainScore ?? '',
-						numModels: m.numModels ?? 0
-					};
-					presentSet.add(simplifiedType);
-					for (const x of modalities) modSet.add(x);
-					for (const x of domains) domSet.add(x);
-					for (const x of languages) langCount.set(x, (langCount.get(x) ?? 0) + 1);
-				}
-				entries.sort((a, b) => COLLATOR.compare(a.name, b.name));
-				ALL_TASKS = entries;
-				// Curated order first, then any extras alphabetised.
-				SIMPLIFIED_PRESENT = [
-					...SIMPLIFIED_TYPES.filter((t) => presentSet.has(t)),
-					...[...presentSet].filter((t) => !SIMPLIFIED_TYPES.includes(t as never)).sort()
-				];
-
-				MODALITIES = [...modSet].sort();
-				DOMAINS = [...domSet].sort();
-				// Descending by usage count, alphabetical tie-break.
-				LANGUAGES = [...langCount.entries()]
-					.sort((a, b) => b[1] - a[1] || COLLATOR.compare(a[0], b[0]))
-					.map(([l]) => l);
-				for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
-				for (const v of MODALITIES) modalityFilter.add(v);
-				for (const v of DOMAINS) domainFilter.add(v);
-				for (const v of LANGUAGES) languageFilter.add(v);
-				loadingData = false;
-			} catch (e) {
-				loadError = e instanceof Error ? e.message : String(e);
-				loadingData = false;
-			}
-		})();
+		const p = data.tasks;
+		loadError = null;
+		p.then((r) => {
+			if (data.tasks === p) resolved = r;
+		}).catch((e) => {
+			if (data.tasks === p) loadError = e instanceof Error ? e.message : String(e);
+		});
 	});
+
+	// Defaults to empty so downstream derived blocks don't throw on undefined.
+	let ALL_TASKS = $derived(resolved?.tasks ?? []);
+	let SIMPLIFIED_PRESENT = $derived(resolved?.simplifiedPresent ?? []);
+	let MODALITIES = $derived(resolved?.modalities ?? []);
+	let DOMAINS = $derived(resolved?.domains ?? []);
+	let LANGUAGES = $derived(resolved?.languages ?? []);
 
 	const SORTS = [
 		{ id: 'models', label: 'Model count' },
@@ -159,25 +72,52 @@
 	};
 
 	let query = $state('');
-	const typeFilter = new SvelteSet<string>();
-	const modalityFilter = new SvelteSet<string>();
-	const domainFilter = new SvelteSet<string>();
-	const languageFilter = new SvelteSet<string>();
+	const typeFacet = createFacetFilter({
+		urlParam: 'types',
+		chipKey: 'types',
+		chipLabel: 'Type',
+		universe: () => SIMPLIFIED_PRESENT
+	});
+	const modalityFacet = createFacetFilter({
+		urlParam: 'mods',
+		chipKey: 'mods',
+		chipLabel: 'Modality',
+		universe: () => MODALITIES
+	});
+	const domainFacet = createFacetFilter({
+		urlParam: 'doms',
+		chipKey: 'doms',
+		chipLabel: 'Domain',
+		universe: () => DOMAINS
+	});
+	const languageFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipKey: 'langs',
+		chipLabel: 'Lang',
+		universe: () => LANGUAGES
+	});
+	const FACETS = [typeFacet, modalityFacet, domainFacet, languageFacet];
+	const typeFilter = typeFacet.picked;
+	const modalityFilter = modalityFacet.picked;
+	const domainFilter = domainFacet.picked;
+	const languageFilter = languageFacet.picked;
+	// $state so the URL-write effect re-runs on the flip and registers the
+	// facet SvelteSets as deps.
+	let filtersSeeded = $state(false);
+	$effect(() => {
+		if (!resolved || filtersSeeded) return;
+		filtersSeeded = true;
+		for (const f of FACETS) f.seed();
+	});
 
-	// URL-backed sort (`?s.tasks=…&d.tasks=…`) so navigating to a task detail
-	// page and back via the browser restores the user's sort choice.
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
 	const DEFAULT_SORT: SortId = 'models';
-	const _urlSort = getParam('s.tasks');
-	const _urlDir = getParam('d.tasks');
-	const initialSort: SortId = SORT_IDS.has(_urlSort as SortId)
-		? (_urlSort as SortId)
-		: DEFAULT_SORT;
-	let sort = $state<SortId>(initialSort);
-	let sortDir = $state<SortDir>(
-		_urlDir === 'asc' || _urlDir === 'desc' ? _urlDir : NATURAL_DIR[initialSort]
-	);
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	let urlHydrated = $state(false);
 	$effect(() => {
+		if (!urlHydrated) return;
 		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
 		updateUrl({
 			's.tasks': isDefault ? null : sort,
@@ -194,10 +134,35 @@
 	}
 
 	// View mode: card grid (default) vs sortable table.
-	const initialView = getParam('view');
-	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	let view = $state<ViewMode>('cards');
 	$effect(() => {
+		if (!urlHydrated) return;
 		updateUrl({ view: view === 'cards' ? null : view });
+	});
+
+	// Facet URL sync — `urlValue()` returns null to clear or encoded string to set.
+	$effect(() => {
+		if (!urlHydrated || !filtersSeeded) return;
+		updateUrl({
+			types: typeFacet.urlValue(),
+			mods: modalityFacet.urlValue(),
+			doms: domainFacet.urlValue(),
+			langs: languageFacet.urlValue()
+		});
+	});
+
+	onMount(() => {
+		const us = getParam('s.tasks');
+		const ud = getParam('d.tasks');
+		const uv = getParam('view');
+		if (us && SORT_IDS.has(us as SortId)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		urlHydrated = true;
 	});
 
 	const sortAdapter: SortState<SortId> = {
@@ -237,24 +202,46 @@
 	}
 	function toggleAllTypes() {
 		if (typeFilter.size === SIMPLIFIED_PRESENT.length) typeFilter.clear();
-		else for (const v of SIMPLIFIED_PRESENT) typeFilter.add(v);
+		else typeFacet.reset();
 	}
 	function toggleAllDomains() {
 		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
-		else for (const v of DOMAINS) domainFilter.add(v);
+		else domainFacet.reset();
 	}
 	function toggleAllModalities() {
 		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
-		else for (const v of MODALITIES) modalityFilter.add(v);
+		else modalityFacet.reset();
 	}
 	function toggleAllLanguages() {
 		if (languageFilter.size === LANGUAGES.length) languageFilter.clear();
-		else for (const v of LANGUAGES) languageFilter.add(v);
+		else languageFacet.reset();
 	}
 	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
+
+	let chips = $derived.by<Chip[]>(() => {
+		const list: Chip[] = [];
+		if (filtersSeeded) {
+			for (const f of FACETS) {
+				const c = f.chip();
+				if (c) list.push(c);
+			}
+		}
+		if (query.trim()) {
+			list.push({
+				key: 'q',
+				label: `Name: "${query.trim()}"`,
+				clear: () => (query = '')
+			});
+		}
+		return list;
+	});
+	function resetAll() {
+		for (const f of FACETS) f.reset();
+		query = '';
+	}
 
 	let domainQuery = $state('');
 	let visibleDomains = $derived.by(() => {
@@ -277,15 +264,10 @@
 		return SIMPLIFIED_RANK[t] ?? SIMPLIFIED_TYPES.length;
 	}
 
-	// Split filter / sort so name-query keystrokes only re-run the cheap
-	// filter pass; the sort only re-runs when sort key/dir or the matched
-	// set identity changes.
+	// Split filter / sort so keystrokes don't trigger a re-sort.
 	let matched = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		// "All on" = filter off (skip the empty-`.some()` problem on rows
-		// with empty modality / domain / type lists). Partial = intersection
-		// check. Empty = the user cleared the category deliberately, so
-		// nothing matches.
+		// All on = filter off; empty pick set = nothing matches.
 		const typeOff = typeFilter.size === SIMPLIFIED_PRESENT.length;
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
@@ -301,8 +283,7 @@
 	});
 	let filtered = $derived.by(() => {
 		const list = [...matched];
-		// Comparator computes ascending cmp; sortDir flips at the end. Name
-		// tie-break stays stable so equal rows don't reshuffle on direction toggle.
+		// Stable tie-break by name; sortDir flips ascending cmp at the end.
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
@@ -429,12 +410,12 @@
 				</button>
 			</div>
 			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
-			{#if !loadingData && !loadError}
+			{#if resolved && !loadError}
 				<span class="count">{filtered.length} / {ALL_TASKS.length}</span>
 			{/if}
 		</div>
 
-		{#if loadingData}
+		{#if !resolved && !loadError}
 			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load tasks: {loadError}</p>
@@ -464,6 +445,7 @@
 	</main>
 
 	<FilterSidebar>
+		<ActiveFilterStrip {chips} onResetAll={resetAll} />
 		<!-- `data-stype` drives the per-stype checked-state tint
 		     defined in this page's local CSS (Task group is the one
 		     facet here that uses the per-category palette rather than

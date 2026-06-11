@@ -7,6 +7,16 @@
 	import { filters, applyFilters } from '$lib/stores/filters.svelte';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import { safeIdle, safeCancelIdle } from '$lib/idle';
+	import { primeBenchmarkCache } from '$lib/data/service';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+
+	// `$effect.pre` ensures this runs before the leaderboard store's load effect
+	// regardless of source order.
+	$effect.pre(() => {
+		if (data.benchmark) primeBenchmarkCache(data.benchmark.name, data.benchmark);
+	});
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
@@ -31,8 +41,14 @@
 	import TaskInfoTab from '$lib/components/TaskInfoTab.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.name ?? ''));
+	// Fallback to the loader's copy prevents a "Unknown benchmark" flash on
+	// hard refresh before the store resolves.
 	let benchmark = $derived(
-		leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : null
+		leaderboard.benchmark?.name === benchmarkName
+			? leaderboard.benchmark
+			: data.benchmark?.name === benchmarkName
+				? data.benchmark
+				: null
 	);
 	// Hero accent follows the canonical modality priority
 	// (`video → audio → image → text`) — matches the BenchmarkCard tint

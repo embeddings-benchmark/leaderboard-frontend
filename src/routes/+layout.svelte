@@ -7,18 +7,25 @@
 	import { afterNavigate, beforeNavigate } from '$app/navigation';
 	import { page, updated } from '$app/state';
 	import { base, resolve } from '$app/paths';
+	import { PUBLIC_API_URL } from '$env/static/public';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
 	import { filters } from '$lib/stores/filters.svelte';
 
+	// Preconnect to the backend so the first fetch lands ~150ms faster on cold
+	// hits. URL tracks `PUBLIC_API_URL` per build.
+	let preconnectHref = (() => {
+		try {
+			const u = new URL(PUBLIC_API_URL);
+			return u.origin;
+		} catch {
+			return null;
+		}
+	})();
+
 	let { children } = $props();
 
-	// Name search is a per-page find-in-table gesture, not a sticky
-	// filter — clear it on cross-page navigation so typing "octen" on
-	// /models doesn't pre-populate the same query on /benchmark/BEIR.
-	// A page that legitimately wants to restore a previous query carries
-	// it via `?q=…` and the filters store reads that param itself on
-	// mount; rebuilding from the URL keeps deep-link behaviour intact.
+	// Name search is per-page — clear on cross-page nav. Pages restore via `?q=`.
 	afterNavigate(({ from, to }) => {
 		if (!to) return;
 		if (from?.url?.pathname === to.url.pathname) return;
@@ -26,19 +33,14 @@
 		if (filters.nameQuery !== urlQ) filters.nameQuery = urlQ;
 	});
 
-	// $app/state's `updated.current` flips to true when the poll detects a new
-	// deployed version (svelte.config.js `kit.version.pollInterval`). Force a
-	// full reload on the next client-side navigation so the new build lands
-	// without users needing to clear cache.
+	// Hard reload on next nav when a new deploy is detected.
 	beforeNavigate(({ willUnload, to }) => {
 		if (updated.current && !willUnload && to?.url) {
 			location.href = to.url.href;
 		}
 	});
 
-	// As a belt-and-suspenders fallback: if no navigation happens but the page
-	// is idle for a while after detecting an update, refresh once it goes
-	// hidden so the next foreground visit is fresh.
+	// Fallback: reload on visibilitychange when an update is pending.
 	onMount(() => {
 		function onVisibility() {
 			if (document.visibilityState === 'hidden' && updated.current) {
@@ -55,9 +57,7 @@
 		return base && p.startsWith(base) ? p.slice(base.length) || '/' : p;
 	});
 
-	// `/` (home) and `/benchmarks` (all-list) are now separate top-nav
-	// entries. `/benchmark/{name}` (the per-benchmark detail page) is owned
-	// by Benchmarks so the detail view doesn't sit "outside" any nav tab.
+	// `/benchmark/{name}` matches the Benchmarks tab too.
 	function isHomeRoute(p: string) {
 		const trimmed = p.replace(/\/$/, '') || '/';
 		return trimmed === '/';
@@ -79,6 +79,9 @@
 
 <svelte:head>
 	<link rel="icon" href="{base}/dots-icon.ico" type="image/x-icon" />
+	{#if preconnectHref}
+		<link rel="preconnect" href={preconnectHref} crossorigin="anonymous" />
+	{/if}
 </svelte:head>
 
 <!-- ShareMeta is intentionally NOT rendered at the layout level. Every

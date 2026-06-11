@@ -46,7 +46,7 @@
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
 <!-- All <a> here carry URLs from user-supplied markdown — always external. -->
-{#each segments as seg, i (i)}
+{#each segments as seg, i (`${seg.type}:${i}:${seg.text}`)}
 	{#if seg.type === 'link'}
 		<a
 			href={seg.url}

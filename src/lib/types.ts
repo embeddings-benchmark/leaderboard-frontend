@@ -18,8 +18,9 @@ export interface Benchmark {
 	domains: string[];
 	modalities: string[];
 	// Backend may flag a benchmark as hidden from the curated menu
-	// (`display_on_leaderboard=False`); /benchmarks?include_hidden=true returns
-	// them so the all-benchmarks page can still surface them.
+	// (`display_on_leaderboard=False`); the /benchmarks list always
+	// includes them so the all-benchmarks page can still surface them
+	// (with the "newer version available" hint).
 	displayOnLeaderboard?: boolean;
 	// Names of newer benchmarks that supersede this one.
 	newVersion?: string[] | null;

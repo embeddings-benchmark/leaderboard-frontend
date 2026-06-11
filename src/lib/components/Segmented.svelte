@@ -6,14 +6,35 @@
 		onChange: (next: T) => void;
 	}
 	let { ariaLabel, options, value, onChange }: Props = $props();
+
+	// Roving tabindex per WAI-ARIA radiogroup pattern.
+	let buttons: HTMLButtonElement[] = $state([]);
+
+	function onKeyDown(e: KeyboardEvent) {
+		const i = options.findIndex((o) => o.value === value);
+		if (i === -1) return;
+		const n = options.length;
+		let next = -1;
+		if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + n) % n;
+		else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % n;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = n - 1;
+		else return;
+		e.preventDefault();
+		onChange(options[next].value);
+		queueMicrotask(() => buttons[next]?.focus());
+	}
 </script>
 
-<div class="segmented" role="radiogroup" aria-label={ariaLabel}>
-	{#each options as opt (opt.value)}
+<!-- tabindex=-1 for a11y lint; real focus is on buttons via roving tabindex. -->
+<div class="segmented" role="radiogroup" aria-label={ariaLabel} tabindex="-1" onkeydown={onKeyDown}>
+	{#each options as opt, i (opt.value)}
 		<button
+			bind:this={buttons[i]}
 			type="button"
 			role="radio"
 			aria-checked={value === opt.value}
+			tabindex={value === opt.value ? 0 : -1}
 			class="seg"
 			class:on={value === opt.value}
 			onclick={() => onChange(opt.value)}

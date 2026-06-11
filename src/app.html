@@ -8,12 +8,10 @@
 		     The inline script below pins it to the user's saved choice (if any)
 		     before first paint to avoid a flash of un-themed content. -->
 		<meta name="color-scheme" content="light dark" />
-		<!-- Open the TLS handshake to the mteb FastAPI host (Hugging Face Space) in
-		     parallel with the HTML parse — every page makes at least one fetch
-		     against it, so the first request lands ~150 ms faster on cold hits.
-		     `preconnect` already implies DNS resolution, so a separate
-		     `dns-prefetch` would be redundant. -->
-		<link rel="preconnect" href="https://mteb-leaderboardv2-api.hf.space" crossorigin />
+		<!-- Per-build backend `preconnect` is emitted by the root +layout.svelte
+		     using the `PUBLIC_API_URL` env var so dev (`http://localhost:8000`)
+		     and prod (`mteb-leaderboardv2-api.hf.space`) each get the right
+		     origin. Don't hardcode it here. -->
 		<!-- Theme pin runs first so it lands before any layout / speculation
 		     work — keeps the no-flash invariant tight on slow CPUs. -->
 		<script>
@@ -63,6 +61,12 @@
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
-		%sveltekit.body%
+		<!-- The body marker is wrapped in a `display: contents` div per SvelteKit's
+		     recommendation — some browser extensions inject siblings into body and
+		     that interferes with hydration. The wrapper is transparent to layout.
+		     Do NOT reference the literal body-marker token in this comment: it's a
+		     simple string-substitution and would be replaced inside the comment too,
+		     breaking the HTML. -->
+		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

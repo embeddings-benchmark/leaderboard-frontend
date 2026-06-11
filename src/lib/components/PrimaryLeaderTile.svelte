@@ -5,14 +5,19 @@
 
 	type TintKey = 'multilingual' | 'retrieval' | 'english';
 
+	// `undefined` = loading.
+	type LeadersResult = BenchmarkLeaders | { error: string };
 	interface Props {
-		// Drives the per-card tint via `data-key`.
 		tintKey: TintKey;
 		label: string;
 		benchmark: Benchmark;
-		leaders: BenchmarkLeaders | 'loading' | 'error' | undefined;
+		leaders: LeadersResult | undefined;
 	}
 	let { tintKey, label, benchmark, leaders }: Props = $props();
+	let leadersErrored = $derived(leaders !== undefined && 'error' in leaders);
+	let leadersData = $derived<BenchmarkLeaders | undefined>(
+		leaders !== undefined && !('error' in leaders) ? leaders : undefined
+	);
 
 	function fmtParams(m: number): string {
 		if (m >= 1000) {
@@ -26,12 +31,8 @@
 		if (max == null) return `>${fmtParams(min)}`;
 		return `${fmtParams(min)}–${fmtParams(max)}`;
 	}
-	// Loader returns buckets ascending by size (smallest → biggest). Reverse
-	// so the largest-model bucket sits at the top — matches the convention
-	// of "best/biggest first" rankings.
-	let orderedBuckets = $derived(
-		leaders && leaders !== 'loading' && leaders !== 'error' ? [...leaders.buckets].reverse() : []
-	);
+	// Reverse to biggest-first.
+	let orderedBuckets = $derived(leadersData ? [...leadersData.buckets].reverse() : []);
 </script>
 
 <a
@@ -64,7 +65,7 @@
 		<span class="prim-chip">{label}</span>
 	</header>
 	<span class="prim-sub">{benchmark.numModels ?? 0} models · {benchmark.tasks.length} tasks</span>
-	{#if leaders === 'loading' || leaders === undefined}
+	{#if leaders === undefined}
 		<div class="prim-grid" aria-busy="true" aria-label="Loading leaders">
 			<div class="prim-row prim-head-row">
 				<span>Top Models</span>
@@ -77,7 +78,7 @@
 				</div>
 			{/each}
 		</div>
-	{:else if leaders === 'error'}
+	{:else if leadersErrored}
 		<div class="prim-state error">Couldn't load.</div>
 	{:else if orderedBuckets.every((bk) => !bk.leader)}
 		<div class="prim-state">No size-bucketed data yet.</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { SvelteSet } from 'svelte/reactivity';
-	import { loadBenchmarks } from '$lib/data/service';
+	import { onMount } from 'svelte';
 	import type { Benchmark } from '$lib/types';
+	import ActiveFilterStrip, { type Chip } from '$lib/components/ActiveFilterStrip.svelte';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
 	import BenchmarksTable from '$lib/components/BenchmarksTable.svelte';
 	import FilterFacet from '$lib/components/FilterFacet.svelte';
@@ -15,13 +15,30 @@
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
 	import { ariaSort, sortIcon } from '$lib/format';
+	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
 	import type { SortState } from '$lib/stores/sort.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import type { PageData } from './$types';
+	import type { BenchmarksData } from './+page';
 
-	let allBenchmarks = $state<Benchmark[]>([]);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
-	let query = $state(getParam('q') ?? '');
+	let { data }: { data: PageData } = $props();
+
+	// Stale-guard via `data.benchmarks === p` on rapid nav.
+	let resolved = $state<BenchmarksData | null>(null);
+	let loadError = $state<string | null>(null);
+	$effect(() => {
+		const p = data.benchmarks;
+		loadError = null;
+		p.then((r) => {
+			if (data.benchmarks === p) resolved = r;
+		}).catch((e) => {
+			if (data.benchmarks === p) loadError = e instanceof Error ? e.message : String(e);
+		});
+	});
+
+	let allBenchmarks = $derived<Benchmark[]>(resolved?.all ?? []);
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
+	let query = $state('');
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
@@ -38,19 +55,11 @@
 		models: 'desc'
 	};
 	const SORT_IDS = SORTS.map((s) => s.id) as readonly SortId[];
-	// Default to "Model count" desc — popularity is the most useful first
-	// impression when browsing the benchmark catalogue.
+	// "Model count" desc surfaces popular benchmarks first.
 	const DEFAULT_SORT: SortId = 'models';
-	const initialSort = getParam('sort');
-	const initialDir = getParam('dir');
-	const seedSort: SortId =
-		initialSort && (SORT_IDS as readonly string[]).includes(initialSort)
-			? (initialSort as SortId)
-			: DEFAULT_SORT;
-	let sort = $state<SortId>(seedSort);
-	let sortDir = $state<SortDir>(
-		initialDir === 'asc' || initialDir === 'desc' ? initialDir : NATURAL_DIR[seedSort]
-	);
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	let urlHydrated = $state(false);
 	function onSortKeyChange(next: SortId) {
 		sort = next;
 		sortDir = NATURAL_DIR[next];
@@ -59,11 +68,7 @@
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
 
-	// URL-backed view mode (cards default) and a SortState adapter that
-	// lets the table's `SortHeader` drive the same sort/sortDir as the
-	// dropdown.
-	const initialView = getParam('view');
-	let view = $state<ViewMode>(initialView === 'table' ? 'table' : 'cards');
+	let view = $state<ViewMode>('cards');
 	const sortAdapter: SortState<SortId> = {
 		get key() {
 			return sort;
@@ -84,25 +89,81 @@
 	};
 
 	$effect(() => {
+		// `filtersSeeded` gate prevents clobbering deep-link facet params before seed.
+		if (!urlHydrated || !filtersSeeded) return;
 		updateUrl({
 			q: query.trim() || null,
 			sort: sort === DEFAULT_SORT ? null : sort,
 			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir,
-			view: view === 'cards' ? null : view
+			view: view === 'cards' ? null : view,
+			types: typeFacet.urlValue(),
+			mods: modalityFacet.urlValue(),
+			doms: domainFacet.urlValue(),
+			langs: languageFacet.urlValue()
 		});
 	});
 
-	// Filter sets are seeded with every value so the default state is
-	// "everything on"; `filteredAll` treats `size === ALL.length` as filter-off
-	// so rows with empty modality / type / domain lists stay visible.
-	let MODALITIES = $state<string[]>([]);
-	let SIMPLIFIED_TYPES_PRESENT = $state<string[]>([]);
-	let DOMAINS = $state<string[]>([]);
-	let LANGUAGES = $state<string[]>([]);
-	const modalityFilter = new SvelteSet<string>();
-	const simplifiedTypeFilter = new SvelteSet<string>();
-	const domainFilter = new SvelteSet<string>();
-	const languageFilter = new SvelteSet<string>();
+	onMount(() => {
+		const uq = getParam('q');
+		const us = getParam('sort');
+		const ud = getParam('dir');
+		const uv = getParam('view');
+		if (uq) query = uq;
+		if (us && (SORT_IDS as readonly string[]).includes(us)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		urlHydrated = true;
+	});
+
+	// Universes — facets read these lazily via arrow-function accessors.
+	let MODALITIES = $derived<string[]>(resolved?.modalities ?? []);
+	let SIMPLIFIED_TYPES_PRESENT = $derived<string[]>(resolved?.simplifiedTypesPresent ?? []);
+	let DOMAINS = $derived<string[]>(resolved?.domains ?? []);
+	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
+
+	const typeFacet = createFacetFilter({
+		urlParam: 'types',
+		chipKey: 'types',
+		chipLabel: 'Type',
+		universe: () => SIMPLIFIED_TYPES_PRESENT
+	});
+	const modalityFacet = createFacetFilter({
+		urlParam: 'mods',
+		chipKey: 'mods',
+		chipLabel: 'Modality',
+		universe: () => MODALITIES
+	});
+	const domainFacet = createFacetFilter({
+		urlParam: 'doms',
+		chipKey: 'doms',
+		chipLabel: 'Domain',
+		universe: () => DOMAINS
+	});
+	const languageFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipKey: 'langs',
+		chipLabel: 'Lang',
+		universe: () => LANGUAGES
+	});
+	const FACETS = [typeFacet, modalityFacet, domainFacet, languageFacet];
+	const simplifiedTypeFilter = typeFacet.picked;
+	const modalityFilter = modalityFacet.picked;
+	const domainFilter = domainFacet.picked;
+	const languageFilter = languageFacet.picked;
+
+	// $state so the URL-write effect re-runs on the flip and registers the
+	// facet SvelteSets as deps.
+	let filtersSeeded = $state(false);
+	$effect(() => {
+		if (!resolved || filtersSeeded) return;
+		filtersSeeded = true;
+		for (const f of FACETS) f.seed();
+	});
+
 	let domainQuery = $state('');
 	let languageQuery = $state('');
 	let visibleDomains = $derived.by(() => {
@@ -124,11 +185,11 @@
 	}
 	function toggleAllModalities() {
 		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
-		else for (const v of MODALITIES) modalityFilter.add(v);
+		else modalityFacet.reset();
 	}
 	function toggleAllDomains() {
 		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
-		else for (const v of DOMAINS) domainFilter.add(v);
+		else domainFacet.reset();
 	}
 	function toggleSimplifiedType(t: string) {
 		if (simplifiedTypeFilter.has(t)) simplifiedTypeFilter.delete(t);
@@ -136,7 +197,7 @@
 	}
 	function toggleAllSimplifiedTypes() {
 		if (simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length) simplifiedTypeFilter.clear();
-		else for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
+		else typeFacet.reset();
 	}
 	function toggleLanguage(l: string) {
 		if (languageFilter.has(l)) languageFilter.delete(l);
@@ -144,72 +205,38 @@
 	}
 	function toggleAllLanguages() {
 		if (languageFilter.size === LANGUAGES.length) languageFilter.clear();
-		else for (const v of LANGUAGES) languageFilter.add(v);
+		else languageFacet.reset();
 	}
 	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
 	let allSimplifiedTypes = $derived(simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length);
 	let allDomains = $derived(domainFilter.size === DOMAINS.length);
 	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
 
-	$effect(() => {
-		loadBenchmarks(true)
-			.then((list) => {
-				allBenchmarks = list.sort((a, b) => a.displayName.localeCompare(b.displayName));
-				// Single pass over the catalog to fill all 3 facet sets, instead of
-				// three separate flatMap+Set traversals. Plain Set is correct
-				// here — used as a local accumulator, never read reactively.
-				/* eslint-disable svelte/prefer-svelte-reactivity */
-				const mods = new Set<string>();
-				const simpTypes = new Set<string>();
-				const doms = new Set<string>();
-				// Count per language so the filter pills sort by popularity.
-				const langCount = new Map<string, number>();
-				/* eslint-enable svelte/prefer-svelte-reactivity */
-				for (const b of list) {
-					if (b.modalities) for (const m of b.modalities) mods.add(m);
-					if (b.simplifiedTaskTypes) for (const t of b.simplifiedTaskTypes) simpTypes.add(t);
-					if (b.domains) for (const d of b.domains) doms.add(d);
-					if (b.languages)
-						for (const l of b.languages) langCount.set(l, (langCount.get(l) ?? 0) + 1);
-				}
-				MODALITIES = [...mods].sort();
-				// Order the simplified buckets the same way /tasks does (curated
-				// canonical first, then any extras) so users see the familiar
-				// "retrieval / classification / …" sequence.
-				const CURATED = [
-					'retrieval',
-					'classification',
-					'pair-classification',
-					'clustering',
-					'semantic-similarity'
-				];
-				SIMPLIFIED_TYPES_PRESENT = [
-					...CURATED.filter((t) => simpTypes.has(t)),
-					...[...simpTypes].filter((t) => !CURATED.includes(t)).sort()
-				];
-				DOMAINS = [...doms].sort();
-				// Descending by usage count, alphabetical tie-break.
-				LANGUAGES = [...langCount.entries()]
-					.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-					.map(([l]) => l);
-				for (const v of MODALITIES) modalityFilter.add(v);
-				for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
-				for (const v of DOMAINS) domainFilter.add(v);
-				for (const v of LANGUAGES) languageFilter.add(v);
-				loading = false;
-			})
-			.catch((e) => {
-				error = e instanceof Error ? e.message : String(e);
-				loading = false;
+	let chips = $derived.by<Chip[]>(() => {
+		const list: Chip[] = [];
+		if (filtersSeeded) {
+			for (const f of FACETS) {
+				const c = f.chip();
+				if (c) list.push(c);
+			}
+		}
+		if (query.trim()) {
+			list.push({
+				key: 'q',
+				label: `Name: "${query.trim()}"`,
+				clear: () => (query = '')
 			});
+		}
+		return list;
 	});
+	function resetAll() {
+		for (const f of FACETS) f.reset();
+		query = '';
+	}
 
-	// Off-menu benchmarks sort alongside the featured ones — the per-card
-	// "newer version available" hint already distinguishes them.
 	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		// "All on" = filter off; partial = intersection check; empty =
-		// the user deliberately cleared the category, so nothing matches.
+		// All on = filter off; empty pick set = nothing matches.
 		const modalityOff = modalityFilter.size === MODALITIES.length;
 		const simplifiedOff = simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length;
 		const domainOff = domainFilter.size === DOMAINS.length;
@@ -299,10 +326,10 @@
 			</span>
 		</div>
 
-		{#if loading}
+		{#if !resolved && !loadError}
 			<SkeletonGrid />
-		{:else if error}
-			<p class="muted">Failed to load: {error}</p>
+		{:else if loadError}
+			<p class="muted">Failed to load: {loadError}</p>
 		{:else if filteredAll.length === 0}
 			<p class="muted">No benchmark matches that search.</p>
 		{:else if view === 'table'}
@@ -323,6 +350,7 @@
 	</main>
 
 	<FilterSidebar>
+		<ActiveFilterStrip {chips} onResetAll={resetAll} />
 		<!-- `type-fill` paints checked chips in the shared primary tint
 		     across every facet on this page, instead of the per-stype
 		     colour /tasks uses for its Task group. -->
