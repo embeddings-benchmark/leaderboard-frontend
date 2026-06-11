@@ -125,10 +125,10 @@ export async function loadBenchmarkMenu(fetchFn?: FetchFn): Promise<MenuEntry[]>
 	return cachedHttp<MenuEntry[]>('/benchmarks/menu', fetchFn);
 }
 
-/** Flat list of every benchmark, including off-menu entries. */
+/** Flat list of every benchmark, including off-menu and hidden entries. */
 export async function loadBenchmarks(fetchFn?: FetchFn): Promise<Benchmark[]> {
 	if (!API) throw noApiError('loadBenchmarks');
-	const out = await cachedHttp<Benchmark[]>(`/benchmarks`, fetchFn);
+	const out = await cachedHttp<Benchmark[]>(`/benchmarks?include_hidden=true`, fetchFn);
 	// Prime per-name slots so the prerender enumerator's `loadBenchmark` calls
 	// hit cache instead of issuing 1+N requests.
 	for (const b of out) cacheTouch(`/benchmarks/${encodeURIComponent(b.name)}`, b);
