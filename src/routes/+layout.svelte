@@ -8,6 +8,7 @@
 	import { page, updated } from '$app/state';
 	import { base, resolve } from '$app/paths';
 	import { PUBLIC_API_URL } from '$env/static/public';
+	import BookText from 'lucide-svelte/icons/book-text';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
 	import { filters } from '$lib/stores/filters.svelte';
@@ -143,22 +144,7 @@
 				rel="noreferrer"
 				title="Documentation site"
 			>
-				<svg
-					viewBox="0 0 24 24"
-					width="16"
-					height="16"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.8"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-					<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-					<path d="M9 7h7" />
-					<path d="M9 11h7" />
-				</svg>
+				<BookText size={16} strokeWidth={1.8} aria-hidden="true" />
 				<span>Documentation</span>
 			</a>
 		</div>

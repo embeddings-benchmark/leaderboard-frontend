@@ -1,3 +1,4 @@
+import { building } from '$app/environment';
 import { PUBLIC_API_URL } from '$env/static/public';
 import type {
 	Benchmark,
@@ -27,15 +28,33 @@ const API_BASE = `${API}/v1`;
 // into the HTML/data payload.
 type FetchFn = typeof globalThis.fetch;
 
+// Typed so loaders can distinguish 404s from transient backend failures and
+// throw `error(404, ...)` for the former without false-positiving on 5xx /
+// network errors.
+export class HttpError extends Error {
+	constructor(
+		public status: number,
+		public statusText: string,
+		public path: string
+	) {
+		super(`${status} ${statusText} — ${path}`);
+		this.name = 'HttpError';
+	}
+}
+
 async function http<T>(path: string, fetchFn: FetchFn = globalThis.fetch): Promise<T> {
 	const res = await fetchFn(`${API_BASE}${path}`);
-	if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`);
+	if (!res.ok) throw new HttpError(res.status, res.statusText, path);
 	return (await res.json()) as T;
 }
 
 // Session-scoped LRU + in-flight dedupe. Bounded so a long-lived tab
 // visiting many benchmarks (each summary MB-sized) doesn't grow unbounded.
-const RESPONSE_CACHE_MAX = 64;
+// Raised during prerender so `loadBenchmarks() / loadTasks() / loadModels()`
+// can prime every per-name slot (~500 each) without evicting them before
+// the per-page loaders run — every detail-route load becomes a sync cache
+// hit instead of a fresh HTTP round-trip.
+const RESPONSE_CACHE_MAX = building ? 10_000 : 64;
 const responseCache = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
 
@@ -221,7 +240,15 @@ export async function loadTasks(filters: TaskFilters = {}, fetchFn?: FetchFn): P
 		`/tasks${buildQuery(filters as Record<string, unknown>)}`,
 		fetchFn
 	);
-	for (const t of out) normalizeTaskMeta(t);
+	// Mirror the benchmarks priming: warm per-name slots so each detail
+	// route's `loadTask(name)` is a sync cache hit during prerender. Only
+	// safe to prime when the catalog isn't narrowed — a filtered list
+	// doesn't represent the per-name resource.
+	const prime = Object.keys(filters).length === 0;
+	for (const t of out) {
+		normalizeTaskMeta(t);
+		if (prime) cacheTouch(`/tasks/${encodeURIComponent(t.name)}`, t);
+	}
 	return out;
 }
 
@@ -248,7 +275,11 @@ export async function loadModels(
 		`/models${buildQuery(filters as Record<string, unknown>)}`,
 		fetchFn
 	);
-	for (const m of out) fillOrgAndDisplay(m);
+	const prime = Object.keys(filters).length === 0;
+	for (const m of out) {
+		fillOrgAndDisplay(m);
+		if (prime) cacheTouch(`/models/${encodeURIComponent(m.name)}`, m);
+	}
 	return out;
 }
 

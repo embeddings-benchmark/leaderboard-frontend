@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Download from 'lucide-svelte/icons/download';
 	import { downloadCsv, type CsvCell } from '$lib/csv';
 
 	interface Props {
@@ -22,21 +23,7 @@
 </script>
 
 <button type="button" class="dl" onclick={onClick} title="Download table as CSV">
-	<svg
-		viewBox="0 0 24 24"
-		width="14"
-		height="14"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		aria-hidden="true"
-	>
-		<path d="M12 3v12" />
-		<path d="m7 10 5 5 5-5" />
-		<path d="M5 21h14" />
-	</svg>
+	<Download size={14} aria-hidden="true" />
 	<span>{label}</span>
 </button>
 

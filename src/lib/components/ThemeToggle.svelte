@@ -14,6 +14,9 @@
 	 * ``color-scheme`` for the root element.
 	 */
 	import { onMount } from 'svelte';
+	import Sun from 'lucide-svelte/icons/sun';
+	import Monitor from 'lucide-svelte/icons/monitor';
+	import Moon from 'lucide-svelte/icons/moon';
 
 	type Choice = 'light' | 'system' | 'dark';
 
@@ -74,35 +77,13 @@
 			title={opt.title}
 			onclick={() => apply(opt.k)}
 		>
-			<svg
-				viewBox="0 0 24 24"
-				width="14"
-				height="14"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.8"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				aria-hidden="true"
-			>
-				{#if opt.k === 'light'}
-					<circle cx="12" cy="12" r="4" />
-					<path d="M12 2v2" />
-					<path d="M12 20v2" />
-					<path d="m4.93 4.93 1.41 1.41" />
-					<path d="m17.66 17.66 1.41 1.41" />
-					<path d="M2 12h2" />
-					<path d="M20 12h2" />
-					<path d="m4.93 19.07 1.41-1.41" />
-					<path d="m17.66 6.34 1.41-1.41" />
-				{:else if opt.k === 'system'}
-					<rect x="2" y="3" width="20" height="14" rx="2" />
-					<path d="M8 21h8" />
-					<path d="M12 17v4" />
-				{:else}
-					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-				{/if}
-			</svg>
+			{#if opt.k === 'light'}
+				<Sun size={14} strokeWidth={1.8} aria-hidden="true" />
+			{:else if opt.k === 'system'}
+				<Monitor size={14} strokeWidth={1.8} aria-hidden="true" />
+			{:else}
+				<Moon size={14} strokeWidth={1.8} aria-hidden="true" />
+			{/if}
 			<span class="sr-only">{opt.label}</span>
 		</button>
 	{/each}

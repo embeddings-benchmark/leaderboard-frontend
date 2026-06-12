@@ -82,7 +82,7 @@ mteb FastAPI (PUBLIC_API_URL + /v1)
 src/lib/data/service.ts   ← loadBenchmarkMenu / loadBenchmark(s) / loadSummary / loadPerLanguage
                             loadLeaders / loadTasks / loadTask / loadTaskScores
                             loadModels / loadModel / loadModelScores
-     │                      + session-scoped LRU `cachedHttp` (64 entries) + inflight dedupe
+     │                      + session-scoped LRU `cachedHttp` (64 entries in the browser, 10_000 during `building` so prerender can prime per-name slots) + inflight dedupe
      ↓
 src/lib/stores/leaderboard.svelte.ts  ← reactive selected/benchmark/summary, with inflight cancellation
 src/lib/stores/filters.svelte.ts      ← all filter state + applyFilters(summary)
@@ -93,6 +93,8 @@ filteredSummary = applyFilters(leaderboard.summary)
 ```
 
 `service.ts` is the **only** place that calls `fetch()` — swap backends, change auth, change cache strategy here without touching anything downstream. All loaders hit `${API}/v1/...`. `loadSummary` hits `/benchmarks/{name}/scores`. Every response goes through `cachedHttp`, a bounded LRU keyed by URL with in-flight dedupe — re-opening a previously-visited page is a synchronous cache hit. Most route loaders are tiny pre-warmers that just call `loadFoo()` so the data is cached by the time the page renders; SvelteKit's `data-sveltekit-preload-data="hover"` hint pre-warms on link hover too. `PUBLIC_API_URL` is also read by `src/lib/format.ts` (`apiUrl()` for benchmark/task icon URLs) and `ShareMeta.svelte` (OG image URL), but neither fetches — both are URL builders, so the "only branch point" guarantee still holds.
+
+**Catalog-driven cache priming**: `loadBenchmarks()`, `loadTasks()`, and `loadModels()` each iterate their full-catalog response and `cacheTouch()` every per-name slot (e.g. `/benchmarks/{name}`, `/tasks/{name}`, `/models/{name}`). During prerender, the `entries()` generator runs the catalog call once per route and every downstream `loadBenchmark(name)` / `loadTask(name)` / `loadModel(name)` in the per-page `load()` is a sync cache hit — eliminates the 1+N round-trip pattern. Tasks/models prime only when called without filters; a narrowed catalog wouldn't represent the per-name resource. `RESPONSE_CACHE_MAX` is `building ? 10_000 : 64` so the LRU doesn't evict primed entries mid-build.
 
 ### Stores (Svelte 5 runes singletons)
 
@@ -152,7 +154,7 @@ The default for every route is a typed `+page.ts` loader that **streams** its da
 
 - **Two loader shapes**:
   - _Single streamed promise_ (`/tasks`, `/benchmarks` index): loader awaits + derives everything inside a helper, returns `{ tasks: deriveTasksData() }` (the **promise** itself is the prop). Page: `let resolved = $state<TasksData | null>(null)` + `$effect(() => { const p = data.tasks; p.then((r) => { if (data.tasks === p) resolved = r; }) })`. Then `{#if !resolved && !loadError}<Skeleton />{:else if loadError}...{:else}...{/if}` in the template.
-  - _Eager metadata + streamed slow data_ (`/tasks/[name]`, `/models/[...name]`, `/`): `await` the cheap fetches (menu, model meta), return the slow one (`scores`, `summary`-derived primaries) as an unresolved promise. The page renders the card / hero from the eagerly-awaited fields and shows a per-section skeleton over the streamed table.
+  - _Eager metadata + client-side heavy data_ (`/tasks/[name]`, `/models/[...name=modelName]`, `/`): `await` the cheap metadata fetches (menu, model meta, task meta) and return them from `load()`. The heavy `/scores` fetch is **NOT** in the loader — it runs in a client-only `$effect` in the page that calls `loadModelScores(name)` / `loadTaskScores(name)` directly. Why: streamed `/scores` promises were inlined during prerender, costing one `/scores` round-trip per detail page (~1000 calls) and bloating every prerendered HTML with embedded score data. Client-fetching keeps the hero card fully prerendered (good for crawlers and LCP) while the scores table loads on hydration. The page uses a `taskName === name` (or `modelName === name`) stale-guard inside the effect to discard a slow fetch from a previous slug on rapid nav.
 - **Streamed promises must never reject during prerender.** A rejected stream crashes the build with an unhandled promise rejection. Wrap potentially-failing fetches in a discriminated-union result so the promise always resolves: `Promise<{ ok: true; data: T } | { ok: false; error: string }>` — see `ScoresResult` in `/tasks/[name]/+page.ts` and `/models/[...name]/+page.ts`. The page reads `.ok` to branch between "show data" and "show error".
 - **Pre-warmer-only loads exist for pages we don't fully migrate.** `/models/+page.ts` is still a pure pre-warmer (`loadModels({}).catch(() => undefined)`) because the page does its own fetch in `$effect` to also compute the language-pill universe from the same payload. Pre-warmers must `.catch(() => undefined)` so a backend hiccup doesn't block client-side nav or blank prerender.
 - **Prefetch heavy detail pages via `data-sveltekit-preload-data="hover"`.** The body in `app.html` opts in globally; pair it with a small `load` on the detail route that **returns the prefetched value** (don't rely on a side-effect call to `loadFoo()` — that only populates the build process's `cachedHttp`, which never reaches the user's browser). `/benchmark/[name]/+page.ts` returns `{ benchmark: await loadBenchmark(name, fetch).catch(() => null) }`, and the page's `$effect` calls `primeBenchmarkCache(name, data.benchmark)` to seed the runtime `cachedHttp` before the leaderboard store fires `loadBenchmark` from its own effect. End-to-end: hover → SvelteKit fetches the route's `.json` (now containing the benchmark) → click → page prime-$effect runs first → store's `loadBenchmark` is a sync cache hit → only the heavy `loadSummary` actually goes to the network. When a route's data is owned by a store rather than the page, mirror this pattern (return data from the loader + add a service-level `primeFooCache(name, value)` export that calls `cacheTouch`).
@@ -163,12 +165,74 @@ The default for every route is a typed `+page.ts` loader that **streams** its da
 - **Migrating off `$effect`-based fetch exposes latent data bugs.** When a page used to render with `data = null` during prerender (effect-based fetch), null fields in upstream records were never reached. The migration to a synchronous loader makes prerender render with real data — broken records (null arrays, edge-slashed names) crash the build instead of silently corrupting hydrated UI. Fix the data at the service boundary (`normalizeTaskMeta` in `service.ts`, `modelPath` stripping edge slashes in `format.ts`) rather than guarding every template access.
 - **Filter locally before adding a refetch.** `/models` used to call `loadModels({ modalities })` on every modality-picker toggle. The full registry is small enough to filter in `buildPasses()` — one `loadModels({})` on mount, modality predicate applied client-side, zero refetches. Before threading a new filter into the API call, check whether the data is already fully loaded and could be narrowed in-process.
 - **Service-layer caching + normalization is the load fast path.** `cachedHttp` in `service.ts` is keyed by URL with in-flight dedupe; route loaders that just call `loadFoo()` are already cache-coherent. Normalization (`enrichSummary`, `enrichTaskScores`, `enrichModelScores`, `fillOrgAndDisplay`, `normalizeTaskMeta`) lives at the same boundary so every downstream consumer reads well-formed shapes. `enrichSummary` also **dedupes** `summary.taskTypes` / `summary.tasks` via `new Set()` — at least one benchmark (`MTEB(cmn, v1)`) ships the same task twice in its registry, which used to crash keyed `{#each}` blocks on the task-list facet. Don't re-cache or re-normalize at the page layer.
+- **`BUILD_NO_PRERENDER=1` skips prerender locally.** Read by `+layout.ts` + the three detail `+page.ts` files as `export const prerender = !process.env.BUILD_NO_PRERENDER`. The literal is inlined into the client bundle via Vite's `define` (`process.env.BUILD_NO_PRERENDER` → JSON-stringified value) in `vite.config.ts` — without that, the browser would hit `ReferenceError: process is not defined` at module load. CI never sets the flag, so production builds always prerender; the flag is for fast iteration against a slow or unreachable backend.
 
 ## Accessibility patterns to follow
 
 - **`{#each}` keys must be content-derived, not array indices.** Use the row's `name` / `id` / a composite like `${seg.type}:${i}:${seg.text}` (see `MarkdownText.svelte`). Bare `(i)` keys defeat keyed-each surgical updates and break when the source list reorders.
 - **Composite-widget keyboard nav.** `Tabs.svelte` (`role="tablist"`) and `Segmented.svelte` (`role="radiogroup"`) implement the WAI-ARIA APG pattern: roving `tabindex` (the active item is `0`, the rest are `-1`), `keydown` on the wrapper handles Arrow / Home / End, then `queueMicrotask(() => buttons[next]?.focus())` so focus re-lands after the re-render. The wrapper itself carries `tabindex="-1"` to satisfy Svelte's a11y lint for keydown-bearing interactive roles. Any new tabset / segmented control should mirror this pattern.
 - **Icon-only buttons need `aria-label`.** `title` is not reliably announced by screen readers — `SearchInput`'s clear button, sort icons, pin buttons, share/scroll-to-top all carry an explicit `aria-label`. Don't rely on `title` alone.
+- **Unique per-route `<title>`** is what SvelteKit's live-region announces after each client-side navigation. Every page that owns its data should set a `<svelte:head><title>…</title></svelte:head>` derived from the resource (e.g. `{model.displayName} — MTEB`), with a sensible fallback while the streamed promise is still in flight. A stale or shared title means screen-reader users can't tell that navigation happened.
+- **Post-nav focus lands on `<body>` by default.** If a route should focus a specific element (e.g. the search input on `/models`), use `afterNavigate` from `$app/navigation` and explicitly `.focus()` the target. Don't reach for `autofocus` — it fires once on initial mount, not on subsequent navs.
+
+## SvelteKit / Svelte 5 framework guidance
+
+Synthesized from upstream docs (`svelte.dev/docs/kit/*`, `svelte.dev/docs/svelte/best-practices`). Only items that actually apply to this project (adapter-static, no server runtime, prerendered SPA, FastAPI backend over CORS) are listed — the "skip list" at the bottom names what we deliberately ignore.
+
+### Link options worth reaching for
+
+- `data-sveltekit-preload-data="hover"` is already enabled globally on `<body>` in `app.html`. It prefetches both code and the `+page.ts` data on hover; pair with the `primeFooCache` pattern (see the load-flow section above) so the runtime cache actually sees the prefetched payload.
+- `data-sveltekit-preload-code="eager"` on specific high-value links preloads the route module without triggering the data load. Useful when a link is almost certain to be clicked but its data is too dynamic or too large to prefetch.
+- `data-sveltekit-replacestate` on filter / sort / search links keeps intermediate states out of the back-history. If a future refactor moves filters from `filters.svelte.ts` into search params (via `goto(url, { replaceState: true })`), apply this so the back button skips past dozens of filter-toggle entries.
+- `data-sveltekit-noscroll` on in-page links that only update search params (e.g. a filter chip routed through `goto`) prevents the viewport from snapping to top.
+- `data-sveltekit-keepfocus` only belongs on form-like inputs the user is actively typing into (e.g. a search box that triggers a `goto`); never on plain anchor links.
+
+### URL state, snapshots, and store state
+
+- The upstream guidance: anything a user wants to **share, reload, or come back to** belongs in the URL. All three reactive stores already URL-sync via `replaceState()` from `$app/navigation`: `sort.svelte.ts` (sort key/dir), `filters.svelte.ts` (every facet — `q`, size range, modalities, tasks, langs, etc., microtask-debounced via `doSync()`), and `pinned.svelte.ts` (the `?pin=` set). `ShareUrlButton` only has to read `page.url.href` because the URL already carries everything. `replaceState` (not `pushState`) is the right choice — filter toggles don't deserve back-history entries.
+- **Snapshots** (`export const snapshot = { capture, restore }` from a `+page.svelte`) are the right tool for ephemeral UI state that shouldn't go in the URL but should survive back/forward navigation — e.g. an expanded info-dot, a collapsed sidebar section, a scroll position within a long table. None used today; reach for this before promoting that kind of state into a singleton store.
+- The "no shared user state on the server" rule from the docs doesn't bite us (we're fully prerendered / static), but the corollary **does**: never write to a global store from inside a `load` function. Loaders return data; pages or stores consume it. The streamed-promise pattern in this repo already follows that — keep it that way.
+
+### Load function pitfalls
+
+- `redirect(status, location)` and `error(status, message)` from `@sveltejs/kit` are **throws**, not return values. Never wrap them in a `try/catch` — you'll swallow the navigation. The three detail loaders (`/benchmark/[name]`, `/models/[...name=modelName]`, `/tasks/[name]`) demonstrate the pattern: `loadFoo(...).catch((e) => { if (e instanceof HttpError && e.status === 404) error(404, ...); throw e; })`. `HttpError` from `src/lib/data/service.ts` carries the status so loaders can distinguish a missing resource from a 5xx / network blip.
+- `await parent()` in a child loader serializes that loader against the parent. If we ever add a parent load, run independent fetches **before** the `await parent()` so they overlap on the network. We don't use parent loads today.
+- Explicit invalidation: `depends('app:foo')` inside a loader plus `invalidate('app:foo')` from a component triggers a targeted re-run. Always prefer this over `invalidateAll()`, which re-runs every active loader on the page. The `filtersSeeded` one-shot guard exists precisely because we anticipate `invalidate()` being added — keep the guard in place when you add it.
+- **Matchers** (`src/params/<name>.ts`) validate dynamic params at the router level. `/models/[...name=modelName]` uses `src/params/modelName.ts` to require the HF `org/name` shape (exactly one `/`, no empty segments, no `..`). Malformed slugs fail at the router and hit the root 404; valid-shape-but-unknown slugs fall through to the loader's `error(404, ...)`. Any new dynamic param with a known shape should follow the same pattern.
+
+### Performance posture
+
+- SvelteKit already handles code-splitting, asset preloading, request coalescing, data inlining (via `event.fetch`), parallel loads, and conservative invalidation. We actively exercise: `event.fetch` threading (inlines responses into prerendered HTML), the hover preload (above), and per-route streamed promises (within-page parallelism). Don't fight the framework on these.
+- We deliberately don't use `@sveltejs/enhanced-img` — the package optimizes **build-time** assets, and our icons are remote (`PUBLIC_API_URL`-served). For remote `<img>`s, set explicit `width` / `height` to prevent CLS, `loading="lazy"` for below-the-fold images, and `fetchpriority="high"` on hero / LCP images (e.g. the icon on `/models/[...name=modelName]`, `/benchmark/[name]`).
+- Dynamic `import()` keeps non-critical code out of the initial bundle — `PlotlyChart` already does this for `plotly.js-dist-min`. If another heavy lib lands (markdown renderer with syntax highlighting, a graph layout engine), follow the same pattern: import inside `onMount`, not at module scope.
+- For bundle size investigations, reach for `rollup-plugin-visualizer` rather than guessing.
+
+### Icons
+
+- Project uses **`lucide-svelte` via subpath imports only**: `import Activity from 'lucide-svelte/icons/activity'`. The wrapper components (`ModalityIcon`, `ModelTypeIcon`, `SortDirIcon`) map domain categories → lucide glyphs in one place; every other call site imports the icon directly at the consuming component. The two GitHub glyphs in `+layout.svelte` stay inline as `<svg>` because Lucide doesn't ship a GitHub icon (Microsoft trademark policy).
+- **Never use the barrel import** (`import { Activity, Search } from 'lucide-svelte'`). That's the pattern the SvelteKit icon docs flag — it walks thousands of `.svelte` modules through Vite's dep optimizer and slows cold-start. Subpath imports tree-shake cleanly and only pull the icons we use.
+- `lucide-svelte` ships legacy Svelte 4 component classes (`export let`, `<slot/>`, `$$props`). They mount fine from runes-mode components because `svelte.config.js` opts node_modules out of runes mode (`compilerOptions.runes`). Don't try to rewrite the icons against runes — the legacy mount is intentional.
+- **`vite.config.ts` carries `ssr.noExternal: ['lucide-svelte']`.** Required: the package's `./icons/<name>.js` shim re-imports `../Icon.svelte` (a raw `.svelte` file). Without `noExternal`, Vite leaves the package external during SSR / prerender and Node hits the `.svelte` file directly, crashing with `ERR_UNKNOWN_FILE_EXTENSION`. If we add another Svelte-component package that ships raw `.svelte` files, it needs the same treatment.
+
+### Hooks (none today, but relevant if we ever ship a server runtime)
+
+- The static adapter doesn't run any of `handle` / `handleFetch` / `handleError` / `reroute`. If we ever switch to a node or edge adapter, the relevant hooks for this project are:
+  - `handleFetch` to rewrite `PUBLIC_API_URL` to an internal hostname during SSR / prerender so the build hits the FastAPI backend over the loopback (no CORS hop).
+  - `reroute` to map legacy paths (e.g. the old `/explorer/...` URLs) without a 301 redirect.
+  - `transformPageChunk` inside `handle` to set `<html lang>` per request if we ever localize.
+
+### Env vars
+
+- `PUBLIC_API_URL` / `PUBLIC_SITE_URL` are read via `$env/static/public` and inlined at build time — exactly the pattern the docs recommend for values that need dead-code elimination. The build fails fast when they're unset (see the `service.ts` loader error), which matches the "validate at startup" guidance.
+- Never put a secret behind a `PUBLIC_` prefix. There are no private env vars in this project; if one is ever needed (e.g. a build-time HF token), use `$env/static/private` and keep it out of any module reachable from a `+page.ts` or component.
+
+### What we deliberately skip
+
+- **Form actions / `use:enhance`** — require a server runtime; the static adapter has none.
+- **Remote functions** (`query` / `command` / `form` / `prerender`) — experimental and server-side; not usable under adapter-static.
+- **Observability / OpenTelemetry tracing** — server-only, opt-in flag, non-trivial overhead; we have no server to instrument.
+- **`+server.js` endpoints** — same reason; the backend is a separate FastAPI service.
+- **`$env/static/private` / `$app/env/private`** — no secrets in the build, no server runtime to read them at request time.
 
 ## Style / interaction patterns to reuse
 

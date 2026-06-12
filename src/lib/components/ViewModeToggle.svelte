@@ -1,4 +1,7 @@
 <script lang="ts">
+	import LayoutGrid from 'lucide-svelte/icons/layout-grid';
+	import Table from 'lucide-svelte/icons/table';
+
 	export type ViewMode = 'cards' | 'table';
 
 	interface Props {
@@ -19,22 +22,7 @@
 		title="Card grid"
 		aria-label="Card grid"
 	>
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<rect x="3" y="3" width="7" height="7" rx="1" />
-			<rect x="14" y="3" width="7" height="7" rx="1" />
-			<rect x="3" y="14" width="7" height="7" rx="1" />
-			<rect x="14" y="14" width="7" height="7" rx="1" />
-		</svg>
+		<LayoutGrid size={14} aria-hidden="true" />
 	</button>
 	<button
 		type="button"
@@ -46,22 +34,7 @@
 		title="Table"
 		aria-label="Table"
 	>
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<rect x="3" y="4" width="18" height="16" rx="1" />
-			<path d="M3 10h18" />
-			<path d="M3 16h18" />
-			<path d="M9 4v16" />
-		</svg>
+		<Table size={14} aria-hidden="true" />
 	</button>
 </div>
 

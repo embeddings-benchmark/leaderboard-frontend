@@ -51,7 +51,7 @@
 					<th class="tbl-col-name" scope="row">
 						<a
 							class="tbl-row-link"
-							href={resolve('/models/[...name]', { name: modelPath(m.name) })}
+							href={resolve('/models/[...name=modelName]', { name: modelPath(m.name) })}
 						>
 							<span class="tbl-model-link">
 								{#if org}<span class="tbl-model-org">{org}</span><span class="tbl-model-sep">/</span

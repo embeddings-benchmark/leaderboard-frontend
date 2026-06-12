@@ -1,5 +1,7 @@
 <!-- Icon + input + clear button. Targets ~32 px tall to align with `.sort select` + `.dir-btn`. -->
 <script lang="ts">
+	import Search from 'lucide-svelte/icons/search';
+
 	interface Props {
 		value: string;
 		placeholder?: string;
@@ -12,21 +14,9 @@
 </script>
 
 <div class="search">
-	<svg
-		class="icon"
-		viewBox="0 0 24 24"
-		width="14"
-		height="14"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		aria-hidden="true"
-	>
-		<circle cx="11" cy="11" r="7" />
-		<path d="m20 20-3.5-3.5" />
-	</svg>
+	<span class="icon" aria-hidden="true">
+		<Search size={14} />
+	</span>
 	<input type="search" {id} {placeholder} aria-label={ariaLabel} bind:value />
 	{#if value}
 		<button type="button" class="clear" onclick={() => (value = '')} aria-label="Clear search">
@@ -54,6 +44,7 @@
 		position: absolute;
 		left: 10px;
 		top: 50%;
+		display: inline-flex;
 		transform: translateY(-50%);
 		color: var(--text-subtle);
 		pointer-events: none;

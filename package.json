@@ -57,6 +57,7 @@
 		"wait-on": "^9.0.10"
 	},
 	"dependencies": {
+		"lucide-svelte": "^1.0.1",
 		"plotly.js": "^3.6.0"
 	},
 	"engines": {

@@ -15,7 +15,7 @@
 	// `$effect.pre` ensures this runs before the leaderboard store's load effect
 	// regardless of source order.
 	$effect.pre(() => {
-		if (data.benchmark) primeBenchmarkCache(data.benchmark.name, data.benchmark);
+		primeBenchmarkCache(data.benchmark.name, data.benchmark);
 	});
 
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
@@ -41,14 +41,11 @@
 	import TaskInfoTab from '$lib/components/TaskInfoTab.svelte';
 
 	let benchmarkName = $derived(decodeURIComponent(page.params.name ?? ''));
-	// Fallback to the loader's copy prevents a "Unknown benchmark" flash on
-	// hard refresh before the store resolves.
+	// Loader guarantees `data.benchmark` for the current slug (a miss throws
+	// error(404)). Prefer the store's copy once it lands so summary-derived
+	// fields stay in sync; otherwise fall back to the loader's copy.
 	let benchmark = $derived(
-		leaderboard.benchmark?.name === benchmarkName
-			? leaderboard.benchmark
-			: data.benchmark?.name === benchmarkName
-				? data.benchmark
-				: null
+		leaderboard.benchmark?.name === benchmarkName ? leaderboard.benchmark : data.benchmark
 	);
 	// Hero accent follows the canonical modality priority
 	// (`video → audio → image → text`) — matches the BenchmarkCard tint
@@ -67,15 +64,14 @@
 		{ id: 'task_info', label: 'Task information' }
 	];
 	let hasLanguageView = $derived(
-		!!benchmark &&
-			(benchmark.languageView === 'all' ||
-				(Array.isArray(benchmark.languageView) && benchmark.languageView.length > 0))
+		benchmark.languageView === 'all' ||
+			(Array.isArray(benchmark.languageView) && benchmark.languageView.length > 0)
 	);
 	let TABS = $derived(ALL_TABS.filter((t) => t.id !== 'perf_language' || hasLanguageView));
 	// Fall back to Summary if the deep-linked tab is no longer available
 	// (e.g. ?tab=perf_language on a benchmark without language_view).
 	$effect(() => {
-		if (activeTab === 'perf_language' && benchmark && !hasLanguageView) {
+		if (activeTab === 'perf_language' && !hasLanguageView) {
 			activeTab = 'summary';
 		}
 	});
@@ -293,18 +289,10 @@
 			<span class="current">{benchmark?.displayName ?? benchmarkName}</span>
 		</nav>
 
-		{#if leaderboard.loading && !benchmark}
-			<p class="muted">Loading benchmark…</p>
-		{:else if leaderboard.error}
+		{#if leaderboard.error}
 			<section class="empty panel">
 				<h1>Couldn't load benchmark</h1>
 				<p>{leaderboard.error}</p>
-				<a class="back" href={resolve('/')}>← Back home</a>
-			</section>
-		{:else if !benchmark}
-			<section class="empty panel">
-				<h1>Unknown benchmark</h1>
-				<p>No benchmark named “{benchmarkName}”.</p>
 				<a class="back" href={resolve('/')}>← Back home</a>
 			</section>
 		{:else}
@@ -434,7 +422,7 @@
 							<PerTaskTab summary={filteredSummary} active={activeTab === 'perf_task'} />
 						</div>
 					{/if}
-					{#if visited.has('perf_language') && hasLanguageView && benchmark?.languageView}
+					{#if visited.has('perf_language') && hasLanguageView && benchmark.languageView}
 						<div class="tab-pane" class:active={activeTab === 'perf_language'} data-prepaint>
 							<PerLanguageTab
 								summary={filteredSummary}

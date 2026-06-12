@@ -364,7 +364,7 @@
 				{#each visibleModels as m (m.name)}
 					<a
 						class="card card-link card-link-vis accent-rail"
-						href={resolve('/models/[...name]', { name: modelPath(m.name) })}
+						href={resolve('/models/[...name=modelName]', { name: modelPath(m.name) })}
 						data-type={m.modelType}
 						title={m.modelType}
 					>

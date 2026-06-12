@@ -26,46 +26,39 @@ make preview          # serve build/ on http://localhost:4173
 
 ### Environment
 
-| Var               | When set                                                                                                                                           |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PUBLIC_API_URL`  | Required for normal use. Points at the mteb FastAPI base (e.g. `http://localhost:8000`). Inlined at build time.                                    |
-| `PUBLIC_USE_MOCK` | Opt-in offline fallback. When set to `1` AND `PUBLIC_API_URL` is empty, every loader returns deterministic mock data from `src/lib/data/mock*.ts`. |
+| Var                  | When set                                                                                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_API_URL`     | **Required.** Points at the mteb FastAPI base (e.g. `http://localhost:8000`). Inlined at build time. Loaders throw a clear error when unset.               |
+| `PUBLIC_SITE_URL`    | Canonical origin baked into prerendered OG / canonical-link tags. Without it, SvelteKit's prerender placeholder ends up in the HTML.                       |
+| `BASE_PATH`          | Path prefix for the build. Empty for the Space, `/leaderboardv2` for GitHub Pages.                                                                         |
+| `BUILD_NO_PRERENDER` | Opt-out for local fast builds. `BUILD_NO_PRERENDER=1 npm run build` skips the prerender phase entirely. CI never sets this — production always prerenders. |
 
 ```sh
 # Normal dev — talk to a local mteb FastAPI
 echo 'PUBLIC_API_URL=http://localhost:8000' > .env.local
 
-# Offline UI work — no backend running
-echo 'PUBLIC_USE_MOCK=1' > .env.local
+# Fast local build, no backend hit during prerender
+BUILD_NO_PRERENDER=1 npm run build
 ```
 
-Behaviour summary:
-
-- `PUBLIC_API_URL` set → every fetch goes through `/v1/...` on that host. Mock
-  modules are dynamic-imported only on the offline branch and tree-shake out
-  of the prod build entirely.
-- `PUBLIC_API_URL` empty + `PUBLIC_USE_MOCK=1` → loaders synthesise summaries,
-  task lists, model lists, and per-benchmark menus from the seeded fixtures
-  under `src/lib/data/mockBenchmarks.ts` + `mockSummary.ts`. A few endpoints
-  have no offline analogue and return empty (notably `loadPerLanguage` —
-  PerLanguageTab renders `'—'`).
-- `PUBLIC_API_URL` empty + no `PUBLIC_USE_MOCK` → every loader throws a clear
-  error so misconfiguration surfaces immediately instead of rendering blanks.
-
-Both vars are `PUBLIC_*` so SvelteKit/Vite inline them at build time —
-`USE_MOCK` is evaluated as a constant and the bundler eliminates the dead
-branch in prod.
+There is no offline mock mode — `PUBLIC_API_URL` is mandatory and every
+loader fails loudly when the backend is unreachable.
 
 ## Routes
 
-| Route                        | Purpose                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| `/`                          | Home — category menu of benchmark cards                                   |
-| `/benchmarks`                | Full benchmark catalog, sidebar filters (Modality / Task type / Domain)   |
-| `/benchmark/[name]`          | Per-benchmark detail: hero + 6 tabs (Summary / Perf×Size / Perf×Time / …) |
-| `/models` + `/models/[name]` | Model index + detail                                                      |
-| `/tasks` + `/tasks/[name]`   | Task index + detail                                                       |
-| `/compare`                   | Side-by-side comparison of up to 4 models                                 |
+| Route                                     | Purpose                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| `/`                                       | Home — category menu of benchmark cards                                   |
+| `/benchmarks`                             | Full benchmark catalog, sidebar filters (Modality / Task type / Domain)   |
+| `/benchmark/[name]`                       | Per-benchmark detail: hero + 6 tabs (Summary / Perf×Size / Perf×Time / …) |
+| `/models` + `/models/[...name=modelName]` | Model index + detail. The matcher enforces the HF `org/name` shape.       |
+| `/tasks` + `/tasks/[name]`                | Task index + detail                                                       |
+| `/compare`                                | Side-by-side comparison of up to 4 models                                 |
+
+Detail routes prerender the hero card eagerly and fetch the heavy scores
+table client-side after hydration, so the build stays fast and HTML files
+stay small. A miss on any detail slug throws `error(404, ...)`; the root
+`+error.svelte` renders the message.
 
 ## Architecture
 
@@ -76,12 +69,12 @@ catalogue (`SearchInput`, `SortDirIcon`, `ScrollToTopButton`,
 
 ## Deploy
 
-- **Hugging Face Space** — `Dockerfile` at the repo root clones the
-  `integration` branch, runs the SvelteKit build, and serves the static bundle
-  via `nginx-unprivileged` on port 7860. `PUBLIC_API_URL` is set as a
-  `Dockerfile` `ENV`.
+- **Hugging Face Space** — `Dockerfile` at the repo root runs the SvelteKit
+  build and serves the static bundle via `nginx-unprivileged` on port 7860.
+  `PUBLIC_API_URL` / `PUBLIC_SITE_URL` are set as `Dockerfile` `ENV`.
 - **GitHub Pages** — `.github/workflows/deploy.yml` runs `make deploy-build`
-  (sets `BASE_PATH=/leaderboardv2`) and uploads `build/`.
+  (sets `BASE_PATH=/leaderboardv2`) and uploads `build/`. PR builds run the
+  same prerender (no `BUILD_NO_PRERENDER`) so the live data path is exercised.
 
 ## License
 

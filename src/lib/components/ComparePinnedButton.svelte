@@ -3,6 +3,7 @@
 	// pre-selected. Positioned away from ScrollToTopButton (bottom-
 	// left) and ShareUrlButton (bottom-right).
 
+	import ArrowLeftRight from 'lucide-svelte/icons/arrow-left-right';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { resolve } from '$app/paths';
@@ -44,20 +45,7 @@
 		title={`Open the compare view with ${count} pinned model${count === 1 ? '' : 's'}`}
 		aria-label="Compare pinned models"
 	>
-		<svg
-			viewBox="0 0 24 24"
-			width="16"
-			height="16"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M3 8h7l-3 4 3 4H3" />
-			<path d="M21 8h-7l3 4-3 4h7" />
-		</svg>
+		<ArrowLeftRight size={16} aria-hidden="true" />
 		<span>Compare {count > 4 ? '4 of ' + count : count} pinned</span>
 	</a>
 	<!-- eslint-enable svelte/no-navigation-without-resolve -->

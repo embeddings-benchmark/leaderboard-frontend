@@ -57,10 +57,20 @@ const config = {
 			// which the top-bar links to. SvelteKit's crawler treats those same-origin URLs
 			// as internal, strips the origin, then crashes because `/mteb/` doesn't start with
 			// `paths.base`. Anything outside our base is a sibling site — log and skip.
-			handleHttpError: ({ path, referrer, message }) => {
+			handleHttpError: ({ status, path, referrer, message }) => {
 				const base = process.env.BASE_PATH || '';
 				if (base && !path.startsWith(base)) {
 					console.warn(`Skipping sibling-origin link ${path} (referenced from ${referrer})`);
+					return;
+				}
+				// 404s on links the crawler discovers (vs. paths from `entries()`)
+				// are data issues — e.g. a model's `adaptedFrom`/`supersededBy`
+				// references another model that's no longer in the public
+				// catalog. The page already 404s correctly at runtime via the
+				// root `+error.svelte`; failing the build for the stale ref
+				// would block on every catalog rotation. Log and continue.
+				if (status === 404 && referrer) {
+					console.warn(`Skipping missing link ${path} (referenced from ${referrer})`);
 					return;
 				}
 				throw new Error(message);
