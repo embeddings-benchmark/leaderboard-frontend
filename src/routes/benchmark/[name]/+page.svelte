@@ -195,8 +195,14 @@
 		leaderboard.requestSummaryForLanguages(langs);
 	});
 
+	// Guard on `summary.benchmarkName`, NOT `leaderboard.selected`. `select()`
+	// flips `selected` synchronously before the async fetch completes, so a
+	// `selected === benchmarkName` check passes while `summary` still holds the
+	// previous benchmark's rows — the table flashes stale data for the duration
+	// of the fetch. The summary's own `benchmarkName` is the authoritative
+	// "which benchmark does this payload represent" identifier.
 	let filteredSummary = $derived(
-		leaderboard.summary && leaderboard.selected === benchmarkName
+		leaderboard.summary && leaderboard.summary.benchmarkName === benchmarkName
 			? applyFilters(leaderboard.summary)
 			: null
 	);
