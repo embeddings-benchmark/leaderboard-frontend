@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .scene {
+        position: absolute;
+        inset: 0;
+        perspective: 2400px;
+        transform-style: preserve-3d;
+      }
+      .layer {
+        position: absolute;
+        transform-style: preserve-3d;
+      }
+      /* Back layer: full v3, tilted */
+      .back {
+        top: 200px;
+        left: 360px;
+        width: 1780px;
+        transform: rotateY(-12deg) rotateX(5deg);
+        transform-origin: left center;
+      }
+      .back .card {
+        box-shadow:
+          0 40px 90px -30px rgba(10, 22, 55, 0.45),
+          0 12px 30px -8px rgba(10, 22, 55, 0.25);
+      }
+      /* Filter sidebar floating front-left */
+      .filter-float {
+        top: 360px;
+        left: 80px;
+        width: 360px;
+        transform: rotateY(14deg) rotateX(3deg);
+        transform-origin: right center;
+      }
+      .filter-float .card {
+        height: 720px;
+      }
+      .filter-float .card img {
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+      }
+      /* Table row strip floating front-right */
+      .row-float {
+        top: 760px;
+        right: 90px;
+        width: 760px;
+        transform: rotateY(-14deg) rotateX(4deg);
+        transform-origin: left center;
+      }
+      .row-float .card {
+        height: 320px;
+      }
+      .row-float .card img {
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+      }
+      .heading {
+        position: absolute;
+        left: 80px;
+        top: 70px;
+        z-index: 5;
+        max-width: 1200px;
+      }
+      .heading .pill {
+        display: inline-block;
+        margin-bottom: 14px;
+        padding: 6px 14px;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: #1d4ed8;
+        background: rgba(37, 99, 235, 0.1);
+        border: 1.5px solid rgba(37, 99, 235, 0.35);
+        border-radius: 999px;
+      }
+      .heading h1 {
+        font-size: 70px;
+        font-weight: 800;
+        letter-spacing: -1.8px;
+        color: #0b1a3a;
+        line-height: 1;
+      }
+      .heading h1 .accent {
+        color: #2563eb;
+      }
+      .heading p {
+        margin-top: 14px;
+        font-size: 22px;
+        color: #3b475e;
+        max-width: 720px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="heading">
+        <span class="pill">New MTEB Leaderboard</span>
+        <h1>Every layer, <span class="accent">one click</span> away.</h1>
+      </div>
+      <div class="scene">
+        <div class="layer back">
+          <div class="card"><img src="leaderboardv3.png" alt="v3 leaderboard" /></div>
+        </div>
+        <div class="layer filter-float">
+          <div class="card"><img src="crop-sidebar.png" alt="filter sidebar" /></div>
+        </div>
+        <div class="layer row-float">
+          <div class="card"><img src="crop-table-top.png" alt="table rows" /></div>
+        </div>
+      </div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), { seed: 19, count: 480, minDist: 42 });
+    </script>
+  </body>
+</html>

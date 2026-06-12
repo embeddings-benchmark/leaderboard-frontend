@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .stage {
+        width: 2240px;
+        height: 1480px;
+      }
+      .grid {
+        position: absolute;
+        inset: 60px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 40px;
+        z-index: 2;
+      }
+      .cell {
+        position: relative;
+        background: #fff;
+        border: 1.5px solid #d2d7de;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow:
+          0 26px 56px -18px rgba(10, 22, 55, 0.34),
+          0 8px 20px -6px rgba(10, 22, 55, 0.2),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+      }
+      .cell img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="grid">
+        <div class="cell"><img src="page-home.png" alt="" /></div>
+        <div class="cell"><img src="page-benchmarks.png" alt="" /></div>
+        <div class="cell"><img src="page-models.png" alt="" /></div>
+        <div class="cell"><img src="page-tasks.png" alt="" /></div>
+      </div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), {
+        seed: 67,
+        count: 720,
+        minDist: 42,
+        w: 2240,
+        h: 1480,
+      });
+    </script>
+  </body>
+</html>

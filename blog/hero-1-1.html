@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .hero-card {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+      }
+      .hero-card img {
+        display: block;
+        width: auto;
+        height: 1060px;
+      }
+      .hero-card::before {
+        content: '';
+        position: absolute;
+        inset: -22px;
+        border-radius: 22px;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(37, 99, 235, 0.32),
+          rgba(37, 99, 235, 0) 70%
+        );
+        z-index: -1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="card hero-card"><img src="leaderboardv3.png" alt="MTEB v3" /></div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), { seed: 11, count: 480, minDist: 40 });
+    </script>
+  </body>
+</html>

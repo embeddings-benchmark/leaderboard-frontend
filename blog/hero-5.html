@@ -1,0 +1,240 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .stage {
+        background-color: #f1f5fd;
+      }
+      svg.network {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 2;
+      }
+      .chip {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        padding: 9px 16px;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.1px;
+        border-radius: 999px;
+        background: var(--bg, #fff);
+        color: var(--fg, #0b1a3a);
+        border: 1.5px solid var(--bd, rgba(15, 23, 42, 0.18));
+        box-shadow:
+          0 8px 20px -8px rgba(10, 22, 55, 0.18),
+          0 0 0 4px var(--halo, rgba(37, 99, 235, 0.06));
+        white-space: nowrap;
+        z-index: 4;
+      }
+      .chip.neutral {
+        --bg: #fff;
+        --fg: #0b1a3a;
+        --bd: rgba(15, 23, 42, 0.22);
+        --halo: rgba(15, 23, 42, 0.06);
+      }
+      .chip.blue {
+        --bg: #e8efff;
+        --fg: #1d4ed8;
+        --bd: rgba(29, 78, 216, 0.35);
+        --halo: rgba(29, 78, 216, 0.12);
+      }
+      .chip.purple {
+        --bg: #f2e7ff;
+        --fg: #5a2da1;
+        --bd: rgba(90, 45, 161, 0.35);
+        --halo: rgba(90, 45, 161, 0.12);
+      }
+      .chip.green {
+        --bg: #d8f3df;
+        --fg: #1f6c33;
+        --bd: rgba(31, 108, 51, 0.35);
+        --halo: rgba(31, 108, 51, 0.12);
+      }
+      .chip.orange {
+        --bg: #ffe1d0;
+        --fg: #a8420b;
+        --bd: rgba(168, 66, 11, 0.35);
+        --halo: rgba(168, 66, 11, 0.12);
+      }
+      .chip.amber {
+        --bg: #fdedb5;
+        --fg: #835100;
+        --bd: rgba(131, 81, 0, 0.4);
+        --halo: rgba(131, 81, 0, 0.12);
+      }
+      .chip.pink {
+        --bg: #ffe1ee;
+        --fg: #a01660;
+        --bd: rgba(160, 22, 96, 0.35);
+        --halo: rgba(160, 22, 96, 0.12);
+      }
+      .chip.azure {
+        --bg: #d9f0ff;
+        --fg: #1762a0;
+        --bd: rgba(23, 98, 160, 0.35);
+        --halo: rgba(23, 98, 160, 0.12);
+      }
+      .chip.teal {
+        --bg: #d2f3eb;
+        --fg: #0d6457;
+        --bd: rgba(13, 100, 87, 0.4);
+        --halo: rgba(13, 100, 87, 0.12);
+      }
+      .center {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 1280px;
+        z-index: 3;
+      }
+      .center .card {
+        box-shadow:
+          0 30px 70px -20px rgba(10, 22, 55, 0.4),
+          0 10px 24px -8px rgba(10, 22, 55, 0.22),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+      }
+      .center .card::before {
+        content: '';
+        position: absolute;
+        inset: -28px;
+        border-radius: 26px;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(37, 99, 235, 0.22),
+          rgba(37, 99, 235, 0) 70%
+        );
+        z-index: -1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <svg class="network"></svg>
+      <div class="center"><div class="card"><img src="leaderboardv3.png" alt="MTEB v3" /></div></div>
+      <div id="chips"></div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      // Denser background dots
+      paintDots(document.querySelector('svg.dots'), { seed: 31, count: 720, minDist: 32 });
+
+      const W = 2240,
+        H = 1180;
+
+      // Chip catalog — id, label, color class, x, y
+      const chips = [
+        { id: 'multi', label: 'multilingual', cls: 'blue', x: 180, y: 130 },
+        { id: 'ret', label: 'retrieval', cls: 'purple', x: 560, y: 80 },
+        { id: 'image', label: 'image', cls: 'blue', x: 1240, y: 100 },
+        { id: 'audio', label: 'audio', cls: 'amber', x: 1700, y: 90 },
+        { id: 'sts', label: 'STS', cls: 'pink', x: 2080, y: 200 },
+
+        { id: 'dense', label: 'dense', cls: 'blue', x: 120, y: 360 },
+        { id: 'cross', label: 'cross-encoder', cls: 'orange', x: 2070, y: 420 },
+
+        { id: 'class', label: 'classification', cls: 'blue', x: 90, y: 640 },
+        { id: 'late', label: 'late-interaction', cls: 'green', x: 2090, y: 700 },
+
+        { id: 'text', label: 'text', cls: 'teal', x: 130, y: 900 },
+        { id: 'cluster', label: 'clustering', cls: 'orange', x: 2070, y: 970 },
+
+        { id: 'eightb', label: '8B params', cls: 'neutral', x: 380, y: 1080 },
+        { id: 'open', label: 'open weights', cls: 'green', x: 880, y: 1100 },
+        { id: 'instr', label: 'instruction-tuned', cls: 'blue', x: 1430, y: 1100 },
+        { id: 'rerank', label: 'reranking', cls: 'amber', x: 1860, y: 1080 },
+      ];
+
+      const byId = Object.fromEntries(chips.map((c) => [c.id, c]));
+      const chipsRoot = document.getElementById('chips');
+      for (const c of chips) {
+        const el = document.createElement('div');
+        el.className = `chip ${c.cls}`;
+        el.style.left = c.x + 'px';
+        el.style.top = c.y + 'px';
+        el.textContent = c.label;
+        chipsRoot.appendChild(el);
+      }
+
+      // Constellation lines — pairs of chip ids
+      const pairs = [
+        ['multi', 'ret'],
+        ['ret', 'image'],
+        ['image', 'audio'],
+        ['audio', 'sts'],
+        ['sts', 'cross'],
+        ['cross', 'late'],
+        ['late', 'cluster'],
+        ['cluster', 'rerank'],
+        ['rerank', 'instr'],
+        ['instr', 'open'],
+        ['open', 'eightb'],
+        ['eightb', 'text'],
+        ['text', 'class'],
+        ['class', 'dense'],
+        ['dense', 'multi'],
+        // a few cross-chords for the network feel
+        ['multi', 'class'],
+        ['ret', 'cross'],
+        ['image', 'late'],
+        ['audio', 'cluster'],
+        ['sts', 'instr'],
+        ['dense', 'cross'],
+        ['text', 'audio'],
+      ];
+
+      const net = document.querySelector('svg.network');
+      net.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      net.setAttribute('preserveAspectRatio', 'none');
+      const ns = 'http://www.w3.org/2000/svg';
+
+      // Draw lines
+      for (const [a, b] of pairs) {
+        const A = byId[a],
+          B = byId[b];
+        if (!A || !B) continue;
+        const line = document.createElementNS(ns, 'line');
+        line.setAttribute('x1', A.x);
+        line.setAttribute('y1', A.y);
+        line.setAttribute('x2', B.x);
+        line.setAttribute('y2', B.y);
+        line.setAttribute('stroke', '#2563eb');
+        line.setAttribute('stroke-width', '1.2');
+        line.setAttribute('stroke-opacity', '0.18');
+        line.setAttribute('stroke-dasharray', '4 6');
+        net.appendChild(line);
+      }
+
+      // A few "upgraded" dots — slightly larger nodes between chips
+      const intermediates = [
+        [380, 240],
+        [820, 200],
+        [1490, 220],
+        [1900, 250],
+        [300, 760],
+        [1980, 540],
+        [620, 1020],
+        [1700, 980],
+        [240, 480],
+        [2050, 850],
+        [1050, 80],
+      ];
+      for (const [x, y] of intermediates) {
+        const c = document.createElementNS(ns, 'circle');
+        c.setAttribute('cx', x);
+        c.setAttribute('cy', y);
+        c.setAttribute('r', 4);
+        c.setAttribute('fill', '#2563eb');
+        c.setAttribute('opacity', 0.55);
+        net.appendChild(c);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .stage {
+        background-color: #eef3fb;
+      }
+      .framed {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 3;
+      }
+      .framed img {
+        display: block;
+        border-radius: 12px;
+        box-shadow:
+          0 22px 50px -16px rgba(10, 22, 55, 0.32),
+          0 6px 16px -4px rgba(10, 22, 55, 0.18),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="framed"><img id="src" alt="" /></div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      const p = new URLSearchParams(location.search);
+      const src = p.get('src');
+      const pad = parseInt(p.get('pad') || '60', 10);
+      const stage = document.querySelector('.stage');
+      const img = document.getElementById('src');
+      img.onload = () => {
+        const w = img.naturalWidth + pad * 2;
+        const h = img.naturalHeight + pad * 2;
+        stage.style.width = w + 'px';
+        stage.style.height = h + 'px';
+        // ~one dot per 8000 px² of canvas
+        const count = Math.max(40, Math.round((w * h) / 8000));
+        paintDots(document.querySelector('svg.dots'), {
+          w,
+          h,
+          count,
+          minDist: 32,
+          seed: 13,
+        });
+        document.title = `ready ${w}x${h}`;
+      };
+      if (src) img.src = src;
+      else document.title = 'error';
+    </script>
+  </body>
+</html>

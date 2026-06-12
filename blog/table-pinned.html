@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .stage {
+        width: 1438px;
+        height: 382px;
+      }
+      .framed {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 3;
+      }
+      .framed img {
+        display: block;
+        border-radius: 12px;
+        box-shadow:
+          0 22px 50px -16px rgba(10, 22, 55, 0.32),
+          0 6px 16px -4px rgba(10, 22, 55, 0.18),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="framed"><img src="_table-pinned-raw.png" alt="" /></div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), {
+        seed: 91,
+        count: 90,
+        minDist: 30,
+        w: 1438,
+        h: 382,
+      });
+    </script>
+  </body>
+</html>

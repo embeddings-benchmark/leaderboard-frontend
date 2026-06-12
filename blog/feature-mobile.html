@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .stage {
+        height: 1180px;
+      }
+      .copy {
+        position: absolute;
+        left: 90px;
+        top: 50%;
+        transform: translateY(-50%);
+        max-width: 760px;
+        z-index: 3;
+      }
+      .copy .pill {
+        display: inline-block;
+        margin-bottom: 16px;
+        padding: 6px 14px;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: #1d4ed8;
+        background: rgba(37, 99, 235, 0.1);
+        border: 1.5px solid rgba(37, 99, 235, 0.35);
+        border-radius: 999px;
+      }
+      .copy h1 {
+        font-size: 72px;
+        font-weight: 800;
+        letter-spacing: -1.8px;
+        color: #0b1a3a;
+        line-height: 1;
+      }
+      .copy h1 .accent {
+        color: #2563eb;
+      }
+      .copy p {
+        margin-top: 22px;
+        font-size: 24px;
+        line-height: 1.4;
+        color: #3b475e;
+        max-width: 640px;
+      }
+      .phones {
+        position: absolute;
+        right: 90px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        gap: 60px;
+        align-items: flex-end;
+        z-index: 2;
+      }
+      .phone {
+        position: relative;
+        width: 380px;
+        height: 822px;
+        background: #0b1a3a;
+        border-radius: 48px;
+        padding: 14px;
+        box-shadow:
+          0 40px 80px -20px rgba(10, 22, 55, 0.5),
+          0 12px 28px -6px rgba(10, 22, 55, 0.28),
+          0 0 0 2px rgba(15, 23, 42, 0.6) inset;
+      }
+      .phone::before {
+        /* notch */
+        content: '';
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 110px;
+        height: 26px;
+        background: #0b1a3a;
+        border-radius: 0 0 16px 16px;
+        z-index: 2;
+      }
+      .phone .screen {
+        width: 100%;
+        height: 100%;
+        background: #fff;
+        border-radius: 34px;
+        overflow: hidden;
+        position: relative;
+      }
+      .phone .screen img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .phone.back {
+        transform: translateY(-30px) rotate(-3deg);
+      }
+      .phone.front {
+        transform: translateY(20px) rotate(3deg);
+        z-index: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="copy">
+        <span class="pill">Works on your phone</span>
+        <h1>The same leaderboard, <span class="accent">pocket-sized.</span></h1>
+        <p>Browse, sort, filter, share — every feature ports cleanly to mobile. Catch up on a new model in line for coffee.</p>
+      </div>
+      <div class="phones">
+        <div class="phone back"><div class="screen"><img src="mobile-home.png" alt="Mobile home" /></div></div>
+        <div class="phone front"><div class="screen"><img src="mobile-benchmark.png" alt="Mobile benchmark" /></div></div>
+      </div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), { seed: 47, count: 520, minDist: 40 });
+    </script>
+  </body>
+</html>

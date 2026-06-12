@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .stage {
+        width: 2240px;
+        height: 1345px;
+        background-color: #eef3fb;
+      }
+      .stage::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(
+          135deg,
+          rgba(37, 99, 235, 0.08) 0%,
+          rgba(255, 255, 255, 0) 35%,
+          rgba(255, 255, 255, 0) 65%,
+          rgba(37, 99, 235, 0.1) 100%
+        );
+      }
+      .v-card {
+        position: absolute;
+        width: 1400px;
+        background: #fff;
+        border: 1.5px solid #d2d7de;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow:
+          0 18px 40px -10px rgba(20, 35, 80, 0.28),
+          0 4px 12px -2px rgba(20, 35, 80, 0.18),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+      }
+      .v-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .v1 {
+        top: 40px;
+        left: 40px;
+      }
+      .v2 {
+        top: 320px;
+        left: 420px;
+      }
+      .v3 {
+        top: 600px;
+        left: 800px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="v-card v1"><img src="leaderboardv1.png" alt="v1" /></div>
+      <div class="v-card v2"><img src="leaderboardv2.png" alt="v2" /></div>
+      <div class="v-card v3"><img src="leaderboardv3.png" alt="v3" /></div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), {
+        seed: 42,
+        count: 520,
+        minDist: 38,
+        w: 2240,
+        h: 1345,
+      });
+    </script>
+  </body>
+</html>

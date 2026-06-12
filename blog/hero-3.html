@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .panel {
+        position: absolute;
+        z-index: 2;
+      }
+      .panel .card img {
+        display: block;
+      }
+      /* Per-panel aspect handling */
+      .p1 .card {
+        width: 520px;
+      }
+      .p1 .card img {
+        width: 520px;
+        height: 720px;
+        object-fit: cover;
+        object-position: top center;
+      }
+      .p2 .card {
+        width: 640px;
+      }
+      .p2 .card img {
+        width: 640px;
+        height: 460px;
+        object-fit: cover;
+        object-position: top left;
+      }
+      .p3 .card {
+        width: 640px;
+      }
+      .p3 .card img {
+        width: 640px;
+        height: 360px;
+        object-fit: cover;
+        object-position: top left;
+      }
+      .panel .label {
+        margin-bottom: 18px;
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+      }
+      .panel .num {
+        font-size: 72px;
+        font-weight: 800;
+        line-height: 0.9;
+        color: #2563eb;
+        letter-spacing: -2px;
+      }
+      .panel .tag {
+        font-size: 32px;
+        font-weight: 700;
+        color: #0b1a3a;
+        letter-spacing: -0.5px;
+      }
+      .panel .desc {
+        margin-top: 14px;
+        font-size: 19px;
+        line-height: 1.4;
+        color: #3b475e;
+        max-width: 540px;
+      }
+      .p1 {
+        top: 110px;
+        left: 70px;
+      }
+      .p2 {
+        top: 220px;
+        left: 760px;
+      }
+      .p3 {
+        top: 580px;
+        left: 1500px;
+      }
+      .heading {
+        position: absolute;
+        right: 90px;
+        top: 60px;
+        text-align: right;
+        z-index: 3;
+        max-width: 600px;
+      }
+      .heading .pill {
+        display: inline-block;
+        margin-bottom: 12px;
+        padding: 6px 14px;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: #1d4ed8;
+        background: rgba(37, 99, 235, 0.1);
+        border: 1.5px solid rgba(37, 99, 235, 0.35);
+        border-radius: 999px;
+      }
+      .heading h1 {
+        font-size: 46px;
+        font-weight: 800;
+        letter-spacing: -1.2px;
+        color: #0b1a3a;
+        line-height: 1.05;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="panel p1">
+        <div class="label"><span class="num">01</span><span class="tag">Filter</span></div>
+        <div class="card"><img src="crop-sidebar.png" alt="Filter sidebar" /></div>
+        <p class="desc">Modality, task type, model size, instruction-tuning — narrow the field to what you actually care about.</p>
+      </div>
+      <div class="panel p2">
+        <div class="label"><span class="num">02</span><span class="tag">Explore</span></div>
+        <div class="card"><img src="crop-table-top.png" alt="Per-task table" /></div>
+        <p class="desc">Per-task heat-shaded scores with zero-shot flags. Sort, pin, and dig as deep as you need.</p>
+      </div>
+      <div class="panel p3">
+        <div class="label"><span class="num">03</span><span class="tag">Inspect</span></div>
+        <div class="card"><img src="crop-hero.png" alt="Benchmark hero" /></div>
+        <p class="desc">Hero metadata, reference papers, tabs for time-, size- and language-stratified views.</p>
+      </div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), { seed: 7, count: 520, minDist: 40 });
+    </script>
+  </body>
+</html>

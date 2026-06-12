@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .stage {
+        width: 1100px;
+        height: 1180px;
+      }
+      .row {
+        position: absolute;
+        inset: 60px;
+        display: flex;
+        gap: 50px;
+        align-items: center;
+        justify-content: center;
+        z-index: 3;
+      }
+      .col {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .col img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 12px;
+        box-shadow:
+          0 22px 50px -16px rgba(10, 22, 55, 0.32),
+          0 6px 16px -4px rgba(10, 22, 55, 0.18),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="row">
+        <div class="col"><img src="_filter-model-raw.png" alt="" /></div>
+        <div class="col"><img src="_filter-scope-raw.png" alt="" /></div>
+      </div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), {
+        seed: 81,
+        count: 240,
+        minDist: 36,
+        w: 1100,
+        h: 1180,
+      });
+    </script>
+  </body>
+</html>

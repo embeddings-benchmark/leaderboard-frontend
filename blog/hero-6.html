@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .scene {
+        position: absolute;
+        left: 50%;
+        top: 52%;
+        transform: translate(-50%, -50%);
+        perspective: 2400px;
+      }
+      .window {
+        width: 1820px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow:
+          0 60px 120px -40px rgba(10, 22, 55, 0.5),
+          0 18px 40px -10px rgba(10, 22, 55, 0.28),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+        transform: rotateX(2deg) rotateY(-2deg);
+      }
+      .chrome {
+        height: 56px;
+        background: linear-gradient(#f3f5f9, #e6eaf1);
+        border-bottom: 1px solid #d2d7de;
+        display: flex;
+        align-items: center;
+        padding: 0 22px;
+        gap: 12px;
+      }
+      .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+      }
+      .dot.r {
+        background: #ff5f57;
+      }
+      .dot.y {
+        background: #febc2e;
+      }
+      .dot.g {
+        background: #28c840;
+      }
+      .url {
+        margin-left: 26px;
+        flex: 1;
+        height: 30px;
+        background: #fff;
+        border: 1px solid #d2d7de;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        font-size: 16px;
+        color: #475569;
+        font-family:
+          ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+      }
+      .lock {
+        margin-right: 10px;
+        color: #16a34a;
+        font-size: 13px;
+      }
+      .url .path {
+        color: #94a3b8;
+      }
+      .url .path b {
+        color: #475569;
+        font-weight: 600;
+      }
+      .window img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .badge {
+        position: absolute;
+        left: 80px;
+        top: 70px;
+        z-index: 4;
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 18px;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(8px);
+        border: 1.5px solid rgba(37, 99, 235, 0.35);
+        border-radius: 999px;
+        box-shadow: 0 8px 20px -6px rgba(10, 22, 55, 0.25);
+      }
+      .badge .live {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #16a34a;
+        box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.18);
+      }
+      .badge span {
+        font-size: 17px;
+        font-weight: 600;
+        color: #0b1a3a;
+        letter-spacing: 0.2px;
+      }
+      .tagline {
+        position: absolute;
+        right: 80px;
+        bottom: 80px;
+        text-align: right;
+        z-index: 4;
+      }
+      .tagline h1 {
+        font-size: 46px;
+        font-weight: 800;
+        letter-spacing: -1.1px;
+        color: #0b1a3a;
+        line-height: 1.05;
+      }
+      .tagline p {
+        margin-top: 10px;
+        font-size: 22px;
+        color: #3b475e;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="badge">
+        <span class="live"></span><span>MTEB Leaderboard · v3</span>
+      </div>
+      <div class="scene">
+        <div class="window">
+          <div class="chrome">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+            <div class="url">
+              <span class="lock">●</span>
+              <span class="path"><b>mteb.org</b>/benchmark/multilingual</span>
+            </div>
+          </div>
+          <img src="leaderboardv3.png" alt="MTEB v3" />
+        </div>
+      </div>
+      <div class="tagline">
+        <h1>From slow demo<br />to live tool.</h1>
+        <p>Fast. Filterable. Transparent.</p>
+      </div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), { seed: 23, count: 460, minDist: 42 });
+    </script>
+  </body>
+</html>

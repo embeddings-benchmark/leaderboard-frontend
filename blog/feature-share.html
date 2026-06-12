@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="_stage.css" />
+    <style>
+      .copy {
+        position: absolute;
+        left: 70px;
+        top: 50%;
+        transform: translateY(-50%);
+        max-width: 640px;
+        z-index: 4;
+      }
+      .copy .pill {
+        display: inline-block;
+        margin-bottom: 16px;
+        padding: 6px 14px;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: #1d4ed8;
+        background: rgba(37, 99, 235, 0.1);
+        border: 1.5px solid rgba(37, 99, 235, 0.35);
+        border-radius: 999px;
+      }
+      .copy h1 {
+        font-size: 74px;
+        font-weight: 800;
+        letter-spacing: -1.9px;
+        color: #0b1a3a;
+        line-height: 1;
+      }
+      .copy h1 .accent {
+        color: #2563eb;
+      }
+      .copy p {
+        margin-top: 20px;
+        font-size: 22px;
+        line-height: 1.4;
+        color: #3b475e;
+        max-width: 580px;
+      }
+
+      .window {
+        position: absolute;
+        right: 60px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1380px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow:
+          0 50px 100px -30px rgba(10, 22, 55, 0.45),
+          0 14px 32px -8px rgba(10, 22, 55, 0.26),
+          0 0 0 1px rgba(37, 99, 235, 0.08);
+        z-index: 2;
+      }
+      .chrome {
+        height: 56px;
+        background: linear-gradient(#f3f5f9, #e6eaf1);
+        border-bottom: 1px solid #d2d7de;
+        display: flex;
+        align-items: center;
+        padding: 0 18px;
+        gap: 10px;
+      }
+      .dot {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+      }
+      .dot.r {
+        background: #ff5f57;
+      }
+      .dot.y {
+        background: #febc2e;
+      }
+      .dot.g {
+        background: #28c840;
+      }
+      .url {
+        margin-left: 22px;
+        flex: 1;
+        height: 34px;
+        background: #fff;
+        border: 1px solid #d2d7de;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        gap: 4px;
+        font-size: 16px;
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        overflow: hidden;
+      }
+      .url .lock {
+        margin-right: 8px;
+        color: #16a34a;
+        font-size: 13px;
+      }
+      .url .host {
+        color: #475569;
+      }
+      .url .path {
+        color: #0b1a3a;
+        font-weight: 600;
+      }
+      .url .q {
+        color: #94a3b8;
+      }
+      .url .param {
+        color: #1d4ed8;
+        font-weight: 600;
+        background: rgba(37, 99, 235, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .url .copy-pill {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: #2563eb;
+        color: #fff;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 999px;
+      }
+      .window img.body {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .share-mark {
+        position: absolute;
+        right: 38px;
+        bottom: 38px;
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        border: 3px solid #2563eb;
+        box-shadow:
+          0 0 0 6px rgba(37, 99, 235, 0.18),
+          0 0 0 14px rgba(37, 99, 235, 0.08);
+        z-index: 6;
+      }
+      .callout {
+        position: absolute;
+        right: 130px;
+        bottom: 140px;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .callout svg {
+        width: 72px;
+        height: 72px;
+      }
+      .callout .label {
+        background: rgba(255, 255, 255, 0.97);
+        border: 1.5px solid rgba(37, 99, 235, 0.5);
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 17px;
+        font-weight: 700;
+        color: #0b1a3a;
+        box-shadow: 0 10px 24px -8px rgba(10, 22, 55, 0.3);
+        max-width: 240px;
+        line-height: 1.25;
+      }
+      .callout .label span {
+        display: block;
+        margin-top: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #3b475e;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <svg class="dots"></svg>
+      <div class="copy">
+        <span class="pill">Shareable views</span>
+        <h1>One URL. <span class="accent">Every filter.</span></h1>
+        <p>Sort, filter, pin, switch tabs — the URL keeps up. Paste it into Slack and your colleague lands on the exact same view.</p>
+      </div>
+
+      <div class="window">
+        <div class="chrome">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <div class="url">
+            <span class="lock">●</span>
+            <span class="host">mteb.org</span>
+            <span class="path">/benchmark/MTEB(Multilingual,&nbsp;v2)</span>
+            <span class="q">?</span>
+            <span class="param">modality=text</span>
+            <span class="q">&amp;</span>
+            <span class="param">zeroshot=only</span>
+            <span class="q">&amp;</span>
+            <span class="param">sort=Mean</span>
+            <span class="q">&amp;</span>
+            <span class="param">dir=desc</span>
+            <span class="copy-pill">⧉ Copy</span>
+          </div>
+        </div>
+        <img class="body" src="leaderboardv3.png" alt="MTEB v3" />
+        <div class="share-mark"></div>
+        <div class="callout">
+          <svg viewBox="0 0 80 80" fill="none">
+            <path d="M75 75 C 50 60, 40 30, 12 18" stroke="#2563eb" stroke-width="2.5"
+              stroke-dasharray="6 6" fill="none" />
+            <path d="M12 18 l 4 8 M12 18 l 9 -1" stroke="#2563eb" stroke-width="2.5"
+              stroke-linecap="round" fill="none" />
+          </svg>
+          <div class="label">
+            Share button<span>Bakes every active filter into the link.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="_dots.js"></script>
+    <script>
+      paintDots(document.querySelector('svg.dots'), { seed: 53, count: 460, minDist: 42 });
+    </script>
+  </body>
+</html>
