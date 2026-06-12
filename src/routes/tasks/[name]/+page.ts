@@ -1,6 +1,13 @@
 // Eagerly awaits menu + task metadata; streams the heavier scores fetch.
+import { error } from '@sveltejs/kit';
 import type { EntryGenerator, PageLoad } from './$types';
-import { loadBenchmarkMenu, loadTask, loadTaskScores, loadTasks } from '$lib/data/service';
+import {
+	HttpError,
+	loadBenchmarkMenu,
+	loadTask,
+	loadTaskScores,
+	loadTasks
+} from '$lib/data/service';
 import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
 
 // Discriminated union so the streamed promise never rejects — prerender would
@@ -17,27 +24,28 @@ export const entries: EntryGenerator = async () => {
 export interface TaskPageData {
 	taskName: string;
 	allBenchmarks: Benchmark[];
-	taskMeta: TaskMeta | null;
-	taskMetaError: string | null;
+	taskMeta: TaskMeta;
 	// Streamed — page renders a scores skeleton until this resolves.
 	scores: Promise<ScoresResult>;
 }
 
 export const load: PageLoad = async ({ params, fetch }): Promise<TaskPageData> => {
 	const taskName = decodeURIComponent(params.name);
-	// Catch task-meta failures so a missing task still shows the card shell.
-	const [menu, taskResult] = await Promise.all([
+	// Only `loadTask` failures imply a missing task; menu failures shouldn't 404
+	// the whole page (the menu is a sidebar; the page is the task).
+	const [menu, taskMeta] = await Promise.all([
 		loadBenchmarkMenu(fetch),
-		loadTask(taskName, fetch).then(
-			(t) => ({ meta: t, error: null as string | null }),
-			(e) => ({ meta: null as TaskMeta | null, error: e instanceof Error ? e.message : String(e) })
-		)
+		loadTask(taskName, fetch).catch((e) => {
+			if (e instanceof HttpError && e.status === 404) {
+				error(404, `Task "${taskName}" not found`);
+			}
+			throw e;
+		})
 	]);
 	return {
 		taskName,
 		allBenchmarks: flattenMenu(menu),
-		taskMeta: taskResult.meta,
-		taskMetaError: taskResult.error,
+		taskMeta,
 		scores: loadTaskScores(taskName, fetch).then(
 			(s): ScoresResult => ({ ok: true, data: s }),
 			(e): ScoresResult => ({ ok: false, error: e instanceof Error ? e.message : String(e) })

@@ -27,9 +27,23 @@ const API_BASE = `${API}/v1`;
 // into the HTML/data payload.
 type FetchFn = typeof globalThis.fetch;
 
+// Typed so loaders can distinguish 404s from transient backend failures and
+// throw `error(404, ...)` for the former without false-positiving on 5xx /
+// network errors.
+export class HttpError extends Error {
+	constructor(
+		public status: number,
+		public statusText: string,
+		public path: string
+	) {
+		super(`${status} ${statusText} — ${path}`);
+		this.name = 'HttpError';
+	}
+}
+
 async function http<T>(path: string, fetchFn: FetchFn = globalThis.fetch): Promise<T> {
 	const res = await fetchFn(`${API_BASE}${path}`);
-	if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`);
+	if (!res.ok) throw new HttpError(res.status, res.statusText, path);
 	return (await res.json()) as T;
 }
 

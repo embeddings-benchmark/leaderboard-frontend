@@ -719,7 +719,7 @@
 							     /models/microsoft%2Fharrier-…. -->
 							<a
 								class="model-name"
-								href={resolve('/models/[...name]', { name: modelPath(r.model.name) })}
+								href={resolve('/models/[...name=modelName]', { name: modelPath(r.model.name) })}
 							>
 								{r.model.displayName}
 							</a>

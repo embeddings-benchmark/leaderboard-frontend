@@ -2,6 +2,8 @@
 	// Bottom-right "copy link" pill — copies `window.location.href` so the
 	// recipient lands on the exact view (all filter params already in the URL).
 
+	import Check from 'lucide-svelte/icons/check';
+	import Link2 from 'lucide-svelte/icons/link-2';
 	import { page } from '$app/state';
 
 	let copied = $state(false);
@@ -32,36 +34,10 @@
 	onclick={copy}
 >
 	{#if copied}
-		<svg
-			viewBox="0 0 24 24"
-			width="16"
-			height="16"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2.4"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M5 12l5 5L20 7" />
-		</svg>
+		<Check size={16} strokeWidth={2.4} aria-hidden="true" />
 		<span>Copied</span>
 	{:else}
-		<!-- Link/chain glyph -->
-		<svg
-			viewBox="0 0 24 24"
-			width="16"
-			height="16"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<path d="M10 14a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07L11 5.93" />
-			<path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07L13 18.07" />
-		</svg>
+		<Link2 size={16} aria-hidden="true" />
 		<span>Copy link</span>
 	{/if}
 </button>

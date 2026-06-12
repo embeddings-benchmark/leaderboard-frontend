@@ -3,6 +3,8 @@
      listener. FUTURE: `@container scroll-state(scrollable: top)` on the root
      would drop the JS once it leaves Chrome-only. -->
 <script lang="ts">
+	import ArrowUp from 'lucide-svelte/icons/arrow-up';
+
 	let visible = $state(false);
 	let sentinel: HTMLDivElement | undefined = $state();
 
@@ -33,20 +35,7 @@
 	aria-hidden={!visible}
 	onclick={scrollTop}
 >
-	<svg
-		viewBox="0 0 24 24"
-		width="16"
-		height="16"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2.2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		aria-hidden="true"
-	>
-		<path d="M12 19V5" />
-		<path d="m5 12 7-7 7 7" />
-	</svg>
+	<ArrowUp size={16} strokeWidth={2.2} aria-hidden="true" />
 	<span>Top</span>
 </button>
 

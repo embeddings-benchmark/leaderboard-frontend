@@ -12,5 +12,12 @@ export default defineConfig({
 	build: {
 		// Plotly chunk is lazy-loaded by PlotlyChart.svelte; default 500 kB warning is noise.
 		chunkSizeWarningLimit: 900
+	},
+	ssr: {
+		// lucide-svelte ships raw `.svelte` files behind its subpath exports
+		// (the `./icons/<name>.js` shim re-imports `../Icon.svelte`). Without
+		// noExternal, Vite leaves the package external during SSR / prerender
+		// and Node hits the `.svelte` files directly → ERR_UNKNOWN_FILE_EXTENSION.
+		noExternal: ['lucide-svelte']
 	}
 });

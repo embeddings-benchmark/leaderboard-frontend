@@ -28,7 +28,6 @@
 	let taskName = $derived(data.taskName);
 	let allBenchmarks = $derived(data.allBenchmarks);
 	let taskMeta = $derived(data.taskMeta);
-	let metaError = $derived(data.taskMetaError);
 
 	// Stale-guard via `data.scores === p` on rapid task→task nav.
 	let scoresPayload = $state<TaskScores | null>(null);
@@ -61,8 +60,8 @@
 		return out;
 	});
 
-	let task = $derived.by<TaskWithBenchmark | null>(() => {
-		if (!taskMeta) return null;
+	// Loader guarantees `taskMeta` (a miss throws error(404)).
+	let task = $derived.by<TaskWithBenchmark>(() => {
 		const first = benchmarks[0];
 		return {
 			meta: taskMeta,
@@ -177,7 +176,7 @@
 
 <ShareMeta
 	title={taskName}
-	description={task?.meta?.description
+	description={task.meta.description
 		? `${task.meta.type} task · ${task.meta.languages.length} languages · ${task.meta.domains.length} domains — ${task.meta.description}`
 		: `${taskName} on the MTEB Leaderboard.`}
 	entity={{ kind: 'task', name: taskName }}
@@ -192,176 +191,167 @@
 		<span class="current">{taskName}</span>
 	</nav>
 
-	{#if !task && !metaError}
-		<p class="muted">Loading task…</p>
-	{:else if !task}
-		<section class="empty panel">
-			<h1>Unknown task</h1>
-			<p>{metaError ?? `No task named “${taskName}” found.`}</p>
-			<a class="back" href={resolve('/tasks')}>← All tasks</a>
-		</section>
-	{:else}
-		<section class="hero panel hero-grid" data-stype={task.meta.simplifiedType}>
-			<div class="hero-left">
-				<div class="kicker">
-					<!-- Hero badge mirrors the task-group chip on the index card:
+	<section class="hero panel hero-grid" data-stype={task.meta.simplifiedType}>
+		<div class="hero-left">
+			<div class="kicker">
+				<!-- Hero badge mirrors the task-group chip on the index card:
 					     simplified type name (e.g. "retrieval") with the matching
 					     per-group tint. The raw `type` value lives in the
 					     spec-list row below. -->
-					<span class="category-badge" data-stype={task.meta.simplifiedType}>
-						{task.meta.simplifiedType || task.meta.type}
+				<span class="category-badge" data-stype={task.meta.simplifiedType}>
+					{task.meta.simplifiedType || task.meta.type}
+				</span>
+				{#each sortModalities(task.meta.modalities) as m (m)}
+					<span class="badge modality-tint" data-modality={m} title={m}>
+						<ModalityIcon modality={m} size={12} />
+						<span>{m}</span>
 					</span>
-					{#each sortModalities(task.meta.modalities) as m (m)}
-						<span class="badge modality-tint" data-modality={m} title={m}>
-							<ModalityIcon modality={m} size={12} />
-							<span>{m}</span>
-						</span>
+				{/each}
+			</div>
+			<h1>{taskName}</h1>
+			<p class="desc"><MarkdownText text={task.meta.description} /></p>
+			{#if task.meta.domains.length > 0}
+				<div class="domains">
+					<span class="eyebrow dim">Domains:</span>
+					{#each task.meta.domains as d (d)}
+						<span class="chip-neutral">{d}</span>
 					{/each}
 				</div>
-				<h1>{taskName}</h1>
-				<p class="desc"><MarkdownText text={task.meta.description} /></p>
-				{#if task.meta.domains.length > 0}
-					<div class="domains">
-						<span class="eyebrow dim">Domains:</span>
-						{#each task.meta.domains as d (d)}
-							<span class="chip-neutral">{d}</span>
-						{/each}
-					</div>
-				{/if}
-				{#if task.meta.languages.length > 0}
-					<div class="langs">
-						<span class="eyebrow dim">Languages:</span>
-						{#each task.meta.languages as l (l)}
-							<span class="chip-neutral" title={l}>{languageLabel(l)}</span>
-						{/each}
-					</div>
-				{/if}
-				<div class="bench-links">
-					<span class="eyebrow dim">In benchmark{multipleBenchmarks ? 's' : ''}:</span>
-					{#each benchmarks as b (b.name)}
-						<a class="bench-chip" href={resolve('/benchmark/[name]', { name: slug(b.name) })}
-							>{b.display}</a
-						>
+			{/if}
+			{#if task.meta.languages.length > 0}
+				<div class="langs">
+					<span class="eyebrow dim">Languages:</span>
+					{#each task.meta.languages as l (l)}
+						<span class="chip-neutral" title={l}>{languageLabel(l)}</span>
 					{/each}
 				</div>
-				<dl class="spec-list">
-					{#if task.meta.type}
-						<div class="row">
-							<dt>Task type</dt>
-							<dd>{task.meta.type}</dd>
-						</div>
-					{/if}
-					{#if task.meta.mainScore}
-						<div class="row">
-							<dt>Main metric</dt>
-							<dd><code>{task.meta.mainScore}</code></dd>
-						</div>
-					{/if}
+			{/if}
+			<div class="bench-links">
+				<span class="eyebrow dim">In benchmark{multipleBenchmarks ? 's' : ''}:</span>
+				{#each benchmarks as b (b.name)}
+					<a class="bench-chip" href={resolve('/benchmark/[name]', { name: slug(b.name) })}
+						>{b.display}</a
+					>
+				{/each}
+			</div>
+			<dl class="spec-list">
+				{#if task.meta.type}
 					<div class="row">
-						<dt>Reference</dt>
+						<dt>Task type</dt>
+						<dd>{task.meta.type}</dd>
+					</div>
+				{/if}
+				{#if task.meta.mainScore}
+					<div class="row">
+						<dt>Main metric</dt>
+						<dd><code>{task.meta.mainScore}</code></dd>
+					</div>
+				{/if}
+				<div class="row">
+					<dt>Reference</dt>
+					<dd>
+						{#if task.meta.reference}
+							<!-- External paper URL -->
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+							<a href={task.meta.reference} target="_blank" rel="noreferrer">
+								{task.meta.reference}
+							</a>
+						{:else}
+							<span class="muted-dd">—</span>
+						{/if}
+					</dd>
+				</div>
+				{#if task.meta.sourceDataset}
+					<div class="row">
+						<dt>Source dataset</dt>
 						<dd>
-							{#if task.meta.reference}
-								<!-- External paper URL -->
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-								<a href={task.meta.reference} target="_blank" rel="noreferrer">
-									{task.meta.reference}
-								</a>
-							{:else}
-								<span class="muted-dd">—</span>
-							{/if}
+							<a
+								href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
+								target="_blank"
+								rel="noreferrer"
+								class="ds-link"
+							>
+								{task.meta.sourceDataset}
+							</a>
 						</dd>
 					</div>
-					{#if task.meta.sourceDataset}
-						<div class="row">
-							<dt>Source dataset</dt>
-							<dd>
-								<a
-									href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
-									target="_blank"
-									rel="noreferrer"
-									class="ds-link"
-								>
-									{task.meta.sourceDataset}
-								</a>
-							</dd>
-						</div>
-					{/if}
-					{#if task.meta.license}
-						<div class="row">
-							<dt>License</dt>
-							<dd>{task.meta.license}</dd>
-						</div>
-					{/if}
-					{#if task.meta.dateFrom || task.meta.dateTo}
-						<div class="row">
-							<dt>Dates</dt>
-							<dd>
-								{task.meta.dateFrom ?? '?'} → {task.meta.dateTo ?? '?'}
-							</dd>
-						</div>
-					{/if}
-					{#if task.meta.annotationsCreators}
-						<div class="row">
-							<dt>
-								Annotations
-								<InfoDot
-									as="button"
-									ariaLabel="What does this mean?"
-									tipKey="annotations"
-									onPointerEnter={showInfoTip}
-									onPointerLeave={hideInfoTip}
-									onFocusIn={showInfoTip}
-									onFocusOut={hideInfoTip}
-								/>
-							</dt>
-							<dd>{task.meta.annotationsCreators}</dd>
-						</div>
-					{/if}
-					{#if task.meta.dialect && task.meta.dialect.length > 0}
-						<div class="row">
-							<dt>Dialect</dt>
-							<dd>
-								<span class="chips">
-									{#each task.meta.dialect as d (d)}
-										<span class="chip">{d}</span>
-									{/each}
-								</span>
-							</dd>
-						</div>
-					{/if}
-					{#if task.meta.sampleCreation}
-						<div class="row">
-							<dt>
-								Sample creation
-								<InfoDot
-									as="button"
-									ariaLabel="What does this mean?"
-									tipKey="sample-creation"
-									onPointerEnter={showInfoTip}
-									onPointerLeave={hideInfoTip}
-									onFocusIn={showInfoTip}
-									onFocusOut={hideInfoTip}
-								/>
-							</dt>
-							<dd>{task.meta.sampleCreation}</dd>
-						</div>
-					{/if}
-				</dl>
-				<CiteBlock kind="task" citation={task.meta.citation} />
+				{/if}
+				{#if task.meta.license}
+					<div class="row">
+						<dt>License</dt>
+						<dd>{task.meta.license}</dd>
+					</div>
+				{/if}
+				{#if task.meta.dateFrom || task.meta.dateTo}
+					<div class="row">
+						<dt>Dates</dt>
+						<dd>
+							{task.meta.dateFrom ?? '?'} → {task.meta.dateTo ?? '?'}
+						</dd>
+					</div>
+				{/if}
+				{#if task.meta.annotationsCreators}
+					<div class="row">
+						<dt>
+							Annotations
+							<InfoDot
+								as="button"
+								ariaLabel="What does this mean?"
+								tipKey="annotations"
+								onPointerEnter={showInfoTip}
+								onPointerLeave={hideInfoTip}
+								onFocusIn={showInfoTip}
+								onFocusOut={hideInfoTip}
+							/>
+						</dt>
+						<dd>{task.meta.annotationsCreators}</dd>
+					</div>
+				{/if}
+				{#if task.meta.dialect && task.meta.dialect.length > 0}
+					<div class="row">
+						<dt>Dialect</dt>
+						<dd>
+							<span class="chips">
+								{#each task.meta.dialect as d (d)}
+									<span class="chip">{d}</span>
+								{/each}
+							</span>
+						</dd>
+					</div>
+				{/if}
+				{#if task.meta.sampleCreation}
+					<div class="row">
+						<dt>
+							Sample creation
+							<InfoDot
+								as="button"
+								ariaLabel="What does this mean?"
+								tipKey="sample-creation"
+								onPointerEnter={showInfoTip}
+								onPointerLeave={hideInfoTip}
+								onFocusIn={showInfoTip}
+								onFocusOut={hideInfoTip}
+							/>
+						</dt>
+						<dd>{task.meta.sampleCreation}</dd>
+					</div>
+				{/if}
+			</dl>
+			<CiteBlock kind="task" citation={task.meta.citation} />
+		</div>
+		<div class="kpis">
+			<div class="kpi">
+				<span class="kpi-label">Models scored</span>
+				<span class="kpi-value">
+					{#if loadingScores}<span class="loading-dot" aria-label="Loading">…</span
+						>{:else}{scores.length}{/if}
+				</span>
 			</div>
-			<div class="kpis">
-				<div class="kpi">
-					<span class="kpi-label">Models scored</span>
-					<span class="kpi-value">
-						{#if loadingScores}<span class="loading-dot" aria-label="Loading">…</span
-							>{:else}{scores.length}{/if}
-					</span>
-				</div>
-			</div>
-		</section>
+		</div>
+	</section>
 
-		{#if task.meta.isPublic !== false && task.meta.sourceDataset}
-			<!-- Embedded HuggingFace dataset viewer in a collapsible section
+	{#if task.meta.isPublic !== false && task.meta.sourceDataset}
+		<!-- Embedded HuggingFace dataset viewer in a collapsible section
 			     so the (heavy) iframe doesn't push the scores below the
 			     fold for users who only came to see the leaderboard.
 			     Closed by default; `loading="lazy"` further defers the
@@ -369,54 +359,53 @@
 			     view. Only shown for public datasets — RTEB private
 			     hold-outs and similar are skipped so we don't surface a
 			     404'ing iframe. -->
-			<details class="dataset-preview details-flat">
-				<summary>
-					<span class="preview-title">Dataset preview</span>
-					<span class="preview-source">{task.meta.sourceDataset}</span>
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-					<a
-						class="ext-link"
-						href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
-						target="_blank"
-						rel="noreferrer"
-						onclick={(e) => e.stopPropagation()}
-					>
-						Open on HuggingFace →
-					</a>
-				</summary>
-				<iframe
-					src="https://huggingface.co/datasets/{task.meta.sourceDataset}/embed/viewer/default/test"
-					title="HuggingFace dataset viewer for {task.meta.sourceDataset}"
-					loading="lazy"
-					frameborder="0"
-					width="100%"
-					height="560"
-				></iframe>
-			</details>
-		{/if}
-
-		<section class="scores">
-			<header class="scores-head">
-				<h2>Model scores</h2>
-				<span class="muted">
-					{#if loadingScores}Loading…
-					{:else}{scores.length} {scores.length === 1 ? 'entry' : 'entries'}{/if}
-				</span>
-				{#if scores.length > 0}
-					<DownloadButton filename="{sanitizeFilename(taskName)}_models" build={buildCsv} />
-				{/if}
-			</header>
-			{#if loadingScores}
-				<SkeletonTable rows={8} cols={6} />
-			{:else if scoresError}
-				<p class="muted">Failed to load scores: {scoresError}</p>
-			{:else if scores.length === 0}
-				<p class="muted">No model has been scored on this task yet.</p>
-			{:else}
-				<ModelScoreTable rows={scores} {subsets} />
-			{/if}
-		</section>
+		<details class="dataset-preview details-flat">
+			<summary>
+				<span class="preview-title">Dataset preview</span>
+				<span class="preview-source">{task.meta.sourceDataset}</span>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a
+					class="ext-link"
+					href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
+					target="_blank"
+					rel="noreferrer"
+					onclick={(e) => e.stopPropagation()}
+				>
+					Open on HuggingFace →
+				</a>
+			</summary>
+			<iframe
+				src="https://huggingface.co/datasets/{task.meta.sourceDataset}/embed/viewer/default/test"
+				title="HuggingFace dataset viewer for {task.meta.sourceDataset}"
+				loading="lazy"
+				frameborder="0"
+				width="100%"
+				height="560"
+			></iframe>
+		</details>
 	{/if}
+
+	<section class="scores">
+		<header class="scores-head">
+			<h2>Model scores</h2>
+			<span class="muted">
+				{#if loadingScores}Loading…
+				{:else}{scores.length} {scores.length === 1 ? 'entry' : 'entries'}{/if}
+			</span>
+			{#if scores.length > 0}
+				<DownloadButton filename="{sanitizeFilename(taskName)}_models" build={buildCsv} />
+			{/if}
+		</header>
+		{#if loadingScores}
+			<SkeletonTable rows={8} cols={6} />
+		{:else if scoresError}
+			<p class="muted">Failed to load scores: {scoresError}</p>
+		{:else if scores.length === 0}
+			<p class="muted">No model has been scored on this task yet.</p>
+		{:else}
+			<ModelScoreTable rows={scores} {subsets} />
+		{/if}
+	</section>
 </main>
 
 {#if infoTip.visible && infoTip.tip}
@@ -663,21 +652,5 @@
 		color: var(--text-subtle);
 		letter-spacing: 0.1em;
 		font-weight: 500;
-	}
-	.empty {
-		padding: 48px 28px;
-		text-align: center;
-	}
-	.empty h1 {
-		font-size: 22px;
-		margin: 0 0 6px;
-	}
-	.empty p {
-		color: var(--text-muted);
-	}
-	.back {
-		display: inline-block;
-		margin-top: 12px;
-		font-weight: 600;
 	}
 </style>

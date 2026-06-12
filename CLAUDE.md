@@ -169,6 +169,66 @@ The default for every route is a typed `+page.ts` loader that **streams** its da
 - **`{#each}` keys must be content-derived, not array indices.** Use the row's `name` / `id` / a composite like `${seg.type}:${i}:${seg.text}` (see `MarkdownText.svelte`). Bare `(i)` keys defeat keyed-each surgical updates and break when the source list reorders.
 - **Composite-widget keyboard nav.** `Tabs.svelte` (`role="tablist"`) and `Segmented.svelte` (`role="radiogroup"`) implement the WAI-ARIA APG pattern: roving `tabindex` (the active item is `0`, the rest are `-1`), `keydown` on the wrapper handles Arrow / Home / End, then `queueMicrotask(() => buttons[next]?.focus())` so focus re-lands after the re-render. The wrapper itself carries `tabindex="-1"` to satisfy Svelte's a11y lint for keydown-bearing interactive roles. Any new tabset / segmented control should mirror this pattern.
 - **Icon-only buttons need `aria-label`.** `title` is not reliably announced by screen readers — `SearchInput`'s clear button, sort icons, pin buttons, share/scroll-to-top all carry an explicit `aria-label`. Don't rely on `title` alone.
+- **Unique per-route `<title>`** is what SvelteKit's live-region announces after each client-side navigation. Every page that owns its data should set a `<svelte:head><title>…</title></svelte:head>` derived from the resource (e.g. `{model.displayName} — MTEB`), with a sensible fallback while the streamed promise is still in flight. A stale or shared title means screen-reader users can't tell that navigation happened.
+- **Post-nav focus lands on `<body>` by default.** If a route should focus a specific element (e.g. the search input on `/models`), use `afterNavigate` from `$app/navigation` and explicitly `.focus()` the target. Don't reach for `autofocus` — it fires once on initial mount, not on subsequent navs.
+
+## SvelteKit / Svelte 5 framework guidance
+
+Synthesized from upstream docs (`svelte.dev/docs/kit/*`, `svelte.dev/docs/svelte/best-practices`). Only items that actually apply to this project (adapter-static, no server runtime, prerendered SPA, FastAPI backend over CORS) are listed — the "skip list" at the bottom names what we deliberately ignore.
+
+### Link options worth reaching for
+
+- `data-sveltekit-preload-data="hover"` is already enabled globally on `<body>` in `app.html`. It prefetches both code and the `+page.ts` data on hover; pair with the `primeFooCache` pattern (see the load-flow section above) so the runtime cache actually sees the prefetched payload.
+- `data-sveltekit-preload-code="eager"` on specific high-value links preloads the route module without triggering the data load. Useful when a link is almost certain to be clicked but its data is too dynamic or too large to prefetch.
+- `data-sveltekit-replacestate` on filter / sort / search links keeps intermediate states out of the back-history. If a future refactor moves filters from `filters.svelte.ts` into search params (via `goto(url, { replaceState: true })`), apply this so the back button skips past dozens of filter-toggle entries.
+- `data-sveltekit-noscroll` on in-page links that only update search params (e.g. a filter chip routed through `goto`) prevents the viewport from snapping to top.
+- `data-sveltekit-keepfocus` only belongs on form-like inputs the user is actively typing into (e.g. a search box that triggers a `goto`); never on plain anchor links.
+
+### URL state, snapshots, and store state
+
+- The upstream guidance: anything a user wants to **share, reload, or come back to** belongs in the URL. All three reactive stores already URL-sync via `replaceState()` from `$app/navigation`: `sort.svelte.ts` (sort key/dir), `filters.svelte.ts` (every facet — `q`, size range, modalities, tasks, langs, etc., microtask-debounced via `doSync()`), and `pinned.svelte.ts` (the `?pin=` set). `ShareUrlButton` only has to read `page.url.href` because the URL already carries everything. `replaceState` (not `pushState`) is the right choice — filter toggles don't deserve back-history entries.
+- **Snapshots** (`export const snapshot = { capture, restore }` from a `+page.svelte`) are the right tool for ephemeral UI state that shouldn't go in the URL but should survive back/forward navigation — e.g. an expanded info-dot, a collapsed sidebar section, a scroll position within a long table. None used today; reach for this before promoting that kind of state into a singleton store.
+- The "no shared user state on the server" rule from the docs doesn't bite us (we're fully prerendered / static), but the corollary **does**: never write to a global store from inside a `load` function. Loaders return data; pages or stores consume it. The streamed-promise pattern in this repo already follows that — keep it that way.
+
+### Load function pitfalls
+
+- `redirect(status, location)` and `error(status, message)` from `@sveltejs/kit` are **throws**, not return values. Never wrap them in a `try/catch` — you'll swallow the navigation. The three detail loaders (`/benchmark/[name]`, `/models/[...name=modelName]`, `/tasks/[name]`) demonstrate the pattern: `loadFoo(...).catch((e) => { if (e instanceof HttpError && e.status === 404) error(404, ...); throw e; })`. `HttpError` from `src/lib/data/service.ts` carries the status so loaders can distinguish a missing resource from a 5xx / network blip.
+- `await parent()` in a child loader serializes that loader against the parent. If we ever add a parent load, run independent fetches **before** the `await parent()` so they overlap on the network. We don't use parent loads today.
+- Explicit invalidation: `depends('app:foo')` inside a loader plus `invalidate('app:foo')` from a component triggers a targeted re-run. Always prefer this over `invalidateAll()`, which re-runs every active loader on the page. The `filtersSeeded` one-shot guard exists precisely because we anticipate `invalidate()` being added — keep the guard in place when you add it.
+- **Matchers** (`src/params/<name>.ts`) validate dynamic params at the router level. `/models/[...name=modelName]` uses `src/params/modelName.ts` to require the HF `org/name` shape (exactly one `/`, no empty segments, no `..`). Malformed slugs fail at the router and hit the root 404; valid-shape-but-unknown slugs fall through to the loader's `error(404, ...)`. Any new dynamic param with a known shape should follow the same pattern.
+
+### Performance posture
+
+- SvelteKit already handles code-splitting, asset preloading, request coalescing, data inlining (via `event.fetch`), parallel loads, and conservative invalidation. We actively exercise: `event.fetch` threading (inlines responses into prerendered HTML), the hover preload (above), and per-route streamed promises (within-page parallelism). Don't fight the framework on these.
+- We deliberately don't use `@sveltejs/enhanced-img` — the package optimizes **build-time** assets, and our icons are remote (`PUBLIC_API_URL`-served). For remote `<img>`s, set explicit `width` / `height` to prevent CLS, `loading="lazy"` for below-the-fold images, and `fetchpriority="high"` on hero / LCP images (e.g. the icon on `/models/[...name=modelName]`, `/benchmark/[name]`).
+- Dynamic `import()` keeps non-critical code out of the initial bundle — `PlotlyChart` already does this for `plotly.js-dist-min`. If another heavy lib lands (markdown renderer with syntax highlighting, a graph layout engine), follow the same pattern: import inside `onMount`, not at module scope.
+- For bundle size investigations, reach for `rollup-plugin-visualizer` rather than guessing.
+
+### Icons
+
+- Project uses **`lucide-svelte` via subpath imports only**: `import Activity from 'lucide-svelte/icons/activity'`. The wrapper components (`ModalityIcon`, `ModelTypeIcon`, `SortDirIcon`) map domain categories → lucide glyphs in one place; every other call site imports the icon directly at the consuming component. The two GitHub glyphs in `+layout.svelte` stay inline as `<svg>` because Lucide doesn't ship a GitHub icon (Microsoft trademark policy).
+- **Never use the barrel import** (`import { Activity, Search } from 'lucide-svelte'`). That's the pattern the SvelteKit icon docs flag — it walks thousands of `.svelte` modules through Vite's dep optimizer and slows cold-start. Subpath imports tree-shake cleanly and only pull the icons we use.
+- `lucide-svelte` ships legacy Svelte 4 component classes (`export let`, `<slot/>`, `$$props`). They mount fine from runes-mode components because `svelte.config.js` opts node_modules out of runes mode (`compilerOptions.runes`). Don't try to rewrite the icons against runes — the legacy mount is intentional.
+
+### Hooks (none today, but relevant if we ever ship a server runtime)
+
+- The static adapter doesn't run any of `handle` / `handleFetch` / `handleError` / `reroute`. If we ever switch to a node or edge adapter, the relevant hooks for this project are:
+  - `handleFetch` to rewrite `PUBLIC_API_URL` to an internal hostname during SSR / prerender so the build hits the FastAPI backend over the loopback (no CORS hop).
+  - `reroute` to map legacy paths (e.g. the old `/explorer/...` URLs) without a 301 redirect.
+  - `transformPageChunk` inside `handle` to set `<html lang>` per request if we ever localize.
+
+### Env vars
+
+- `PUBLIC_API_URL` / `PUBLIC_SITE_URL` are read via `$env/static/public` and inlined at build time — exactly the pattern the docs recommend for values that need dead-code elimination. The build fails fast when they're unset (see the `service.ts` loader error), which matches the "validate at startup" guidance.
+- Never put a secret behind a `PUBLIC_` prefix. There are no private env vars in this project; if one is ever needed (e.g. a build-time HF token), use `$env/static/private` and keep it out of any module reachable from a `+page.ts` or component.
+
+### What we deliberately skip
+
+- **Form actions / `use:enhance`** — require a server runtime; the static adapter has none.
+- **Remote functions** (`query` / `command` / `form` / `prerender`) — experimental and server-side; not usable under adapter-static.
+- **Observability / OpenTelemetry tracing** — server-only, opt-in flag, non-trivial overhead; we have no server to instrument.
+- **`+server.js` endpoints** — same reason; the backend is a separate FastAPI service.
+- **`$env/static/private` / `$app/env/private`** — no secrets in the build, no server runtime to read them at request time.
 
 ## Style / interaction patterns to reuse
 
