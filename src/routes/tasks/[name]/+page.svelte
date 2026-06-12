@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
+	import { loadTaskScores } from '$lib/data/service';
 	import { languageLabel } from '$lib/data/languages';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import InfoDot from '$lib/components/InfoDot.svelte';
@@ -29,21 +30,29 @@
 	let allBenchmarks = $derived(data.allBenchmarks);
 	let taskMeta = $derived(data.taskMeta);
 
-	// Stale-guard via `data.scores === p` on rapid task→task nav.
+	// Scores aren't in the loader — fetched client-side here so prerender
+	// only awaits the hero metadata. Stale-guard via `taskName === name`
+	// on rapid task→task nav.
 	let scoresPayload = $state<TaskScores | null>(null);
 	let loadingScores = $state(true);
 	let scoresError = $state<string | null>(null);
 	$effect(() => {
-		const p = data.scores;
+		const name = taskName;
 		scoresPayload = null;
 		scoresError = null;
 		loadingScores = true;
-		p.then((r) => {
-			if (data.scores !== p) return;
-			if (r.ok) scoresPayload = r.data;
-			else scoresError = r.error;
-			loadingScores = false;
-		});
+		loadTaskScores(name).then(
+			(s) => {
+				if (taskName !== name) return;
+				scoresPayload = s;
+				loadingScores = false;
+			},
+			(e) => {
+				if (taskName !== name) return;
+				scoresError = e instanceof Error ? e.message : String(e);
+				loadingScores = false;
+			}
+		);
 	});
 
 	// Pre-index task membership for the "In benchmarks: …" strip.

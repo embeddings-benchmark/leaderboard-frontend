@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { loadTasks } from '$lib/data/service';
+	import { loadModelScores, loadTasks } from '$lib/data/service';
 	import type { ModelMeta, ModelScores } from '$lib/types';
 	import BenchScoreTable, { type BenchScore } from '$lib/components/BenchScoreTable.svelte';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
@@ -19,22 +19,29 @@
 
 	let modelName = $derived(data.modelName);
 
-	// Stale-guard via `data.scores === p` so a slow earlier fetch can't
-	// overwrite a rapid model→model nav.
+	// Scores aren't in the loader — fetched client-side here so prerender
+	// only awaits the hero metadata. Stale-guard via `modelName === name`
+	// so a slow earlier fetch can't overwrite a rapid model→model nav.
 	let payload = $state<ModelScores | null>(null);
 	let loadingScores = $state(true);
 	let scoresError = $state<string | null>(null);
 	$effect(() => {
-		const p = data.scores;
+		const name = modelName;
 		payload = null;
 		scoresError = null;
 		loadingScores = true;
-		p.then((r) => {
-			if (data.scores !== p) return;
-			if (r.ok) payload = r.data;
-			else scoresError = r.error;
-			loadingScores = false;
-		});
+		loadModelScores(name).then(
+			(s) => {
+				if (modelName !== name) return;
+				payload = s;
+				loadingScores = false;
+			},
+			(e) => {
+				if (modelName !== name) return;
+				scoresError = e instanceof Error ? e.message : String(e);
+				loadingScores = false;
+			}
+		);
 	});
 
 	// Scores payload carries a refined model with summary-derived fields;

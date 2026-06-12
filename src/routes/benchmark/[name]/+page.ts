@@ -5,7 +5,7 @@ import type { EntryGenerator, PageLoad } from './$types';
 import { HttpError, loadBenchmark, loadBenchmarks } from '$lib/data/service';
 import type { Benchmark } from '$lib/types';
 
-export const prerender = true;
+export const prerender = !process.env.BUILD_NO_PRERENDER;
 
 export const entries: EntryGenerator = async () => {
 	const benches = await loadBenchmarks();
