@@ -249,9 +249,15 @@ export interface TaskScoreRow {
 	model: ModelMeta;
 	// `null` when the model wasn't evaluated on every subset of this task —
 	// rendering a partial-coverage mean would falsely outrank fully-scored
-	// peers, so the API leaves it blank.
+	// peers, so the API leaves it blank. Each subset's contribution is the
+	// max across the splits the model ran, so this stays comparable between
+	// models that ran only ``test`` and models that ran both ``validation``
+	// and ``test``.
 	score: number | null;
-	subsetScores: Record<string, number>;
+	// Nested map: subset → split → score. Missing inner keys mean the
+	// model wasn't evaluated on that (subset, split) cell. The frontend
+	// can pivot either axis off this one payload.
+	subsetScores: Record<string, Record<string, number>>;
 	benchmarks: string[];
 	// Three-state per-task training-overlap signal from the backend:
 	//   true  → task is in `model.trainingDatasets` (matches PerTaskTab's ⚠️)
@@ -264,6 +270,10 @@ export interface TaskScores {
 	task: TaskMeta;
 	benchmarks: string[];
 	subsets: string[];
+	// Distinct splits observed across every model's scores. Most tasks
+	// only have ``["test"]``; tasks declaring multiple ``eval_splits``
+	// (e.g. MassiveIntentClassification) surface both.
+	splits: string[];
 	rows: TaskScoreRow[];
 }
 
@@ -282,6 +292,259 @@ export interface ModelScoreRow {
 export interface ModelScores {
 	model: ModelMeta;
 	rows: ModelScoreRow[];
+}
+
+// --- /v1/tasks/{name}/descriptive-stats ---------------------------------
+// Snake_case is intentional: the backend ships these via TypedDicts (not
+// pydantic models with camelCase aliases), so the wire shape mirrors the
+// Python attribute names verbatim. See `mteb/types/statistics.py` for the
+// authoritative shapes.
+//
+// Per-task shapes are discriminated by `TaskMeta.type` from `/tasks/{name}`,
+// but the frontend renderer reads them structurally — it iterates the
+// object's keys and surfaces any present `*_statistics` block — so new
+// task-type stats classes added on the backend are forward-compatible
+// without a frontend change.
+
+export interface TextStatistics {
+	total_text_length: number;
+	min_text_length: number;
+	average_text_length: number;
+	max_text_length: number;
+	unique_texts: number;
+}
+
+export interface ImageStatistics {
+	min_image_width: number;
+	average_image_width: number;
+	max_image_width: number;
+	min_image_height: number;
+	average_image_height: number;
+	max_image_height: number;
+	unique_images: number;
+}
+
+export interface AudioStatistics {
+	total_duration_seconds: number;
+	min_duration_seconds: number;
+	average_duration_seconds: number;
+	max_duration_seconds: number;
+	unique_audios: number;
+	average_sampling_rate: number;
+	// Backend keys these by int (sampling rate Hz); JSON forces string keys.
+	sampling_rates: Record<string, number>;
+}
+
+export interface VideoStatistics {
+	total_duration_seconds: number | null;
+	total_frames: number | null;
+	min_width: number | null;
+	average_width: number | null;
+	max_width: number | null;
+	min_height: number | null;
+	average_height: number | null;
+	max_height: number | null;
+	min_duration_seconds: number | null;
+	average_duration_seconds: number | null;
+	max_duration_seconds: number | null;
+	unique_videos: number;
+	average_fps: number | null;
+	fps: Record<string, number>;
+	min_resolution: [number, number] | null;
+	average_resolution: [number, number] | null;
+	max_resolution: [number, number] | null;
+	resolutions: Record<string, number>;
+}
+
+export interface ScoreStatistics {
+	min_score: number;
+	avg_score: number;
+	max_score: number;
+}
+
+export interface LabelStatistics {
+	min_labels_per_text: number;
+	average_label_per_text: number;
+	max_labels_per_text: number;
+	unique_labels: number;
+	// Nested: { "<label>": { "count": N } } — the inner dict is a small
+	// metadata bag so the backend can grow it without bumping the schema.
+	labels: Record<string, Record<string, number>>;
+}
+
+export interface RelevantDocsStatistics {
+	num_relevant_docs: number;
+	min_relevant_docs_per_query: number;
+	average_relevant_docs_per_query: number;
+	max_relevant_docs_per_query: number;
+	unique_relevant_docs: number;
+}
+
+export interface TopRankedStatistics {
+	num_top_ranked: number;
+	min_top_ranked_per_query: number;
+	average_top_ranked_per_query: number;
+	max_top_ranked_per_query: number;
+}
+
+// --- Per-task split-level shapes (mirror mteb/types/statistics.py) ---------
+
+export interface AnySTSDescriptiveStatistics {
+	num_samples: number;
+	number_of_characters: number | null;
+	unique_pairs: number | null;
+	text1_statistics: TextStatistics | null;
+	text2_statistics: TextStatistics | null;
+	image1_statistics: ImageStatistics | null;
+	image2_statistics: ImageStatistics | null;
+	audio1_statistics: AudioStatistics | null;
+	audio2_statistics: AudioStatistics | null;
+	video1_statistics: VideoStatistics | null;
+	video2_statistics: VideoStatistics | null;
+	label_statistics: ScoreStatistics;
+}
+
+export interface BitextDescriptiveStatistics {
+	num_samples: number;
+	number_of_characters: number;
+	unique_pairs: number;
+	sentence1_statistics: TextStatistics;
+	sentence2_statistics: TextStatistics;
+}
+
+export interface ClassificationDescriptiveStatistics {
+	num_samples: number;
+	samples_in_train: number | null;
+	text_statistics: TextStatistics | null;
+	image_statistics: ImageStatistics | null;
+	audio_statistics: AudioStatistics | null;
+	video_statistics: VideoStatistics | null;
+	label_statistics: LabelStatistics;
+}
+
+export interface RegressionDescriptiveStatistics {
+	num_samples: number;
+	samples_in_train: number | null;
+	text_statistics: TextStatistics | null;
+	image_statistics: ImageStatistics | null;
+	audio_statistics: AudioStatistics | null;
+	video_statistics: VideoStatistics | null;
+	values_statistics: ScoreStatistics;
+}
+
+export interface ClusteringDescriptiveStatistics {
+	num_samples: number;
+	text_statistics: TextStatistics | null;
+	image_statistics: ImageStatistics | null;
+	audio_statistics: AudioStatistics | null;
+	video_statistics: VideoStatistics | null;
+	label_statistics: LabelStatistics;
+}
+
+export interface ClusteringFastDescriptiveStatistics {
+	num_samples: number;
+	text_statistics: TextStatistics | null;
+	image_statistics: ImageStatistics | null;
+	audio_statistics: AudioStatistics | null;
+	video_statistics: VideoStatistics | null;
+	labels_statistics: LabelStatistics;
+}
+
+export interface PairClassificationDescriptiveStatistics {
+	num_samples: number;
+	number_of_characters: number | null;
+	unique_pairs: number | null;
+	text1_statistics: TextStatistics | null;
+	image1_statistics: ImageStatistics | null;
+	audio1_statistics: AudioStatistics | null;
+	video1_statistics: VideoStatistics | null;
+	text2_statistics: TextStatistics | null;
+	image2_statistics: ImageStatistics | null;
+	audio2_statistics: AudioStatistics | null;
+	video2_statistics: VideoStatistics | null;
+	labels_statistics: LabelStatistics;
+}
+
+export interface ZeroShotClassificationDescriptiveStatistics {
+	num_samples: number;
+	text_statistics: TextStatistics | null;
+	image_statistics: ImageStatistics | null;
+	audio_statistics: AudioStatistics | null;
+	video_statistics: VideoStatistics | null;
+	label_statistics: LabelStatistics;
+	candidates_labels_text_statistics: TextStatistics;
+}
+
+export interface RetrievalDescriptiveStatistics {
+	num_samples: number;
+	num_queries: number;
+	num_documents: number;
+	number_of_characters: number;
+	documents_text_statistics: TextStatistics | null;
+	documents_image_statistics: ImageStatistics | null;
+	documents_audio_statistics: AudioStatistics | null;
+	documents_video_statistics: VideoStatistics | null;
+	queries_text_statistics: TextStatistics | null;
+	queries_image_statistics: ImageStatistics | null;
+	queries_audio_statistics: AudioStatistics | null;
+	queries_video_statistics: VideoStatistics | null;
+	relevant_docs_statistics: RelevantDocsStatistics;
+	top_ranked_statistics: TopRankedStatistics | null;
+}
+
+export interface SummarizationDescriptiveStatistics {
+	num_samples: number;
+	number_of_characters: number;
+	text_statistics: TextStatistics;
+	human_summaries_statistics: TextStatistics;
+	machine_summaries_statistics: TextStatistics;
+	score_statistics: ScoreStatistics;
+}
+
+export interface ImageTextPairClassificationDescriptiveStatistics {
+	num_samples: number;
+	text_statistics: TextStatistics;
+	image_statistics: ImageStatistics;
+}
+
+// Union of every per-split shape. Discriminating up-front (via
+// `TaskMeta.type`) is not enough — at least one task (`AJGT`) ships
+// fields the schema doesn't declare (`number_texts_intersect_with_train`),
+// and the renderer iterates known `*_statistics` keys structurally rather
+// than type-narrowing, so we widen here for the consumer.
+export type SplitDescriptiveStatistics =
+	| AnySTSDescriptiveStatistics
+	| BitextDescriptiveStatistics
+	| ClassificationDescriptiveStatistics
+	| RegressionDescriptiveStatistics
+	| ClusteringDescriptiveStatistics
+	| ClusteringFastDescriptiveStatistics
+	| PairClassificationDescriptiveStatistics
+	| ZeroShotClassificationDescriptiveStatistics
+	| RetrievalDescriptiveStatistics
+	| SummarizationDescriptiveStatistics
+	| ImageTextPairClassificationDescriptiveStatistics;
+
+// Multilingual datasets wrap each split's stats in a per-`hf_subset` map.
+// Distinguishable by the presence of `hf_subset_descriptive_stats`.
+export interface MultiSubsetDescriptiveStatistics {
+	num_samples: number;
+	hf_subset_descriptive_stats: Record<string, SplitDescriptiveStatistics>;
+}
+
+// Top-level API shape: split name → stats (or multilingual wrapper).
+export type TaskDescriptiveStats = Record<
+	string,
+	SplitDescriptiveStatistics | MultiSubsetDescriptiveStatistics
+>;
+
+export function hasSubsets(
+	s: SplitDescriptiveStatistics | MultiSubsetDescriptiveStatistics
+): s is MultiSubsetDescriptiveStatistics {
+	return (
+		'hf_subset_descriptive_stats' in s &&
+		(s as MultiSubsetDescriptiveStatistics).hf_subset_descriptive_stats != null
+	);
 }
 
 export interface TaskFilters {

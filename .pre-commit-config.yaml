@@ -7,11 +7,17 @@ repos:
     hooks:
       - id: check-yaml
       - id: check-json
+      # JSON formatting is owned by prettier (tabs, per .prettierrc).
+      # `pretty-format-json` enforces 4-space indent and disagrees with
+      # prettier, so it's scoped out of `*.json` to avoid the two
+      # formatters fighting each other and failing every commit that
+      # touches a JSON file.
       - id: pretty-format-json
         args:
           - '--autofix'
           - '--indent=4'
           - '--no-sort-keys'
+        exclude: '\.json$'
       - id: end-of-file-fixer # generated a lot of changes
       - id: trailing-whitespace
       - id: check-toml

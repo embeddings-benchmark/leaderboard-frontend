@@ -9,6 +9,7 @@ import type {
 	ModelFilters,
 	ModelMeta,
 	ModelScores,
+	TaskDescriptiveStats,
 	TaskFilters,
 	TaskMeta,
 	TaskScores
@@ -263,6 +264,17 @@ export async function loadTaskScores(name: string, fetchFn?: FetchFn): Promise<T
 	if (!API) throw noApiError('loadTaskScores');
 	return enrichTaskScores(
 		await cachedHttp<TaskScores>(`/tasks/${encodeURIComponent(name)}/scores`, fetchFn)
+	);
+}
+
+export async function loadTaskDescriptiveStats(
+	name: string,
+	fetchFn?: FetchFn
+): Promise<TaskDescriptiveStats> {
+	if (!API) throw noApiError('loadTaskDescriptiveStats');
+	return cachedHttp<TaskDescriptiveStats>(
+		`/tasks/${encodeURIComponent(name)}/descriptive-stats`,
+		fetchFn
 	);
 }
 
