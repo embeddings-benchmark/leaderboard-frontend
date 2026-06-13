@@ -52,18 +52,12 @@
 	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
 	const languageFacet = createFacetFilter({
 		urlParam: 'langs',
-		chipKey: 'langs',
 		chipLabel: 'Lang',
 		universe: () => LANGUAGES
 	});
 	const languagesPicked = languageFacet.picked;
-	// $state (not plain let) so the URL-write effect re-runs on the flip and
-	// registers `languagesPicked` as a dep.
-	let languagesSeeded = $state(false);
 	$effect(() => {
-		if (!resolved || languagesSeeded) return;
-		languagesSeeded = true;
-		languageFacet.seed();
+		if (resolved) languageFacet.seed();
 	});
 
 	const SORTS = [
@@ -119,9 +113,9 @@
 	});
 
 	// Page-local `?langs=` sync; shared filters handle their own params.
+	// `resolved` gate: empty pre-load universe would delete `?langs=` deep links.
 	$effect(() => {
-		// languagesSeeded gate: empty universe pre-seed would delete `?langs=` deep links.
-		if (!urlHydrated || !languagesSeeded) return;
+		if (!urlHydrated || !resolved) return;
 		updateUrl({ langs: languageFacet.urlValue() });
 	});
 
@@ -218,15 +212,6 @@
 			}
 			return true;
 		};
-	}
-
-	function toggleLanguage(l: string) {
-		if (languagesPicked.has(l)) languagesPicked.delete(l);
-		else languagesPicked.add(l);
-	}
-	function toggleAllLanguages() {
-		if (languagesPicked.size === LANGUAGES.length) languagesPicked.clear();
-		else languageFacet.reset();
 	}
 
 	// Split filter / sort so name-query keystrokes (which only narrow rows)
@@ -429,8 +414,8 @@
 		hideZeroShot
 		languageOptions={LANGUAGES}
 		languagesPicked={languagesPicked as unknown as Set<string>}
-		onToggleLanguage={toggleLanguage}
-		onToggleAllLanguages={toggleAllLanguages}
+		onToggleLanguage={(l) => languageFacet.toggle(l)}
+		onToggleAllLanguages={() => languageFacet.toggleAll()}
 		onResetLanguages={() => languageFacet.reset()}
 	/>
 </div>

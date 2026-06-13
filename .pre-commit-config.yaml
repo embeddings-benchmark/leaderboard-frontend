@@ -2,6 +2,20 @@
 # Install once per clone: `pre-commit install`.
 # Skip a commit with: `git commit --no-verify` (avoid).
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: pretty-format-json
+        args:
+          - '--autofix'
+          - '--indent=4'
+          - '--no-sort-keys'
+      - id: end-of-file-fixer # generated a lot of changes
+      - id: trailing-whitespace
+      - id: check-toml
+
   - repo: local
     hooks:
       - id: lint
