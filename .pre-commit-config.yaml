@@ -7,11 +7,10 @@ repos:
     hooks:
       - id: check-yaml
       - id: check-json
-      - id: pretty-format-json
-        args:
-          - '--autofix'
-          - '--indent=4'
-          - '--no-sort-keys'
+      # JSON formatting is owned by prettier (`npm run lint` below) so
+      # there's a single source of truth. `pretty-format-json` enforces
+      # 4-space indent and disagreed with prettier's tabs, causing every
+      # commit that touched a JSON file to fail.
       - id: end-of-file-fixer # generated a lot of changes
       - id: trailing-whitespace
       - id: check-toml

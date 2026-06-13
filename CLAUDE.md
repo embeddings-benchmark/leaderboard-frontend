@@ -33,14 +33,14 @@ Read via `$env/static/public` (build-time inlined):
 
 `/explorer` prefix is gone — every route is at the site root.
 
-| Route                           | Purpose                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------- |
-| `/`                             | Three featured `PrimaryLeaderTile`s + `MenuSection`s                             |
-| `/benchmarks`                   | Catalog + sidebar filters (Modality / Task type / Domain)                        |
-| `/benchmark/[name]`             | Hero + tabs (Summary / Perf×Size / Perf×Time / Per task / Per language / Info)   |
+| Route                           | Purpose                                                                            |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| `/`                             | Three featured `PrimaryLeaderTile`s + `MenuSection`s                               |
+| `/benchmarks`                   | Catalog + sidebar filters (Modality / Task type / Domain)                          |
+| `/benchmark/[name]`             | Hero + tabs (Summary / Perf×Size / Perf×Time / Per task / Per language / Info)     |
 | `/models` + `/models/[...name]` | Index + detail. Rest-param accepts `org/name` (validated by `params/modelName.ts`) |
-| `/tasks` + `/tasks/[name]`      | Index + detail, sidebar mirrors `/benchmarks`                                    |
-| `/compare`                      | Up to 4 models side-by-side with radar                                           |
+| `/tasks` + `/tasks/[name]`      | Index + detail, sidebar mirrors `/benchmarks`                                      |
+| `/compare`                      | Up to 4 models side-by-side with radar                                             |
 
 Components live under `src/lib/components/` — read them before adding new ones. Shared toolbar widgets (`SearchInput`, `SortDirIcon`, `DownloadButton`, `SortHeader`) and floating actions (`ShareUrlButton` bottom-right, `ScrollToTopButton` bottom-left) appear on every overview / detail page.
 
