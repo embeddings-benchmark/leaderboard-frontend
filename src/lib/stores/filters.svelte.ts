@@ -146,71 +146,80 @@ function createFilters() {
 
 	function initFor(summary: BenchmarkSummary | null) {
 		if (!summary) return;
-		const isNewBenchmark = lastBenchmarkName !== summary.benchmarkName;
-		lastBenchmarkName = summary.benchmarkName;
+		// Whole body runs inside `untrack` so calling this from an $effect
+		// (the `/benchmark/[name]` page does exactly that) doesn't subscribe
+		// the caller to any state read here. The facet helpers (`prune`,
+		// `reset`, `seed`) all call `opts.universe()` — which reads the
+		// `available*` arrays we just wrote — so without `untrack` the
+		// caller-effect would subscribe to its own writes and loop on
+		// `effect_update_depth_exceeded`. Writes still notify other
+		// subscribers normally; `untrack` only blocks the read-subscription
+		// edge.
+		untrack(() => {
+			const isNewBenchmark = lastBenchmarkName !== summary.benchmarkName;
+			lastBenchmarkName = summary.benchmarkName;
 
-		// Local accumulators — never reactive.
-		/* eslint-disable svelte/prefer-svelte-reactivity */
-		const domains = new Set<string>();
-		const modalities = new Set<string>();
-		const languageCount = new Map<string, number>();
-		/* eslint-enable svelte/prefer-svelte-reactivity */
-		for (const t of summary.tasksMeta) {
-			for (const d of t.domains ?? []) domains.add(d);
-			for (const m of t.modalities ?? []) modalities.add(m);
-			for (const l of t.languages ?? []) languageCount.set(l, (languageCount.get(l) ?? 0) + 1);
-		}
-		const sortedDomains = [...domains].sort();
-		const sortedModalities = [...modalities].sort();
-		const sortedLanguages = [...languageCount.entries()]
-			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-			.map(([l]) => l);
+			// Local accumulators — never reactive.
+			/* eslint-disable svelte/prefer-svelte-reactivity */
+			const domains = new Set<string>();
+			const modalities = new Set<string>();
+			const languageCount = new Map<string, number>();
+			/* eslint-enable svelte/prefer-svelte-reactivity */
+			for (const t of summary.tasksMeta) {
+				for (const d of t.domains ?? []) domains.add(d);
+				for (const m of t.modalities ?? []) modalities.add(m);
+				for (const l of t.languages ?? []) languageCount.set(l, (languageCount.get(l) ?? 0) + 1);
+			}
+			const sortedDomains = [...domains].sort();
+			const sortedModalities = [...modalities].sort();
+			const sortedLanguages = [...languageCount.entries()]
+				.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+				.map(([l]) => l);
 
-		// Bracket slider bounds to the actual observed min/max — no "nice" rounding
-		// outwards, otherwise a benchmark whose largest model is 7B shows a slider
-		// edge at 10B and users think there are unloaded rows past the visible top.
-		let lowM = Number.POSITIVE_INFINITY;
-		let highM = 0;
-		for (const row of summary.rows) {
-			const b = row.model.totalParamsB;
-			if (!b) continue;
-			const m = b * 1000;
-			if (m < lowM) lowM = m;
-			if (m > highM) highM = m;
-		}
-		const hasSizes = highM > 0 && lowM !== Number.POSITIVE_INFINITY;
-		const boundLow = hasSizes ? Math.max(SIZE_MIN_M, lowM) : SIZE_MIN_M;
-		const boundHigh = hasSizes ? Math.min(SIZE_MAX_M, highM) : SIZE_MAX_M;
+			// Bracket slider bounds to the actual observed min/max — no "nice" rounding
+			// outwards, otherwise a benchmark whose largest model is 7B shows a slider
+			// edge at 10B and users think there are unloaded rows past the visible top.
+			let lowM = Number.POSITIVE_INFINITY;
+			let highM = 0;
+			for (const row of summary.rows) {
+				const b = row.model.totalParamsB;
+				if (!b) continue;
+				const m = b * 1000;
+				if (m < lowM) lowM = m;
+				if (m > highM) highM = m;
+			}
+			const hasSizes = highM > 0 && lowM !== Number.POSITIVE_INFINITY;
+			const boundLow = hasSizes ? Math.max(SIZE_MIN_M, lowM) : SIZE_MIN_M;
+			const boundHigh = hasSizes ? Math.min(SIZE_MAX_M, highM) : SIZE_MAX_M;
 
-		// Write-only — must not read state.* here or this re-fires when called
-		// from an $effect.
-		availableTaskTypes = summary.taskTypes;
-		availableTasks = summary.tasksMeta;
-		availableDomains = sortedDomains;
-		availableModalities = sortedModalities;
-		// Languages only refresh on benchmark change so the language-scoped
-		// refetch dedupe key stays stable.
-		if (isNewBenchmark) {
-			availableLanguages = sortedLanguages;
-		}
-		state.availableMinModelSizeM = boundLow;
-		state.availableMaxModelSizeM = boundHigh;
-		// Same-benchmark refetch: keep picks, just trim ones no longer in the
-		// shrunk universe (otherwise sidebar shows e.g. "9/8").
-		if (!isNewBenchmark) {
-			for (const f of scopeFacets) f.prune();
+			availableTaskTypes = summary.taskTypes;
+			availableTasks = summary.tasksMeta;
+			availableDomains = sortedDomains;
+			availableModalities = sortedModalities;
+			// Languages only refresh on benchmark change so the language-scoped
+			// refetch dedupe key stays stable.
+			if (isNewBenchmark) {
+				availableLanguages = sortedLanguages;
+			}
+			state.availableMinModelSizeM = boundLow;
+			state.availableMaxModelSizeM = boundHigh;
+			// Same-benchmark refetch: keep picks, just trim ones no longer in the
+			// shrunk universe (otherwise sidebar shows e.g. "9/8").
+			if (!isNewBenchmark) {
+				for (const f of scopeFacets) f.prune();
+				sync();
+				return;
+			}
+			// New benchmark — reset every scope facet to its (just-updated) universe.
+			for (const f of scopeFacets) f.reset();
+			state.minModelSizeM = boundLow;
+			state.maxModelSizeM = boundHigh;
+			state.sizeActive = false;
+
+			// Layer URL params on top so deep links restore the exact view.
+			hydrateFromUrl();
 			sync();
-			return;
-		}
-		// New benchmark — reset every scope facet to its (just-updated) universe.
-		for (const f of scopeFacets) f.reset();
-		state.minModelSizeM = boundLow;
-		state.maxModelSizeM = boundHigh;
-		state.sizeActive = false;
-
-		// Layer URL params on top so deep links restore the exact view.
-		hydrateFromUrl();
-		sync();
+		});
 	}
 
 	function hydrateFromUrl() {

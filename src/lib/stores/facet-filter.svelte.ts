@@ -51,6 +51,13 @@ export function createFacetFilter(opts: FacetFilterOptions): FacetFilter {
 			return picked.size === opts.universe().length;
 		},
 		seed() {
+			// Replace, don't merge. Fixed-universe facets (model type / model
+			// modality) are pre-seeded to the full universe at store init so
+			// the default state is "everything picked"; without `clear()`
+			// here, seeding from a URL like ``?mtypes=a,b`` would union with
+			// that pre-seed and silently restore all of `a..e` instead of
+			// just `a,b`.
+			picked.clear();
 			const raw = getParam(opts.urlParam);
 			if (raw !== null) {
 				// eslint-disable-next-line svelte/prefer-svelte-reactivity

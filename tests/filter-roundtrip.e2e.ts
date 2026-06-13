@@ -355,12 +355,12 @@ test.describe('/benchmark/[name] empty pick set drops every row', () => {
 		await scopeGroup(page, /^Domain/)
 			.getByRole('button', { name: /^Clear$/ })
 			.click();
-		await expect(page).toHaveURL(/[?&]dom=(&|$)/);
+		await expect(page).toHaveURL(/[?&]doms=(&|$)/);
 		await expect(activeChips(page).filter({ hasText: 'Domain' })).toBeVisible();
 		await expect.poll(() => page.locator('table tbody tr').count()).toBe(0);
 
 		await resetAll(page).click();
-		await expect(page).not.toHaveURL(/[?&]dom=/);
+		await expect(page).not.toHaveURL(/[?&]doms=/);
 		await expect(page.locator('table tbody tr').first()).toBeVisible();
 	});
 
@@ -398,12 +398,12 @@ test.describe('/benchmark/[name] empty pick set drops every row', () => {
 		await scopeGroup(page, /^Languages/)
 			.getByRole('button', { name: /^Clear$/ })
 			.click();
-		await expect(page).toHaveURL(/[?&]lang=(&|$)/);
+		await expect(page).toHaveURL(/[?&]langs=(&|$)/);
 		await expect(activeChips(page).filter({ hasText: 'Lang' })).toBeVisible();
 		await expect.poll(() => page.locator('table tbody tr').count()).toBe(0);
 
 		await resetAll(page).click();
-		await expect(page).not.toHaveURL(/[?&]lang=/);
+		await expect(page).not.toHaveURL(/[?&]langs=/);
 		await expect(page.locator('table tbody tr').first()).toBeVisible();
 	});
 });
