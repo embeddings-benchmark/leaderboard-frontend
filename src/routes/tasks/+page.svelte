@@ -15,7 +15,7 @@
 	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
 	import type { SortState } from '$lib/stores/sort.svelte';
 	import { ariaSort, COLLATOR, sortIcon } from '$lib/format';
-	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
+	import { createFacetFilter, createFacetGroup } from '$lib/stores/facet-filter.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { PageData } from './$types';
@@ -74,40 +74,27 @@
 	let query = $state('');
 	const typeFacet = createFacetFilter({
 		urlParam: 'types',
-		chipKey: 'types',
 		chipLabel: 'Type',
 		universe: () => SIMPLIFIED_PRESENT
 	});
 	const modalityFacet = createFacetFilter({
 		urlParam: 'mods',
-		chipKey: 'mods',
 		chipLabel: 'Modality',
 		universe: () => MODALITIES
 	});
 	const domainFacet = createFacetFilter({
 		urlParam: 'doms',
-		chipKey: 'doms',
 		chipLabel: 'Domain',
 		universe: () => DOMAINS
 	});
 	const languageFacet = createFacetFilter({
 		urlParam: 'langs',
-		chipKey: 'langs',
 		chipLabel: 'Lang',
 		universe: () => LANGUAGES
 	});
-	const FACETS = [typeFacet, modalityFacet, domainFacet, languageFacet];
-	const typeFilter = typeFacet.picked;
-	const modalityFilter = modalityFacet.picked;
-	const domainFilter = domainFacet.picked;
-	const languageFilter = languageFacet.picked;
-	// $state so the URL-write effect re-runs on the flip and registers the
-	// facet SvelteSets as deps.
-	let filtersSeeded = $state(false);
+	const facetGroup = createFacetGroup([typeFacet, modalityFacet, domainFacet, languageFacet]);
 	$effect(() => {
-		if (!resolved || filtersSeeded) return;
-		filtersSeeded = true;
-		for (const f of FACETS) f.seed();
+		if (resolved) facetGroup.seed();
 	});
 
 	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
@@ -140,15 +127,9 @@
 		updateUrl({ view: view === 'cards' ? null : view });
 	});
 
-	// Facet URL sync — `urlValue()` returns null to clear or encoded string to set.
 	$effect(() => {
-		if (!urlHydrated || !filtersSeeded) return;
-		updateUrl({
-			types: typeFacet.urlValue(),
-			mods: modalityFacet.urlValue(),
-			doms: domainFacet.urlValue(),
-			langs: languageFacet.urlValue()
-		});
+		if (!urlHydrated || !facetGroup.seeded) return;
+		updateUrl(facetGroup.urlPatch());
 	});
 
 	onMount(() => {
@@ -184,51 +165,8 @@
 		}
 	};
 
-	function toggleType(t: string) {
-		if (typeFilter.has(t)) typeFilter.delete(t);
-		else typeFilter.add(t);
-	}
-	function toggleModality(m: string) {
-		if (modalityFilter.has(m)) modalityFilter.delete(m);
-		else modalityFilter.add(m);
-	}
-	function toggleDomain(d: string) {
-		if (domainFilter.has(d)) domainFilter.delete(d);
-		else domainFilter.add(d);
-	}
-	function toggleLanguage(l: string) {
-		if (languageFilter.has(l)) languageFilter.delete(l);
-		else languageFilter.add(l);
-	}
-	function toggleAllTypes() {
-		if (typeFilter.size === SIMPLIFIED_PRESENT.length) typeFilter.clear();
-		else typeFacet.reset();
-	}
-	function toggleAllDomains() {
-		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
-		else domainFacet.reset();
-	}
-	function toggleAllModalities() {
-		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
-		else modalityFacet.reset();
-	}
-	function toggleAllLanguages() {
-		if (languageFilter.size === LANGUAGES.length) languageFilter.clear();
-		else languageFacet.reset();
-	}
-	let allTypes = $derived(typeFilter.size === SIMPLIFIED_PRESENT.length);
-	let allDomains = $derived(domainFilter.size === DOMAINS.length);
-	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
-	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
-
 	let chips = $derived.by<Chip[]>(() => {
-		const list: Chip[] = [];
-		if (filtersSeeded) {
-			for (const f of FACETS) {
-				const c = f.chip();
-				if (c) list.push(c);
-			}
-		}
+		const list: Chip[] = facetGroup.seeded ? facetGroup.chips() : [];
 		if (query.trim()) {
 			list.push({
 				key: 'q',
@@ -239,7 +177,7 @@
 		return list;
 	});
 	function resetAll() {
-		for (const f of FACETS) f.reset();
+		facetGroup.resetAll();
 		query = '';
 	}
 
@@ -268,16 +206,20 @@
 	let matched = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		// All on = filter off; empty pick set = nothing matches.
-		const typeOff = typeFilter.size === SIMPLIFIED_PRESENT.length;
-		const modalityOff = modalityFilter.size === MODALITIES.length;
-		const domainOff = domainFilter.size === DOMAINS.length;
-		const languageOff = languageFilter.size === LANGUAGES.length;
+		const typeOff = typeFacet.allSelected;
+		const modalityOff = modalityFacet.allSelected;
+		const domainOff = domainFacet.allSelected;
+		const languageOff = languageFacet.allSelected;
+		const types = typeFacet.picked;
+		const modalities = modalityFacet.picked;
+		const domains = domainFacet.picked;
+		const languages = languageFacet.picked;
 		return ALL_TASKS.filter((t) => {
 			if (q && !t.nameLower.includes(q)) return false;
-			if (!typeOff && !typeFilter.has(t.simplifiedType)) return false;
-			if (!modalityOff && !t.modalities.some((m) => modalityFilter.has(m))) return false;
-			if (!domainOff && !t.domains.some((d) => domainFilter.has(d))) return false;
-			if (!languageOff && !t.languages.some((l) => languageFilter.has(l))) return false;
+			if (!typeOff && !types.has(t.simplifiedType)) return false;
+			if (!modalityOff && !t.modalities.some((m) => modalities.has(m))) return false;
+			if (!domainOff && !t.domains.some((d) => domains.has(d))) return false;
+			if (!languageOff && !t.languages.some((l) => languages.has(l))) return false;
 			return true;
 		});
 	});
@@ -453,20 +395,20 @@
 		<FilterFacet
 			label="Task group"
 			items={SIMPLIFIED_PRESENT}
-			picked={typeFilter}
-			onToggle={toggleType}
-			onToggleAll={toggleAllTypes}
-			allSelected={allTypes}
+			picked={typeFacet.picked}
+			onToggle={(t) => typeFacet.toggle(t)}
+			onToggleAll={() => typeFacet.toggleAll()}
+			allSelected={typeFacet.allSelected}
 			pillClass="type-pill"
 			pillAttrs={(t) => ({ 'data-stype': t })}
 		/>
 		<FilterFacet
 			label="Modality"
 			items={MODALITIES}
-			picked={modalityFilter}
-			onToggle={toggleModality}
-			onToggleAll={toggleAllModalities}
-			allSelected={allModalities}
+			picked={modalityFacet.picked}
+			onToggle={(m) => modalityFacet.toggle(m)}
+			onToggleAll={() => modalityFacet.toggleAll()}
+			allSelected={modalityFacet.allSelected}
 			pillClass="modality-fill"
 		>
 			{#snippet pillIcon(m)}<ModalityIcon modality={m} size={12} />{/snippet}
@@ -474,10 +416,10 @@
 		<FilterFacet
 			label="Domain"
 			items={visibleDomains}
-			picked={domainFilter}
-			onToggle={toggleDomain}
-			onToggleAll={toggleAllDomains}
-			allSelected={allDomains}
+			picked={domainFacet.picked}
+			onToggle={(d) => domainFacet.toggle(d)}
+			onToggleAll={() => domainFacet.toggleAll()}
+			allSelected={domainFacet.allSelected}
 			pillClass="type-fill"
 			searchPlaceholder="Search domains…"
 			bind:searchValue={domainQuery}
@@ -487,10 +429,10 @@
 		<FilterFacet
 			label="Language"
 			items={filteredLanguages}
-			picked={languageFilter}
-			onToggle={toggleLanguage}
-			onToggleAll={toggleAllLanguages}
-			allSelected={allLanguages}
+			picked={languageFacet.picked}
+			onToggle={(l) => languageFacet.toggle(l)}
+			onToggleAll={() => languageFacet.toggleAll()}
+			allSelected={languageFacet.allSelected}
 			pillClass="type-fill"
 			searchPlaceholder="Search languages…"
 			bind:searchValue={languageQuery}

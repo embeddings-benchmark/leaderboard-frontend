@@ -1,9 +1,10 @@
 import { untrack } from 'svelte';
-import { SvelteSet } from 'svelte/reactivity';
+import type { SvelteSet } from 'svelte/reactivity';
 
 import type { BenchmarkSummary, ModelType, SummaryRow, TaskMeta } from '$lib/types';
 import { modelSearchKey } from '$lib/format';
-import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
+import { readParams, updateUrl } from '$lib/url-state';
+import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
 
 export type ZeroShotMode = 'allow_all' | 'remove_unknown' | 'only_zero_shot';
 export type Availability = 'both' | 'open' | 'proprietary';
@@ -30,7 +31,7 @@ export type ModelModality = (typeof MODEL_MODALITIES)[number];
 const TEXT_ONLY: readonly string[] = ['text'];
 
 interface FiltersState {
-	// model filters
+	// model-row filters (scalars)
 	nameQuery: string;
 	minModelSizeM: number;
 	maxModelSizeM: number;
@@ -40,14 +41,6 @@ interface FiltersState {
 	availability: Availability;
 	instructions: InstructionMode;
 	sentenceTransformersOnly: boolean;
-	modelTypes: SvelteSet<string>;
-	modelModalities: SvelteSet<string>;
-	// customize-benchmark filters
-	taskTypes: SvelteSet<string>;
-	domains: SvelteSet<string>;
-	modalities: SvelteSet<string>;
-	languages: SvelteSet<string>;
-	tasks: SvelteSet<string>;
 	// Slider bounds; fall back to global defaults when no benchmark is loaded.
 	availableMinModelSizeM: number;
 	availableMaxModelSizeM: number;
@@ -63,13 +56,6 @@ function defaultState(): FiltersState {
 		availability: 'both',
 		instructions: 'both',
 		sentenceTransformersOnly: false,
-		modelTypes: new SvelteSet<string>(MODEL_TYPES),
-		modelModalities: new SvelteSet<string>(MODEL_MODALITIES),
-		taskTypes: new SvelteSet(),
-		domains: new SvelteSet(),
-		modalities: new SvelteSet(),
-		languages: new SvelteSet(),
-		tasks: new SvelteSet(),
 		availableMinModelSizeM: SIZE_MIN_M,
 		availableMaxModelSizeM: SIZE_MAX_M
 	};
@@ -87,6 +73,76 @@ function createFilters() {
 	// Same-benchmark refetches (e.g. language-scoped) refresh available-* without
 	// resetting user picks — otherwise toggling a language would loop.
 	let lastBenchmarkName: string | null = null;
+
+	// One FacetFilter per set-based facet. Universe accessors close over the
+	// `available*` state above, so each facet stays consistent with the
+	// currently loaded benchmark.
+	const taskTypesFacet = createFacetFilter({
+		urlParam: 'types',
+		chipLabel: 'Task type',
+		universe: () => availableTaskTypes
+	});
+	const domainsFacet = createFacetFilter({
+		urlParam: 'doms',
+		chipLabel: 'Domain',
+		universe: () => availableDomains
+	});
+	const modalitiesFacet = createFacetFilter({
+		urlParam: 'mods',
+		chipLabel: 'Modality',
+		universe: () => availableModalities
+	});
+	const languagesFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipLabel: 'Lang',
+		universe: () => availableLanguages
+	});
+	const tasksFacet = createFacetFilter({
+		urlParam: 'tasks',
+		chipLabel: 'Task',
+		universe: () => availableTasks.map((t) => t.name)
+	});
+	const modelTypesFacet = createFacetFilter({
+		urlParam: 'mtypes',
+		chipLabel: 'Type',
+		universe: () => MODEL_TYPES
+	});
+	const modelModalitiesFacet = createFacetFilter({
+		urlParam: 'mmods',
+		chipLabel: 'Modality',
+		universe: () => MODEL_MODALITIES
+	});
+	// Pre-seed the two fixed-universe model facets so the default state
+	// (everything selected) matches the legacy behaviour.
+	modelTypesFacet.reset();
+	modelModalitiesFacet.reset();
+
+	// `scope` = benchmark-scope facets (driven by availableX, dropped on /models).
+	// `model` = model-row facets (fixed universes).
+	// `all` = everything that gets URL-synced + hydrated.
+	const scopeFacets = [taskTypesFacet, domainsFacet, modalitiesFacet, languagesFacet, tasksFacet];
+	const modelFacets = [modelTypesFacet, modelModalitiesFacet];
+	const allFacets = [...modelFacets, ...scopeFacets];
+
+	// Map for the public `toggleInSet`/`setAll` helpers — keeps FilterContent's
+	// call sites unchanged after the refactor.
+	type SetKey =
+		| 'taskTypes'
+		| 'domains'
+		| 'modalities'
+		| 'languages'
+		| 'tasks'
+		| 'modelTypes'
+		| 'modelModalities';
+	const facetByKey: Record<SetKey, FacetFilter> = {
+		taskTypes: taskTypesFacet,
+		domains: domainsFacet,
+		modalities: modalitiesFacet,
+		languages: languagesFacet,
+		tasks: tasksFacet,
+		modelTypes: modelTypesFacet,
+		modelModalities: modelModalitiesFacet
+	};
 
 	function initFor(summary: BenchmarkSummary | null) {
 		if (!summary) return;
@@ -110,7 +166,9 @@ function createFilters() {
 			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
 			.map(([l]) => l);
 
-		// Bracket slider bounds to known model sizes; unsized models pass anyway.
+		// Bracket slider bounds to the actual observed min/max — no "nice" rounding
+		// outwards, otherwise a benchmark whose largest model is 7B shows a slider
+		// edge at 10B and users think there are unloaded rows past the visible top.
 		let lowM = Number.POSITIVE_INFINITY;
 		let highM = 0;
 		for (const row of summary.rows) {
@@ -121,9 +179,8 @@ function createFilters() {
 			if (m > highM) highM = m;
 		}
 		const hasSizes = highM > 0 && lowM !== Number.POSITIVE_INFINITY;
-		// Round outward to 1-sigfig "nice" numbers for readable tick labels.
-		const niceLow = hasSizes ? Math.max(SIZE_MIN_M, niceDown(lowM)) : SIZE_MIN_M;
-		const niceHigh = hasSizes ? Math.min(SIZE_MAX_M, niceUp(highM)) : SIZE_MAX_M;
+		const boundLow = hasSizes ? Math.max(SIZE_MIN_M, lowM) : SIZE_MIN_M;
+		const boundHigh = hasSizes ? Math.min(SIZE_MAX_M, highM) : SIZE_MAX_M;
 
 		// Write-only — must not read state.* here or this re-fires when called
 		// from an $effect.
@@ -136,26 +193,19 @@ function createFilters() {
 		if (isNewBenchmark) {
 			availableLanguages = sortedLanguages;
 		}
-		state.availableMinModelSizeM = niceLow;
-		state.availableMaxModelSizeM = niceHigh;
+		state.availableMinModelSizeM = boundLow;
+		state.availableMaxModelSizeM = boundHigh;
 		// Same-benchmark refetch: keep picks, just trim ones no longer in the
 		// shrunk universe (otherwise sidebar shows e.g. "9/8").
 		if (!isNewBenchmark) {
-			pruneToAvailable(state.taskTypes, summary.taskTypes);
-			pruneToAvailable(state.tasks, summary.tasks);
-			pruneToAvailable(state.domains, sortedDomains);
-			pruneToAvailable(state.modalities, sortedModalities);
+			for (const f of scopeFacets) f.prune();
 			sync();
 			return;
 		}
-		// In-place mutation preserves SvelteSet identity for subscribers.
-		replaceSet(state.taskTypes, summary.taskTypes);
-		replaceSet(state.domains, sortedDomains);
-		replaceSet(state.modalities, sortedModalities);
-		replaceSet(state.languages, sortedLanguages);
-		replaceSet(state.tasks, summary.tasks);
-		state.minModelSizeM = niceLow;
-		state.maxModelSizeM = niceHigh;
+		// New benchmark — reset every scope facet to its (just-updated) universe.
+		for (const f of scopeFacets) f.reset();
+		state.minModelSizeM = boundLow;
+		state.maxModelSizeM = boundHigh;
 		state.sizeActive = false;
 
 		// Layer URL params on top so deep links restore the exact view.
@@ -186,32 +236,9 @@ function createFilters() {
 		if (zs === 'allow_all' || zs === 'remove_unknown' || zs === 'only_zero_shot')
 			state.zeroShot = zs;
 		if (p.get('st') === '1') state.sentenceTransformersOnly = true;
-		const mt = p.get('mtypes');
-		if (mt !== null) replaceSet(state.modelTypes, decodeSet(mt));
-		const mm = p.get('mmods');
-		if (mm !== null) replaceSet(state.modelModalities, decodeSet(mm));
-		const tt = p.get('tt');
-		if (tt !== null) replaceSet(state.taskTypes, decodeSet(tt));
-		const lang = p.get('lang');
-		if (lang !== null) replaceSet(state.languages, decodeSet(lang));
-		const dom = p.get('dom');
-		if (dom !== null) replaceSet(state.domains, decodeSet(dom));
-		const mods = p.get('mods');
-		if (mods !== null) replaceSet(state.modalities, decodeSet(mods));
-		const tks = p.get('tks');
-		if (tks !== null) replaceSet(state.tasks, decodeSet(tks));
-	}
-
-	function pruneToAvailable(target: SvelteSet<string>, available: readonly string[]) {
-		const present = new Set<string>(available);
-		for (const v of target) {
-			if (!present.has(v)) target.delete(v);
-		}
-	}
-
-	function replaceSet(target: SvelteSet<string>, source: Iterable<string>) {
-		target.clear();
-		for (const v of source) target.add(v);
+		// Set facets: seed delegates to FacetFilter, which intersects URL values
+		// with the current universe (silently drops unknowns from stale links).
+		for (const f of allFacets) f.seed();
 	}
 
 	// Microtask-debounced URL sync. `untrack` prevents reactive subscribers
@@ -226,47 +253,19 @@ function createFilters() {
 		});
 	}
 	function doSync() {
-		untrack(() =>
-			updateUrl({
+		untrack(() => {
+			const patch: Record<string, string | null> = {
 				q: state.nameQuery || null,
 				minSize: state.sizeActive ? String(state.minModelSizeM) : null,
 				maxSize: state.sizeActive ? String(state.maxModelSizeM) : null,
 				avail: state.availability !== 'both' ? state.availability : null,
 				inst: state.instructions !== 'both' ? state.instructions : null,
 				zs: state.zeroShot !== 'allow_all' ? state.zeroShot : null,
-				st: state.sentenceTransformersOnly ? '1' : null,
-				mtypes: state.modelTypes.size === MODEL_TYPES.length ? null : encodeSet(state.modelTypes),
-				mmods:
-					state.modelModalities.size === MODEL_MODALITIES.length
-						? null
-						: encodeSet(state.modelModalities),
-				tt: state.taskTypes.size === availableTaskTypes.length ? null : encodeSet(state.taskTypes),
-				lang:
-					state.languages.size === availableLanguages.length ? null : encodeSet(state.languages),
-				dom: state.domains.size === availableDomains.length ? null : encodeSet(state.domains),
-				mods:
-					state.modalities.size === availableModalities.length ? null : encodeSet(state.modalities),
-				tks: state.tasks.size === availableTasks.length ? null : encodeSet(state.tasks)
-			})
-		);
-	}
-
-	// niceDown(109) → 100, niceDown(7) → 5; niceUp(7) → 10, niceUp(43) → 50.
-	function niceDown(m: number): number {
-		if (m <= 0) return 0;
-		const pow = Math.floor(Math.log10(m));
-		const base = Math.pow(10, pow);
-		const lead = m / base;
-		const stepped = lead >= 5 ? 5 : lead >= 2 ? 2 : 1;
-		return stepped * base;
-	}
-	function niceUp(m: number): number {
-		if (m <= 0) return 0;
-		const pow = Math.floor(Math.log10(m));
-		const base = Math.pow(10, pow);
-		const lead = m / base;
-		const stepped = lead <= 1 ? 1 : lead <= 2 ? 2 : lead <= 5 ? 5 : 10;
-		return stepped * base;
+				st: state.sentenceTransformersOnly ? '1' : null
+			};
+			for (const f of allFacets) patch[f.urlParam] = f.urlValue();
+			updateUrl(patch);
+		});
 	}
 
 	function resetModelFilters() {
@@ -278,41 +277,24 @@ function createFilters() {
 		state.availability = 'both';
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
-		replaceSet(state.modelTypes, MODEL_TYPES);
-		replaceSet(state.modelModalities, MODEL_MODALITIES);
+		for (const f of modelFacets) f.reset();
 		sync();
 	}
 
 	function resetCustomize() {
-		replaceSet(state.taskTypes, availableTaskTypes);
-		replaceSet(state.domains, availableDomains);
-		replaceSet(state.modalities, availableModalities);
-		replaceSet(state.languages, availableLanguages);
-		state.tasks.clear();
-		for (const t of availableTasks) state.tasks.add(t.name);
+		for (const f of scopeFacets) f.reset();
 		sync();
 	}
 
-	type SetKey =
-		| 'taskTypes'
-		| 'domains'
-		| 'modalities'
-		| 'languages'
-		| 'tasks'
-		| 'modelTypes'
-		| 'modelModalities';
-
 	function toggleInSet(key: SetKey, name: string) {
-		const s = state[key];
-		if (s.has(name)) s.delete(name);
-		else s.add(name);
+		facetByKey[key].toggle(name);
 		sync();
 	}
 
 	function setAll(key: SetKey, values: readonly string[], checked: boolean) {
-		const s = state[key];
-		s.clear();
-		if (checked) for (const v of values) s.add(v);
+		const f = facetByKey[key];
+		f.picked.clear();
+		if (checked) for (const v of values) f.picked.add(v);
 		sync();
 	}
 
@@ -371,26 +353,29 @@ function createFilters() {
 			state.sentenceTransformersOnly = v;
 			sync();
 		},
-		get modelTypes() {
-			return state.modelTypes;
+		// Each get returns the underlying SvelteSet — same identity-preserving
+		// contract the legacy store provided, so SummaryTable / FilterFacet
+		// subscribers don't re-bind on every benchmark switch.
+		get modelTypes(): SvelteSet<string> {
+			return modelTypesFacet.picked;
 		},
-		get modelModalities() {
-			return state.modelModalities;
+		get modelModalities(): SvelteSet<string> {
+			return modelModalitiesFacet.picked;
 		},
-		get taskTypes() {
-			return state.taskTypes;
+		get taskTypes(): SvelteSet<string> {
+			return taskTypesFacet.picked;
 		},
-		get domains() {
-			return state.domains;
+		get domains(): SvelteSet<string> {
+			return domainsFacet.picked;
 		},
-		get modalities() {
-			return state.modalities;
+		get modalities(): SvelteSet<string> {
+			return modalitiesFacet.picked;
 		},
-		get languages() {
-			return state.languages;
+		get languages(): SvelteSet<string> {
+			return languagesFacet.picked;
 		},
-		get tasks() {
-			return state.tasks;
+		get tasks(): SvelteSet<string> {
+			return tasksFacet.picked;
 		},
 		get availableTaskTypes() {
 			return availableTaskTypes;
@@ -412,6 +397,15 @@ function createFilters() {
 		},
 		get availableMaxModelSizeM() {
 			return state.availableMaxModelSizeM;
+		},
+		// Facet instances exposed for chip / count derivations in FilterContent
+		// (read-only — mutations still flow through toggleInSet / setAll so the
+		// URL sync stays automatic).
+		get modelFacets(): readonly FacetFilter[] {
+			return modelFacets;
+		},
+		get scopeFacets(): readonly FacetFilter[] {
+			return scopeFacets;
 		},
 		initFor,
 		// Public for pages without a benchmark summary (e.g. /models); /benchmark

@@ -170,10 +170,10 @@
 		label: string;
 		clear: () => void;
 	}
-	// Split into per-section derived so toggling a model filter doesn't
-	// invalidate the customize chips (and vice versa) — each section only
-	// re-runs when its own inputs change.
-	let modelChips = $derived.by(() => {
+	// Scalar (non-facet) model filters — hand-written chips because each has a
+	// custom label format. Set-based facets fold into `modelFacetChips` /
+	// `scopeFacetChips` below via the FacetFilter.chip() method.
+	let scalarModelChips = $derived.by(() => {
 		const list: Chip[] = [];
 		if (filters.nameQuery.trim()) {
 			list.push({
@@ -211,141 +211,69 @@
 				clear: () => (filters.sentenceTransformersOnly = false)
 			});
 		}
-		if (
-			filters.minModelSizeM > filters.availableMinModelSizeM ||
-			filters.maxModelSizeM < filters.availableMaxModelSizeM
-		) {
+		// An active size filter also drops unsized (proprietary) models —
+		// surface that in the chip so vanishing rows aren't a mystery.
+		if (filters.sizeActive) {
 			list.push({
 				key: 'size',
-				label: `Size ${formatParams(filters.minModelSizeM)}–${formatParams(filters.maxModelSizeM)}`,
+				label: `Size ${formatParams(filters.minModelSizeM)}–${formatParams(filters.maxModelSizeM)} (excl. unsized)`,
 				clear: () => {
 					filters.minModelSizeM = filters.availableMinModelSizeM;
 					filters.maxModelSizeM = filters.availableMaxModelSizeM;
 				}
 			});
 		}
-		if (filters.modelTypes.size !== MODEL_TYPES.length) {
-			list.push({
-				key: 'mtype',
-				label: `Type · ${filters.modelTypes.size}/${MODEL_TYPES.length}`,
-				clear: () => filters.setAll('modelTypes', MODEL_TYPES, true)
-			});
-		}
-		if (filters.modelModalities.size !== MODEL_MODALITIES.length) {
-			list.push({
-				key: 'mmod',
-				label: `Modality · ${filters.modelModalities.size}/${MODEL_MODALITIES.length}`,
-				clear: () => filters.setAll('modelModalities', MODEL_MODALITIES, true)
-			});
-		}
-		// Page-local Language facet (only on /models).
-		if (
-			languagesPicked &&
-			languageOptions &&
-			languageOptions.length > 0 &&
-			languagesPicked.size !== languageOptions.length &&
-			onResetLanguages
-		) {
-			list.push({
-				key: 'mlang',
-				label: `Lang · ${languagesPicked.size}/${languageOptions.length}`,
-				clear: () => onResetLanguages()
-			});
-		}
 		return list;
 	});
-	let customizeChips = $derived.by(() => {
+	// Set-based model facets — modelTypes, modelModalities — fold straight into
+	// chips via FacetFilter.chip().
+	let modelFacetChips = $derived.by<Chip[]>(() => {
 		const list: Chip[] = [];
-		const hasTT = filters.availableTaskTypes.length > 0;
-		if (hasTT && filters.taskTypes.size !== filters.availableTaskTypes.length) {
-			list.push({
-				key: 'tt',
-				label: `Task type · ${filters.taskTypes.size}/${filters.availableTaskTypes.length}`,
-				clear: () => filters.setAll('taskTypes', filters.availableTaskTypes, true)
-			});
-		}
-		const hasD = filters.availableDomains.length > 0;
-		if (hasD && filters.domains.size !== filters.availableDomains.length) {
-			list.push({
-				key: 'dom',
-				label: `Domain · ${filters.domains.size}/${filters.availableDomains.length}`,
-				clear: () => filters.setAll('domains', filters.availableDomains, true)
-			});
-		}
-		const hasM = filters.availableModalities.length > 0;
-		if (hasM && filters.modalities.size !== filters.availableModalities.length) {
-			list.push({
-				key: 'mod',
-				label: `Modality · ${filters.modalities.size}/${filters.availableModalities.length}`,
-				clear: () => filters.setAll('modalities', filters.availableModalities, true)
-			});
-		}
-		const hasL = filters.availableLanguages.length > 0;
-		if (hasL && filters.languages.size !== filters.availableLanguages.length) {
-			list.push({
-				key: 'lang',
-				label: `Lang · ${filters.languages.size}/${filters.availableLanguages.length}`,
-				clear: () => filters.setAll('languages', filters.availableLanguages, true)
-			});
-		}
-		const hasT = filters.availableTasks.length > 0;
-		if (hasT && filters.tasks.size !== filters.availableTasks.length) {
-			list.push({
-				key: 'task',
-				label: `Task · ${filters.tasks.size}/${filters.availableTasks.length}`,
-				clear: () =>
-					filters.setAll(
-						'tasks',
-						filters.availableTasks.map((t) => t.name),
-						true
-					)
-			});
+		for (const f of filters.modelFacets) {
+			const c = f.chip();
+			if (c) list.push(c);
 		}
 		return list;
 	});
-	let chips = $derived([...modelChips, ...customizeChips]);
+	let scopeFacetChips = $derived.by<Chip[]>(() => {
+		const list: Chip[] = [];
+		for (const f of filters.scopeFacets) {
+			const c = f.chip();
+			if (c) list.push(c);
+		}
+		return list;
+	});
+	// Page-local Language facet (only on /models — not part of the global store).
+	let pageLocalLangChip = $derived.by<Chip | null>(() => {
+		if (
+			!languagesPicked ||
+			!languageOptions ||
+			languageOptions.length === 0 ||
+			languagesPicked.size === languageOptions.length ||
+			!onResetLanguages
+		)
+			return null;
+		return {
+			key: 'mlang',
+			label: `Lang · ${languagesPicked.size}/${languageOptions.length}`,
+			clear: () => onResetLanguages()
+		};
+	});
+	let chips = $derived.by<Chip[]>(() => {
+		const list = [...scalarModelChips, ...modelFacetChips];
+		if (pageLocalLangChip) list.push(pageLocalLangChip);
+		return [...list, ...scopeFacetChips];
+	});
 
 	let activeModelCount = $derived.by(() => {
-		let n = 0;
-		if (filters.availability !== 'both') n++;
-		if (filters.zeroShot !== 'allow_all') n++;
-		if (filters.instructions !== 'both') n++;
-		if (filters.sentenceTransformersOnly) n++;
-		if (
-			filters.minModelSizeM > filters.availableMinModelSizeM ||
-			filters.maxModelSizeM < filters.availableMaxModelSizeM
-		)
-			n++;
-		if (filters.modelTypes.size !== MODEL_TYPES.length) n++;
-		if (filters.modelModalities.size !== MODEL_MODALITIES.length) n++;
+		// Search-name chip is a find-in-table gesture, not a filter narrowing
+		// for count purposes (mirrors the legacy count which ignored nameQuery).
+		const scalarN = scalarModelChips.length - (filters.nameQuery.trim() ? 1 : 0);
+		let n = scalarN + modelFacetChips.length;
+		if (pageLocalLangChip) n++;
 		return n;
 	});
-	let activeScopeCount = $derived.by(() => {
-		let n = 0;
-		if (
-			filters.availableTaskTypes.length > 0 &&
-			filters.taskTypes.size !== filters.availableTaskTypes.length
-		)
-			n++;
-		if (
-			filters.availableDomains.length > 0 &&
-			filters.domains.size !== filters.availableDomains.length
-		)
-			n++;
-		if (
-			filters.availableModalities.length > 0 &&
-			filters.modalities.size !== filters.availableModalities.length
-		)
-			n++;
-		if (
-			filters.availableLanguages.length > 0 &&
-			filters.languages.size !== filters.availableLanguages.length
-		)
-			n++;
-		if (filters.availableTasks.length > 0 && filters.tasks.size !== filters.availableTasks.length)
-			n++;
-		return n;
-	});
+	let activeScopeCount = $derived(scopeFacetChips.length);
 
 	let filteredLanguages = $derived.by(() => {
 		// Lowercase + trim the query ONCE; `.filter` callback then only
