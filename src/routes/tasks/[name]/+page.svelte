@@ -2,20 +2,22 @@
 	import { resolve } from '$app/paths';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
-	import { loadTaskScores } from '$lib/data/service';
+	import { loadTaskDescriptiveStats, loadTaskScores } from '$lib/data/service';
 	import { languageLabel } from '$lib/data/languages';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
+	import DescriptiveStatsSection from '$lib/components/DescriptiveStatsSection.svelte';
 	import InfoDot from '$lib/components/InfoDot.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import Segmented from '$lib/components/Segmented.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import { slug, sortModalities } from '$lib/format';
 	import { clampTooltipX } from '$lib/cell-hover';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
-	import type { TaskMeta, TaskScores } from '$lib/types';
+	import type { TaskDescriptiveStats, TaskMeta, TaskScores } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -55,6 +57,30 @@
 		);
 	});
 
+	// Descriptive stats live behind a separate endpoint — same client-side
+	// fetch pattern as scores so prerender doesn't pay for them. Failures
+	// silently hide the section (vs. blocking the page) since stats are
+	// supplementary metadata.
+	let descriptiveStats = $state.raw<TaskDescriptiveStats | null>(null);
+	let loadingStats = $state(true);
+	$effect(() => {
+		const name = taskName;
+		descriptiveStats = null;
+		loadingStats = true;
+		loadTaskDescriptiveStats(name).then(
+			(s) => {
+				if (taskName !== name) return;
+				descriptiveStats = s;
+				loadingStats = false;
+			},
+			() => {
+				if (taskName !== name) return;
+				loadingStats = false;
+			}
+		);
+	});
+	let hasStats = $derived(descriptiveStats != null && Object.keys(descriptiveStats).length > 0);
+
 	// Pre-index task membership for the "In benchmarks: …" strip.
 	let benchTasksSets = $derived(allBenchmarks.map((b) => new Set(b.tasks)));
 	let benchmarks = $derived.by(() => {
@@ -79,26 +105,96 @@
 		};
 	});
 
-	// Real per-hf_subset scores come straight from /tasks/{name}/scores.
-	// For single-subset tasks (most retrieval benchmarks) the per-subset
-	// breakdown adds nothing — the Mean column already shows the value.
-	// Drop the subset list when there's only one (regardless of whether
-	// it's the literal `default` name or some other singleton) so the
-	// table renders without the redundant subset column.
+	// Single-subset tasks: the Mean column already shows the only value.
 	let subsets = $derived<string[]>(
 		(scoresPayload?.subsets ?? []).length > 1 ? (scoresPayload?.subsets ?? []) : []
 	);
 
+	type SplitMode = 'all' | (string & {});
+	let availableSplits = $derived(scoresPayload?.splits ?? []);
+	let splitMode = $state<SplitMode>('all');
+	$effect(() => {
+		void taskName;
+		splitMode = 'all';
+	});
+	// Picker only renders for multi-split tasks; single-split tasks pin "all".
+	let splitOptions = $derived(
+		availableSplits.length > 1
+			? [
+					{ label: 'All splits', value: 'all' as SplitMode },
+					...availableSplits.map((s) => ({ label: s, value: s as SplitMode }))
+				]
+			: []
+	);
+
+	// "all" mode: per-cell mean across every split the task offers; any missing
+	// split nulls the cell so partial-coverage models aren't ranked against
+	// fully-evaluated ones. Specific split: literal cell value, or undefined.
+	function projectSubsetScores(
+		nested: Record<string, Record<string, number>>,
+		mode: SplitMode,
+		allSplits: readonly string[]
+	): Record<string, number> {
+		const out: Record<string, number> = {};
+		for (const [sub, perSplit] of Object.entries(nested)) {
+			if (mode === 'all') {
+				let sum = 0;
+				let complete = true;
+				for (const sp of allSplits) {
+					const v = perSplit[sp];
+					if (v === undefined) {
+						complete = false;
+						break;
+					}
+					sum += v;
+				}
+				if (complete && allSplits.length > 0) out[sub] = sum / allSplits.length;
+			} else if (perSplit[mode] !== undefined) {
+				out[sub] = perSplit[mode];
+			}
+		}
+		return out;
+	}
+
 	let scores = $derived.by<ModelScore[]>(() => {
 		if (!scoresPayload) return [];
-		return scoresPayload.rows.map((r) => ({
-			model: r.model,
-			score: r.score,
-			rank: r.rank,
-			benchmarkName: r.benchmarks[0] ?? '',
-			subsetScores: r.subsetScores,
-			trainedOn: r.trainedOn
-		}));
+		const subsetList = scoresPayload.subsets;
+		const splitList = scoresPayload.splits;
+		const projected = scoresPayload.rows.map((r) => {
+			const flat = projectSubsetScores(r.subsetScores, splitMode, splitList);
+			// Mean over subsets; null on any missing subset cell.
+			let score: number | null = null;
+			let sum = 0;
+			let n = 0;
+			let complete = true;
+			for (const sub of subsetList) {
+				const v = flat[sub];
+				if (v === undefined) {
+					complete = false;
+					break;
+				}
+				sum += v;
+				n++;
+			}
+			if (complete && n > 0) score = sum / n;
+			return {
+				model: r.model,
+				score,
+				benchmarkName: r.benchmarks[0] ?? '',
+				subsetScores: flat,
+				trainedOn: r.trainedOn
+			};
+		});
+		// Re-rank per mode — the API's rank reflects its own rollup, not what
+		// the user sees once a split is picked.
+		const sorted = [...projected].sort((a, b) => {
+			if (a.score === null && b.score === null) return a.model.name.localeCompare(b.model.name);
+			if (a.score === null) return 1;
+			if (b.score === null) return -1;
+			if (a.score === b.score) return a.model.name.localeCompare(b.model.name);
+			return b.score - a.score;
+		});
+		return sorted.map((row, i) => ({ ...row, rank: i + 1 }));
 	});
 
 	let multipleBenchmarks = $derived(benchmarks.length > 1);
@@ -394,6 +490,10 @@
 		</details>
 	{/if}
 
+	{#if !loadingStats && hasStats && descriptiveStats}
+		<DescriptiveStatsSection stats={descriptiveStats} />
+	{/if}
+
 	<section class="scores">
 		<header class="scores-head">
 			<h2>Model scores</h2>
@@ -401,8 +501,24 @@
 				{#if loadingScores}Loading…
 				{:else}{scores.length} {scores.length === 1 ? 'entry' : 'entries'}{/if}
 			</span>
+			{#if splitOptions.length > 0}
+				<div class="split-picker">
+					<span class="picker-label">Split</span>
+					<Segmented
+						ariaLabel="Split"
+						options={splitOptions}
+						value={splitMode}
+						onChange={(v) => (splitMode = v)}
+					/>
+				</div>
+			{/if}
 			{#if scores.length > 0}
-				<DownloadButton filename="{sanitizeFilename(taskName)}_models" build={buildCsv} />
+				<DownloadButton
+					filename="{sanitizeFilename(taskName)}_models{splitMode === 'all'
+						? ''
+						: '_' + sanitizeFilename(splitMode)}"
+					build={buildCsv}
+				/>
 			{/if}
 		</header>
 		{#if loadingScores}
@@ -645,6 +761,20 @@
 	}
 	.scores-head .muted {
 		flex: 1;
+	}
+	/* Split picker sits between the entry count and the download button,
+	   only renders for tasks with >1 eval split (most tasks: just "test"). */
+	.split-picker {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.picker-label {
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
 	}
 	.scores h2 {
 		font-size: 18px;
