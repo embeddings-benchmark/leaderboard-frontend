@@ -273,7 +273,7 @@ export async function loadTaskDescriptiveStats(
 ): Promise<TaskDescriptiveStats> {
 	if (!API) throw noApiError('loadTaskDescriptiveStats');
 	return cachedHttp<TaskDescriptiveStats>(
-		`/tasks/${encodeURIComponent(name)}/descriptive-stats`,
+		`/tasks/${encodeURIComponent(name)}/descriptive_statistics`,
 		fetchFn
 	);
 }

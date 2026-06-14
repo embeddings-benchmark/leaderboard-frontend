@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Renders per-split descriptive statistics for a task.
 	//
-	// The /v1/tasks/{name}/descriptive-stats payload shape is one of ~10
+	// The /v1/tasks/{name}/descriptive_statistics payload shape is one of ~10
 	// per-task TypedDicts (see `mteb/types/statistics.py`), each carrying
 	// `num_samples` plus a varying set of `*_statistics` nested blocks
 	// (TextStatistics, ImageStatistics, AudioStatistics, VideoStatistics,

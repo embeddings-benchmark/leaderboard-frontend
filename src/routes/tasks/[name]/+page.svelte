@@ -105,32 +105,19 @@
 		};
 	});
 
-	// Real per-hf_subset scores come straight from /tasks/{name}/scores.
-	// For single-subset tasks (most retrieval benchmarks) the per-subset
-	// breakdown adds nothing — the Mean column already shows the value.
-	// Drop the subset list when there's only one (regardless of whether
-	// it's the literal `default` name or some other singleton) so the
-	// table renders without the redundant subset column.
+	// Single-subset tasks: the Mean column already shows the only value.
 	let subsets = $derived<string[]>(
 		(scoresPayload?.subsets ?? []).length > 1 ? (scoresPayload?.subsets ?? []) : []
 	);
 
-	// Split picker. Tasks evaluated on a single split (most retrieval /
-	// classification benchmarks just run ``test``) skip the picker entirely
-	// and behave exactly like the pre-split API. Multi-split tasks (e.g.
-	// MassiveIntentClassification: validation + test) expose an "All" mode
-	// that uses the API's cross-split rollup plus one mode per split.
 	type SplitMode = 'all' | (string & {});
 	let availableSplits = $derived(scoresPayload?.splits ?? []);
 	let splitMode = $state<SplitMode>('all');
-	// Reset the picker when the user navigates to a different task — the
-	// previous split name might not exist on the new one.
 	$effect(() => {
-		// Read `taskName` to register it as a dep; the assignment below is
-		// the work this effect does.
 		void taskName;
 		splitMode = 'all';
 	});
+	// Picker only renders for multi-split tasks; single-split tasks pin "all".
 	let splitOptions = $derived(
 		availableSplits.length > 1
 			? [
@@ -140,23 +127,28 @@
 			: []
 	);
 
-	// Flatten the nested subset→split→score map according to the picker.
-	// In "all" mode each subset cell is the max across splits the model ran
-	// (matches the API's per-subset rollup that feeds `row.score`).
-	// In split-specific mode the cell is the literal (subset, split) value
-	// or `undefined` if the model didn't evaluate that cell.
+	// "all" mode: per-cell mean across every split the task offers; any missing
+	// split nulls the cell so partial-coverage models aren't ranked against
+	// fully-evaluated ones. Specific split: literal cell value, or undefined.
 	function projectSubsetScores(
 		nested: Record<string, Record<string, number>>,
-		mode: SplitMode
+		mode: SplitMode,
+		allSplits: readonly string[]
 	): Record<string, number> {
 		const out: Record<string, number> = {};
 		for (const [sub, perSplit] of Object.entries(nested)) {
 			if (mode === 'all') {
-				let best: number | undefined;
-				for (const v of Object.values(perSplit)) {
-					if (best === undefined || v > best) best = v;
+				let sum = 0;
+				let complete = true;
+				for (const sp of allSplits) {
+					const v = perSplit[sp];
+					if (v === undefined) {
+						complete = false;
+						break;
+					}
+					sum += v;
 				}
-				if (best !== undefined) out[sub] = best;
+				if (complete && allSplits.length > 0) out[sub] = sum / allSplits.length;
 			} else if (perSplit[mode] !== undefined) {
 				out[sub] = perSplit[mode];
 			}
@@ -167,39 +159,42 @@
 	let scores = $derived.by<ModelScore[]>(() => {
 		if (!scoresPayload) return [];
 		const subsetList = scoresPayload.subsets;
-		return scoresPayload.rows.map((r) => {
-			const flat = projectSubsetScores(r.subsetScores, splitMode);
-			// Mean reflects the active mode: API rollup for "all", per-split
-			// mean over subsets otherwise (null when the model didn't cover
-			// every subset on the chosen split — same partial-coverage rule
-			// as the API).
-			let score: number | null;
-			if (splitMode === 'all') {
-				score = r.score;
-			} else {
-				let sum = 0;
-				let n = 0;
-				let complete = true;
-				for (const sub of subsetList) {
-					const v = flat[sub];
-					if (v === undefined) {
-						complete = false;
-						break;
-					}
-					sum += v;
-					n++;
+		const splitList = scoresPayload.splits;
+		const projected = scoresPayload.rows.map((r) => {
+			const flat = projectSubsetScores(r.subsetScores, splitMode, splitList);
+			// Mean over subsets; null on any missing subset cell.
+			let score: number | null = null;
+			let sum = 0;
+			let n = 0;
+			let complete = true;
+			for (const sub of subsetList) {
+				const v = flat[sub];
+				if (v === undefined) {
+					complete = false;
+					break;
 				}
-				score = complete && n > 0 ? sum / n : null;
+				sum += v;
+				n++;
 			}
+			if (complete && n > 0) score = sum / n;
 			return {
 				model: r.model,
 				score,
-				rank: r.rank,
 				benchmarkName: r.benchmarks[0] ?? '',
 				subsetScores: flat,
 				trainedOn: r.trainedOn
 			};
 		});
+		// Re-rank per mode — the API's rank reflects its own rollup, not what
+		// the user sees once a split is picked.
+		const sorted = [...projected].sort((a, b) => {
+			if (a.score === null && b.score === null) return a.model.name.localeCompare(b.model.name);
+			if (a.score === null) return 1;
+			if (b.score === null) return -1;
+			if (a.score === b.score) return a.model.name.localeCompare(b.model.name);
+			return b.score - a.score;
+		});
+		return sorted.map((row, i) => ({ ...row, rank: i + 1 }));
 	});
 
 	let multipleBenchmarks = $derived(benchmarks.length > 1);

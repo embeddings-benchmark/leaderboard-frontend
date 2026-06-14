@@ -294,7 +294,7 @@ export interface ModelScores {
 	rows: ModelScoreRow[];
 }
 
-// --- /v1/tasks/{name}/descriptive-stats ---------------------------------
+// --- /v1/tasks/{name}/descriptive_statistics ----------------------------
 // Snake_case is intentional: the backend ships these via TypedDicts (not
 // pydantic models with camelCase aliases), so the wire shape mirrors the
 // Python attribute names verbatim. See `mteb/types/statistics.py` for the
