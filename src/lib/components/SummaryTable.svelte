@@ -45,9 +45,52 @@
 		}
 	} as const;
 
-	// Short explanations for the per-task-type columns. Surfaced on
-	// column-header hover so users skimming the table know what each
-	// score is measuring without leaving the page.
+	// Short header labels for the per-task-type columns. Full task type names
+	// (especially the vision / audio ones — "AudioZeroshotClassification",
+	// "Any2AnyMultilingualRetrieval") eat horizontal space and force the
+	// table into awkward horizontal scrolling on benchmarks with many task
+	// types. The abbreviated label sits in the column header; the full
+	// humanized name is still announced via the hover tooltip's title.
+	// Keys mirror the real `tasksMeta[].type` values returned by the API
+	// (see `/v1/tasks`). Anything unmapped falls back to `humanizeType`.
+	const TASK_TYPE_ABBREV: Record<string, string> = {
+		Any2AnyMultilingualRetrieval: 'A2A MultiRetr.',
+		Any2AnyRetrieval: 'A2A Retr.',
+		AudioClassification: 'Aud Class.',
+		AudioClustering: 'Aud Clust.',
+		AudioMultilabelClassification: 'Aud MultiClass.',
+		AudioPairClassification: 'Aud PairClass.',
+		AudioReranking: 'Aud Rerank',
+		AudioZeroshotClassification: 'Aud 0Shot Class.',
+		BitextMining: 'Bitext',
+		Classification: 'Class.',
+		Clustering: 'Clust.',
+		Compositionality: 'Comp.',
+		DocumentUnderstanding: 'Doc Und.',
+		ImageClassification: 'Img Class.',
+		ImageClustering: 'Img Clust.',
+		InstructionReranking: 'Instr Rerank',
+		InstructionRetrieval: 'Instr Retr.',
+		MultilabelClassification: 'MultiClass.',
+		PairClassification: 'PairClass.',
+		Regression: 'Regr.',
+		Reranking: 'Rerank',
+		Retrieval: 'Retr.',
+		STS: 'STS',
+		Summarization: 'Summ.',
+		VideoCentricQA: 'Vid QA',
+		VideoClassification: 'Vid Class.',
+		VideoClustering: 'Vid Clust.',
+		VideoPairClassification: 'Vid PairClass.',
+		VideoZeroshotClassification: 'Vid 0Shot Class.',
+		VisionCentricQA: 'Vis QA',
+		'VisualSTS(eng)': 'V-STS (en)',
+		'VisualSTS(multi)': 'V-STS (multi)',
+		ZeroShotClassification: '0Shot Class.'
+	};
+
+	// Per-column hover descriptions. Keyed by `tasksMeta[i].type` (not the
+	// `summary.taskTypes` form the backend strips) — see `realTaskType` below.
 	const TASK_TYPE_INFO: Record<string, string> = {
 		Classification: 'Classify text into pre-defined labels (sentiment, topic, intent, …).',
 		Clustering:
@@ -63,7 +106,21 @@
 		BitextMining:
 			'Pair sentences across two languages that carry the same meaning (translation alignment).',
 		Summarization:
-			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.'
+			'Produce or evaluate concise summaries of longer documents; scored against reference summaries.',
+		// Vision / image-modality task types — surfaced on MIEB / MVEB / Image*.
+		ImageClassification: 'Classify images into pre-defined labels.',
+		ImageClustering: 'Group similar images together without supervision.',
+		ZeroShotClassification:
+			'Classify images / text into labels without per-task supervision; scored on held-out labels.',
+		DocumentUnderstanding:
+			'Parse document layouts (text, tables, figures) and answer questions over them.',
+		MultilingualRetrieval: 'Find relevant documents in a multilingual corpus.',
+		VisionCentricQA: 'Answer questions that require visual understanding of an image.',
+		Compositionality:
+			'Test compositional understanding (objects, attributes, and relations) in vision-language models.',
+		'VisualSTS(eng)': 'Rate semantic similarity between English sentence pairs rendered as images.',
+		'VisualSTS(multi)':
+			'Rate semantic similarity between multilingual sentence pairs rendered as images.'
 	};
 </script>
 
@@ -72,6 +129,7 @@
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import {
 		bestWorstPerColumn,
+		floatPinnedToTop,
 		fmtParamsUnit,
 		fmtParamsValue,
 		fmtPct,
@@ -86,7 +144,7 @@
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { safeIdle } from '$lib/idle';
-	import { isBoundaryCross } from '$lib/cell-hover';
+	import { clampTooltipX, isBoundaryCross } from '$lib/cell-hover';
 	import ModelCellName from './ModelCellName.svelte';
 	import PinButton from './PinButton.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
@@ -96,8 +154,15 @@
 
 	interface Props {
 		summary: BenchmarkSummary;
+		// `false` when this pane is mounted but hidden behind another tab. We
+		// then skip subscribing `sortedRows` to `pinnedModels` so pin clicks
+		// in the visible pane don't invalidate the hidden one's derived.
+		// Defaults to `true` so callers that don't use the prewarm pattern
+		// (e.g. /benchmark/[name] only mounts the active tab when prerender
+		// is off) keep the live-pin behaviour.
+		active?: boolean;
 	}
-	let { summary }: Props = $props();
+	let { summary, active = true }: Props = $props();
 
 	type SortKey =
 		| 'rank'
@@ -127,7 +192,7 @@
 			case 'model':
 				return { v: row.model.displayName.toLowerCase(), missing: false };
 			case 'totalParams':
-				return { v: row.totalParamsB, missing: row.totalParamsB === 0 };
+				return { v: row.totalParamsB ?? 0, missing: !row.totalParamsB };
 			case 'zeroShot':
 				// -1 is the "unknown" sentinel; treat as missing so it sorts
 				// to the bottom regardless of direction.
@@ -176,17 +241,13 @@
 				return ((va.v as number) - (vb.v as number)) * dir;
 			});
 		}
-		// Float pinned rows to the top in a single partition pass. Pin keys
-		// are per-row identities (see `rowId`) so pinning a base model and a
+		// Inactive panes don't subscribe to `pinnedModels` — pin clicks
+		// elsewhere don't invalidate this derived. Reactivates on tab switch
+		// (the `active` prop change re-fires the derived). Pin keys are
+		// per-row identities (see `rowId`) so pinning a base model and a
 		// variant of the same model independently surfaces both.
-		if (pinnedModels.size === 0) return rows;
-		const pinned: SummaryRow[] = [];
-		const unpinned: SummaryRow[] = [];
-		for (const r of rows) {
-			if (pinnedModels.has(rowId(r))) pinned.push(r);
-			else unpinned.push(r);
-		}
-		return [...pinned, ...unpinned];
+		if (!active) return rows;
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(rowId(r)), pinnedModels.size);
 	});
 
 	// Progressive row render — Firefox benefits a lot (cold first-paint
@@ -249,6 +310,21 @@
 	// regardless of locale, etc.
 	// `summary.taskTypes` is pre-sorted at the service boundary.
 	let sortedTaskTypes = $derived(summary.taskTypes);
+
+	// `summary.taskTypes` carries the backend's stripped form (no parens,
+	// and a stray `S` next to them — `VisualSTS(eng)` → `VisualSTeng`).
+	// `tasksMeta[i].type` keeps the real form, so reverse the strip to
+	// recover human labels + hit `TASK_TYPE_INFO` keys that contain parens.
+	let realTaskType = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const m = new Map<string, string>();
+		for (const t of summary.tasksMeta) {
+			if (!t.type) continue;
+			const stripped = t.type.replace(/S?\(|\)S?/g, '');
+			if (!m.has(stripped)) m.set(stripped, t.type);
+		}
+		return m;
+	});
 	let typeBests = $derived(
 		bestWorstPerColumn(sortedTaskTypes, summary.rows, (r, tt) => r.scoresByTaskType[tt])
 	);
@@ -293,6 +369,9 @@
 	let showMeanTaskType = $derived(summary.aggregations?.includes('mean_task_type') ?? false);
 	let showTaskTypes = $derived(summary.aggregations?.includes('task_types') ?? false);
 	let showPublicPrivate = $derived(summary.aggregations?.includes('public_private') ?? false);
+	// ViDoRe / RTEB don't track training-data overlap for their tasks, so
+	// every row would render as a misleading uniform 100% — hide the column.
+	let showZeroShot = $derived(summary.showZeroShot ?? true);
 	// Recompute Mean (Public) / Mean (Private) from the model's per-task scores
 	// using the benchmark's `tasksMeta[].isPublic` flag. This way the means
 	// update live when the user filters the task set, instead of staying frozen
@@ -394,16 +473,7 @@
 	// rightmost task-type columns on narrow screens.
 	const TIP_MAX_WIDTH = 340;
 	const TIP_EDGE = 8;
-	function clampTipX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = TIP_MAX_WIDTH / 2;
-		const min = TIP_EDGE + half;
-		const max = window.innerWidth - TIP_EDGE - half;
-		// On very narrow viewports (< TIP_MAX_WIDTH) min > max; centre on the
-		// viewport in that case rather than letting min clobber max.
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampTipX = (x: number) => clampTooltipX(x, TIP_MAX_WIDTH, TIP_EDGE);
 
 	function showTip(e: PointerEvent | FocusEvent) {
 		cancelHide();
@@ -460,9 +530,11 @@
 <div class="summary">
 	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl summary-table" use:stickyHead>
+			<caption class="sr-only">Model leaderboard</caption>
 			<thead>
 				<tr>
 					<th
+						scope="col"
 						class="sticky-left rank-head"
 						data-tip-title={INFO.rank.title}
 						data-tip={INFO.rank.text}
@@ -479,6 +551,7 @@
 						</button>
 					</th>
 					<th
+						scope="col"
 						class="sticky-model"
 						aria-sort={sort.aria('model')}
 						data-tip-title={INFO.model.title}
@@ -495,6 +568,7 @@
 						</button>
 					</th>
 					<th
+						scope="col"
 						class="tbl-num"
 						data-tip-title={INFO.totalParams.title}
 						data-tip={INFO.totalParams.text}
@@ -512,22 +586,25 @@
 							>
 						</button>
 					</th>
-					<th
-						class="tbl-num"
-						data-tip-title={INFO.zeroShot.title}
-						data-tip={INFO.zeroShot.text}
-						onpointerenter={showTip}
-						onpointerleave={hideTip}
-						onfocusin={showTip}
-						onfocusout={hideTip}
-						aria-sort={sort.aria('zeroShot')}
-					>
-						<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
-							<span>Zero-shot</span>
-							<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
-							<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
-						</button>
-					</th>
+					{#if showZeroShot}
+						<th
+							scope="col"
+							class="tbl-num"
+							data-tip-title={INFO.zeroShot.title}
+							data-tip={INFO.zeroShot.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('zeroShot')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('zeroShot')}>
+								<span>Zero-shot</span>
+								<InfoDot ariaLabel="What is {INFO.zeroShot.title}?" />
+								<span class="ind" class:on={sort.key === 'zeroShot'}>{sort.icon('zeroShot')}</span>
+							</button>
+						</th>
+					{/if}
 					{#if showMeanTask}
 						<th
 							class="tbl-num"
@@ -607,20 +684,24 @@
 					{#if showTaskTypes}
 						{#each sortedTaskTypes as tt (tt)}
 							{@const k = `tt:${tt}` as SortKey}
-							{@const desc = TASK_TYPE_INFO[tt]}
+							{@const real = realTaskType.get(tt) ?? tt}
+							{@const desc = TASK_TYPE_INFO[real] ?? TASK_TYPE_INFO[tt]}
+							{@const full = humanizeType(real)}
+							{@const label = TASK_TYPE_ABBREV[real] ?? TASK_TYPE_ABBREV[tt] ?? full}
 							<th
+								scope="col"
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
-								data-tip-title={desc ? humanizeType(tt) : ''}
+								data-tip-title={full}
 								data-tip={desc ?? ''}
-								onpointerenter={desc ? showTip : undefined}
-								onpointerleave={desc ? hideTip : undefined}
-								onfocusin={desc ? showTip : undefined}
-								onfocusout={desc ? hideTip : undefined}
+								onpointerenter={showTip}
+								onpointerleave={hideTip}
+								onfocusin={showTip}
+								onfocusout={hideTip}
 							>
-								<button class="sort-btn tbl-num" onclick={() => sort.click(k)}>
-									<span>{humanizeType(tt)}</span>
-									{#if desc}<InfoDot ariaLabel="What is {humanizeType(tt)}?" />{/if}
+								<button class="sort-btn tbl-num" onclick={() => sort.click(k)} title={full}>
+									<span>{label}</span>
+									<InfoDot ariaLabel="What is {full}?" />
 									<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
 								</button>
 							</th>
@@ -638,7 +719,8 @@
 								<span class="rank-pill">#{row.rank}</span>
 							</div>
 						</td>
-						<td
+						<th
+							scope="row"
 							class="sticky-model has-tip"
 							data-model-type={row.model.modelType}
 							onpointerover={(e) => showModelTip(e, row)}
@@ -647,15 +729,17 @@
 							onfocusout={hideModelTip}
 						>
 							<ModelCellName model={row.model} experiments={row.experiments} />
-						</td>
+						</th>
 						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
 							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span
 									class="unit">{fmtParamsUnit(row.totalParamsB)}</span
 								>{/if}
 						</td>
-						<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
-							{fmtZeroShot(row.zeroShotPct)}
-						</td>
+						{#if showZeroShot}
+							<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
+								{fmtZeroShot(row.zeroShotPct)}
+							</td>
+						{/if}
 						{#if showMeanTask}
 							<td
 								class="tbl-num {heat(row.meanTask, worstMeanTask, bestMeanTask)}"
@@ -817,14 +901,22 @@
 		gap: 8px;
 		padding: 4px 8px;
 	}
-	/* Combined pin + rank column. */
+	/* Combined pin + rank column. Single source of truth for the
+	   column width — `.sticky-model` reads the same token for its
+	   `left` offset so the two columns butt cleanly regardless of
+	   how wide the rank pill ends up. Bumped from 72px so 4-digit
+	   ranks (#1234) don't get clipped under the sticky model column. */
+	.summary-table {
+		--rank-col-w: 88px;
+	}
 	.sticky-left {
 		position: sticky;
 		left: 0;
 		background: var(--surface);
 		z-index: 2;
-		width: 72px;
-		min-width: 72px;
+		width: var(--rank-col-w);
+		min-width: var(--rank-col-w);
+		max-width: var(--rank-col-w);
 	}
 	.sticky-left .sort-btn {
 		justify-content: flex-start;
@@ -840,12 +932,9 @@
 	tbody tr:nth-child(even) td.sticky-left {
 		background: var(--row-alt);
 	}
-	tbody tr:hover td.sticky-left {
-		background: var(--row-hover);
-	}
 	.sticky-model {
 		position: sticky;
-		left: 72px;
+		left: var(--rank-col-w);
 		background: var(--surface);
 		z-index: 2;
 		/* Hold the column to a fixed width window. Long model names wrap
@@ -856,17 +945,27 @@
 		max-width: 260px;
 		white-space: normal;
 		overflow-wrap: anywhere;
-		vertical-align: top;
+		vertical-align: middle;
 	}
 	thead th.sticky-model {
 		background: var(--surface-muted);
 		z-index: 3;
 	}
-	tbody tr:nth-child(even) td.sticky-model {
+	tbody tr:nth-child(even) th.sticky-model {
 		background: var(--row-alt);
 	}
-	tbody tr:hover td.sticky-model {
-		background: var(--row-hover);
+	/* Per-component pinned overrides — the generic `tr.pinned :is(td, th)`
+	   rules in leaderboard-table.css (specificity 0,2,3 / 0,3,3) lose to
+	   the Svelte-scoped even-row rule above (0,4,3 once the scoping class
+	   is added), so pinned rows would otherwise show the zebra tint on
+	   the sticky columns. */
+	tbody tr.pinned td.sticky-left,
+	tbody tr.pinned th.sticky-model {
+		background: var(--row-pinned-bg);
+	}
+	tbody tr.pinned:nth-child(even) td.sticky-left,
+	tbody tr.pinned:nth-child(even) th.sticky-model {
+		background: var(--row-pinned-bg-alt);
 	}
 
 	/* Mobile: 72 px (rank) + 260 px (model) of sticky pane eats almost

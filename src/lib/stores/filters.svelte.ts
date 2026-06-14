@@ -1,8 +1,10 @@
 import { untrack } from 'svelte';
-import { SvelteSet } from 'svelte/reactivity';
+import type { SvelteSet } from 'svelte/reactivity';
 
-import type { BenchmarkSummary, ModelType, TaskMeta } from '$lib/types';
-import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
+import type { BenchmarkSummary, ModelType, SummaryRow, TaskMeta } from '$lib/types';
+import { modelSearchKey } from '$lib/format';
+import { readParams, updateUrl } from '$lib/url-state';
+import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
 
 export type ZeroShotMode = 'allow_all' | 'remove_unknown' | 'only_zero_shot';
 export type Availability = 'both' | 'open' | 'proprietary';
@@ -25,36 +27,21 @@ export const MODEL_TYPES: ModelType[] = [
 export const MODEL_MODALITIES = ['text', 'image', 'audio', 'video'] as const;
 export type ModelModality = (typeof MODEL_MODALITIES)[number];
 
+// Hot-path constant — avoids allocating a fresh `['text']` per row.
+const TEXT_ONLY: readonly string[] = ['text'];
+
 interface FiltersState {
-	// model filters
+	// model-row filters (scalars)
 	nameQuery: string;
 	minModelSizeM: number;
 	maxModelSizeM: number;
-	// `false` until the user actually moves the slider. While inactive the
-	// size filter is a no-op (all rows pass, including proprietary models
-	// with unknown size). Once flipped on, the filter applies AND drops
-	// unsized models — see applyFilters.
+	// Inactive until the user moves the slider; once on, also drops unsized models.
 	sizeActive: boolean;
 	zeroShot: ZeroShotMode;
 	availability: Availability;
 	instructions: InstructionMode;
 	sentenceTransformersOnly: boolean;
-	modelTypes: SvelteSet<string>;
-	modelModalities: SvelteSet<string>;
-	// customize-benchmark filters
-	taskTypes: SvelteSet<string>;
-	domains: SvelteSet<string>;
-	modalities: SvelteSet<string>;
-	languages: SvelteSet<string>;
-	tasks: SvelteSet<string>;
-	// available choices (per benchmark)
-	availableTaskTypes: string[];
-	availableDomains: string[];
-	availableModalities: string[];
-	availableLanguages: string[];
-	availableTasks: TaskMeta[];
-	// Size slider bounds derived from the loaded summary. Fall back to the
-	// global SIZE_MIN_M / SIZE_MAX_M when no benchmark is loaded.
+	// Slider bounds; fall back to global defaults when no benchmark is loaded.
 	availableMinModelSizeM: number;
 	availableMaxModelSizeM: number;
 }
@@ -69,18 +56,6 @@ function defaultState(): FiltersState {
 		availability: 'both',
 		instructions: 'both',
 		sentenceTransformersOnly: false,
-		modelTypes: new SvelteSet<string>(MODEL_TYPES),
-		modelModalities: new SvelteSet<string>(MODEL_MODALITIES),
-		taskTypes: new SvelteSet(),
-		domains: new SvelteSet(),
-		modalities: new SvelteSet(),
-		languages: new SvelteSet(),
-		tasks: new SvelteSet(),
-		availableTaskTypes: [],
-		availableDomains: [],
-		availableModalities: [],
-		availableLanguages: [],
-		availableTasks: [],
 		availableMinModelSizeM: SIZE_MIN_M,
 		availableMaxModelSizeM: SIZE_MAX_M
 	};
@@ -88,118 +63,163 @@ function defaultState(): FiltersState {
 
 function createFilters() {
 	const state = $state<FiltersState>(defaultState());
-	// Track the benchmark whose available-* + picks we've already seeded.
-	// Subsequent `initFor` calls for the SAME benchmark (e.g. a
-	// language-scoped summary refetch) refresh the available-* lists
-	// without clobbering the user's current pick state — otherwise
-	// unchecking a language would trigger a refetch, the new summary
-	// would land, `initFor` would reset the language picks to "all",
-	// which would trigger another refetch back to unfiltered.
+	// $state.raw because these are reassigned wholesale (never deep-mutated)
+	// and contain hundreds of entries per Multilingual benchmark.
+	let availableTaskTypes = $state.raw<string[]>([]);
+	let availableDomains = $state.raw<string[]>([]);
+	let availableModalities = $state.raw<string[]>([]);
+	let availableLanguages = $state.raw<string[]>([]);
+	let availableTasks = $state.raw<TaskMeta[]>([]);
+	// Same-benchmark refetches (e.g. language-scoped) refresh available-* without
+	// resetting user picks — otherwise toggling a language would loop.
 	let lastBenchmarkName: string | null = null;
+
+	// One FacetFilter per set-based facet. Universe accessors close over the
+	// `available*` state above, so each facet stays consistent with the
+	// currently loaded benchmark.
+	const taskTypesFacet = createFacetFilter({
+		urlParam: 'types',
+		chipLabel: 'Task type',
+		universe: () => availableTaskTypes
+	});
+	const domainsFacet = createFacetFilter({
+		urlParam: 'doms',
+		chipLabel: 'Domain',
+		universe: () => availableDomains
+	});
+	const modalitiesFacet = createFacetFilter({
+		urlParam: 'mods',
+		chipLabel: 'Modality',
+		universe: () => availableModalities
+	});
+	const languagesFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipLabel: 'Lang',
+		universe: () => availableLanguages
+	});
+	const tasksFacet = createFacetFilter({
+		urlParam: 'tasks',
+		chipLabel: 'Task',
+		universe: () => availableTasks.map((t) => t.name)
+	});
+	const modelTypesFacet = createFacetFilter({
+		urlParam: 'mtypes',
+		chipLabel: 'Type',
+		universe: () => MODEL_TYPES
+	});
+	const modelModalitiesFacet = createFacetFilter({
+		urlParam: 'mmods',
+		chipLabel: 'Modality',
+		universe: () => MODEL_MODALITIES
+	});
+	// Pre-seed the two fixed-universe model facets so the default state
+	// (everything selected) matches the legacy behaviour.
+	modelTypesFacet.reset();
+	modelModalitiesFacet.reset();
+
+	// `scope` = benchmark-scope facets (driven by availableX, dropped on /models).
+	// `model` = model-row facets (fixed universes).
+	// `all` = everything that gets URL-synced + hydrated.
+	const scopeFacets = [taskTypesFacet, domainsFacet, modalitiesFacet, languagesFacet, tasksFacet];
+	const modelFacets = [modelTypesFacet, modelModalitiesFacet];
+	const allFacets = [...modelFacets, ...scopeFacets];
+
+	// Map for the public `toggleInSet`/`setAll` helpers — keeps FilterContent's
+	// call sites unchanged after the refactor.
+	type SetKey =
+		| 'taskTypes'
+		| 'domains'
+		| 'modalities'
+		| 'languages'
+		| 'tasks'
+		| 'modelTypes'
+		| 'modelModalities';
+	const facetByKey: Record<SetKey, FacetFilter> = {
+		taskTypes: taskTypesFacet,
+		domains: domainsFacet,
+		modalities: modalitiesFacet,
+		languages: languagesFacet,
+		tasks: tasksFacet,
+		modelTypes: modelTypesFacet,
+		modelModalities: modelModalitiesFacet
+	};
 
 	function initFor(summary: BenchmarkSummary | null) {
 		if (!summary) return;
-		const isNewBenchmark = lastBenchmarkName !== summary.benchmarkName;
-		lastBenchmarkName = summary.benchmarkName;
+		// Whole body runs inside `untrack` so calling this from an $effect
+		// (the `/benchmark/[name]` page does exactly that) doesn't subscribe
+		// the caller to any state read here. The facet helpers (`prune`,
+		// `reset`, `seed`) all call `opts.universe()` — which reads the
+		// `available*` arrays we just wrote — so without `untrack` the
+		// caller-effect would subscribe to its own writes and loop on
+		// `effect_update_depth_exceeded`. Writes still notify other
+		// subscribers normally; `untrack` only blocks the read-subscription
+		// edge.
+		untrack(() => {
+			const isNewBenchmark = lastBenchmarkName !== summary.benchmarkName;
+			lastBenchmarkName = summary.benchmarkName;
 
-		// Local accumulators — not held by $state, so plain Set is correct.
-		// Languages come from `tasksMeta[i].languages` which the backend
-		// emits in benchmark-scoped form via `scoped_task_meta_schema`
-		// (so a task pinned to `languages=['eng']` doesn't leak its full
-		// class-level union into the per-benchmark filter sidebar).
-		/* eslint-disable svelte/prefer-svelte-reactivity */
-		const domains = new Set<string>();
-		const modalities = new Set<string>();
-		const languages = new Set<string>();
-		/* eslint-enable svelte/prefer-svelte-reactivity */
-		for (const t of summary.tasksMeta) {
-			for (const d of t.domains ?? []) domains.add(d);
-			for (const m of t.modalities ?? []) modalities.add(m);
-			for (const l of t.languages ?? []) languages.add(l);
-		}
-		const sortedDomains = [...domains].sort();
-		const sortedModalities = [...modalities].sort();
-		const sortedLanguages = [...languages].sort();
+			// Local accumulators — never reactive.
+			/* eslint-disable svelte/prefer-svelte-reactivity */
+			const domains = new Set<string>();
+			const modalities = new Set<string>();
+			const languageCount = new Map<string, number>();
+			/* eslint-enable svelte/prefer-svelte-reactivity */
+			for (const t of summary.tasksMeta) {
+				for (const d of t.domains ?? []) domains.add(d);
+				for (const m of t.modalities ?? []) modalities.add(m);
+				for (const l of t.languages ?? []) languageCount.set(l, (languageCount.get(l) ?? 0) + 1);
+			}
+			const sortedDomains = [...domains].sort();
+			const sortedModalities = [...modalities].sort();
+			const sortedLanguages = [...languageCount.entries()]
+				.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+				.map(([l]) => l);
 
-		// Bracket the size slider to this benchmark's actual models. We ignore
-		// proprietary/unknown-size models (totalParamsB === 0) when computing
-		// the bounds — they pass the size filter anyway. If no model has a
-		// known size, fall back to the global defaults so the slider is still
-		// usable.
-		let lowM = Number.POSITIVE_INFINITY;
-		let highM = 0;
-		for (const row of summary.rows) {
-			const b = row.model.totalParamsB;
-			if (!b) continue;
-			const m = b * 1000;
-			if (m < lowM) lowM = m;
-			if (m > highM) highM = m;
-		}
-		const hasSizes = highM > 0 && lowM !== Number.POSITIVE_INFINITY;
-		// Round outward to a 1-significant-figure value so the slider edges
-		// land on "nice" numbers (e.g. 100M rather than 109M, 10B rather
-		// than 9.24B). This keeps the visible tick labels readable.
-		const niceLow = hasSizes ? Math.max(SIZE_MIN_M, niceDown(lowM)) : SIZE_MIN_M;
-		const niceHigh = hasSizes ? Math.min(SIZE_MAX_M, niceUp(highM)) : SIZE_MAX_M;
+			// Bracket slider bounds to the actual observed min/max — no "nice" rounding
+			// outwards, otherwise a benchmark whose largest model is 7B shows a slider
+			// edge at 10B and users think there are unloaded rows past the visible top.
+			let lowM = Number.POSITIVE_INFINITY;
+			let highM = 0;
+			for (const row of summary.rows) {
+				const b = row.model.totalParamsB;
+				if (!b) continue;
+				const m = b * 1000;
+				if (m < lowM) lowM = m;
+				if (m > highM) highM = m;
+			}
+			const hasSizes = highM > 0 && lowM !== Number.POSITIVE_INFINITY;
+			const boundLow = hasSizes ? Math.max(SIZE_MIN_M, lowM) : SIZE_MIN_M;
+			const boundHigh = hasSizes ? Math.min(SIZE_MAX_M, highM) : SIZE_MAX_M;
 
-		// Single batch of writes; we deliberately never read state.* here, so this
-		// stays a write-only operation when called from inside a $effect — no
-		// implicit subscription, no re-fire loop.
-		state.availableTaskTypes = summary.taskTypes;
-		state.availableTasks = summary.tasksMeta;
-		state.availableDomains = sortedDomains;
-		state.availableModalities = sortedModalities;
-		// Available languages are only reseeded when the benchmark changes;
-		// staying constant across same-benchmark refetches lets the
-		// language-filter `requestSummaryForLanguages` effect track its
-		// own dedupe key correctly.
-		if (isNewBenchmark) {
-			state.availableLanguages = sortedLanguages;
-		}
-		state.availableMinModelSizeM = niceLow;
-		state.availableMaxModelSizeM = niceHigh;
-		// Same-benchmark refresh (e.g. language-scoped summary refetch):
-		// leave the user's current pick state alone — only the available-*
-		// lists were updated above. Picks reset only when the benchmark
-		// actually changes (new page nav).
-		//
-		// Trim picks that reference items no longer in the new available-*
-		// universe — otherwise the sidebar's `picks/available` counter
-		// reads e.g. "9/8" when a task type the user had checked got
-		// dropped by the server-scoped summary (e.g. InstructionReranking
-		// disappearing once English is deselected). We don't ADD newly
-		// available items: the user's explicit deselections stay in force,
-		// they just get masked against the visible universe.
-		if (!isNewBenchmark) {
-			pruneToAvailable(state.taskTypes, summary.taskTypes);
-			pruneToAvailable(state.tasks, summary.tasks);
-			pruneToAvailable(state.domains, sortedDomains);
-			pruneToAvailable(state.modalities, sortedModalities);
+			availableTaskTypes = summary.taskTypes;
+			availableTasks = summary.tasksMeta;
+			availableDomains = sortedDomains;
+			availableModalities = sortedModalities;
+			// Languages only refresh on benchmark change so the language-scoped
+			// refetch dedupe key stays stable.
+			if (isNewBenchmark) {
+				availableLanguages = sortedLanguages;
+			}
+			state.availableMinModelSizeM = boundLow;
+			state.availableMaxModelSizeM = boundHigh;
+			// Same-benchmark refetch: keep picks, just trim ones no longer in the
+			// shrunk universe (otherwise sidebar shows e.g. "9/8").
+			if (!isNewBenchmark) {
+				for (const f of scopeFacets) f.prune();
+				sync();
+				return;
+			}
+			// New benchmark — reset every scope facet to its (just-updated) universe.
+			for (const f of scopeFacets) f.reset();
+			state.minModelSizeM = boundLow;
+			state.maxModelSizeM = boundHigh;
+			state.sizeActive = false;
+
+			// Layer URL params on top so deep links restore the exact view.
+			hydrateFromUrl();
 			sync();
-			return;
-		}
-		// Replace contents in place rather than swapping the SvelteSet reference.
-		// Reassigning the Set forces every chip / FilterContent subscriber to
-		// re-bind from scratch; mutating notifies once per mutation but lets
-		// consumers see the new contents on the same identity.
-		replaceSet(state.taskTypes, summary.taskTypes);
-		replaceSet(state.domains, sortedDomains);
-		replaceSet(state.modalities, sortedModalities);
-		replaceSet(state.languages, sortedLanguages);
-		replaceSet(state.tasks, summary.tasks);
-		// Reset the chosen range to the new bounds so switching benchmarks
-		// doesn't leave the slider stuck at an invisible position.
-		state.minModelSizeM = niceLow;
-		state.maxModelSizeM = niceHigh;
-		// Each new benchmark starts with the size filter disabled — only the
-		// user dragging the slider opts in. URL hydration below can flip it
-		// back on if the share link carried explicit bounds.
-		state.sizeActive = false;
-
-		// After initFor establishes the defaults, layer any URL state on top so
-		// shared deep-links restore the exact filter view.
-		hydrateFromUrl();
-		sync();
+		});
 	}
 
 	function hydrateFromUrl() {
@@ -225,48 +245,13 @@ function createFilters() {
 		if (zs === 'allow_all' || zs === 'remove_unknown' || zs === 'only_zero_shot')
 			state.zeroShot = zs;
 		if (p.get('st') === '1') state.sentenceTransformersOnly = true;
-		const mt = p.get('mtypes');
-		if (mt !== null) replaceSet(state.modelTypes, decodeSet(mt));
-		const mm = p.get('mmods');
-		if (mm !== null) replaceSet(state.modelModalities, decodeSet(mm));
-		const tt = p.get('tt');
-		if (tt !== null) replaceSet(state.taskTypes, decodeSet(tt));
-		const lang = p.get('lang');
-		if (lang !== null) replaceSet(state.languages, decodeSet(lang));
-		const dom = p.get('dom');
-		if (dom !== null) replaceSet(state.domains, decodeSet(dom));
-		const mods = p.get('mods');
-		if (mods !== null) replaceSet(state.modalities, decodeSet(mods));
-		const tks = p.get('tks');
-		if (tks !== null) replaceSet(state.tasks, decodeSet(tks));
+		// Set facets: seed delegates to FacetFilter, which intersects URL values
+		// with the current universe (silently drops unknowns from stale links).
+		for (const f of allFacets) f.seed();
 	}
 
-	// Drop entries from `target` that aren't in `available`. Used on
-	// same-benchmark refresh so the picks/available counter doesn't
-	// read "9/8" after a server-scoped refetch shrinks the universe.
-	function pruneToAvailable(target: SvelteSet<string>, available: readonly string[]) {
-		const present = new Set<string>(available);
-		for (const v of target) {
-			if (!present.has(v)) target.delete(v);
-		}
-	}
-
-	function replaceSet(target: SvelteSet<string>, source: Iterable<string>) {
-		target.clear();
-		for (const v of source) target.add(v);
-	}
-
-	// Writes the current filter state back to the URL. Each set field only
-	// appears in the URL when narrowed (not equal to its "all" baseline), so
-	// the default view stays a clean URL with no query string at all. We
-	// `untrack` the body because callers can be inside reactive contexts
-	// (e.g. `initFor` is invoked from an `$effect`) — without it, the
-	// state-reads below would bind to the outer effect and a single state
-	// change would loop the entire reactive graph.
-	//
-	// `syncTimer` debounces: 13 sites call `sync()` (one per setter), and a
-	// reset / hydrate burst calls 5-7 of them back-to-back. Coalescing to one
-	// `replaceState` per microtask collapses that to a single URL rebuild.
+	// Microtask-debounced URL sync. `untrack` prevents reactive subscribers
+	// from binding to state reads when called from inside an $effect.
 	let syncScheduled = false;
 	function sync() {
 		if (syncScheduled) return;
@@ -277,55 +262,19 @@ function createFilters() {
 		});
 	}
 	function doSync() {
-		untrack(() =>
-			updateUrl({
+		untrack(() => {
+			const patch: Record<string, string | null> = {
 				q: state.nameQuery || null,
 				minSize: state.sizeActive ? String(state.minModelSizeM) : null,
 				maxSize: state.sizeActive ? String(state.maxModelSizeM) : null,
 				avail: state.availability !== 'both' ? state.availability : null,
 				inst: state.instructions !== 'both' ? state.instructions : null,
 				zs: state.zeroShot !== 'allow_all' ? state.zeroShot : null,
-				st: state.sentenceTransformersOnly ? '1' : null,
-				mtypes: state.modelTypes.size === MODEL_TYPES.length ? null : encodeSet(state.modelTypes),
-				mmods:
-					state.modelModalities.size === MODEL_MODALITIES.length
-						? null
-						: encodeSet(state.modelModalities),
-				tt:
-					state.taskTypes.size === state.availableTaskTypes.length
-						? null
-						: encodeSet(state.taskTypes),
-				lang:
-					state.languages.size === state.availableLanguages.length
-						? null
-						: encodeSet(state.languages),
-				dom: state.domains.size === state.availableDomains.length ? null : encodeSet(state.domains),
-				mods:
-					state.modalities.size === state.availableModalities.length
-						? null
-						: encodeSet(state.modalities),
-				tks: state.tasks.size === state.availableTasks.length ? null : encodeSet(state.tasks)
-			})
-		);
-	}
-
-	// "Nice" log-rounded numbers for slider endpoints. niceDown(109) → 100,
-	// niceDown(7) → 5, niceDown(0.6) → 0.5; niceUp(7) → 10, niceUp(43) → 50.
-	function niceDown(m: number): number {
-		if (m <= 0) return 0;
-		const pow = Math.floor(Math.log10(m));
-		const base = Math.pow(10, pow);
-		const lead = m / base;
-		const stepped = lead >= 5 ? 5 : lead >= 2 ? 2 : 1;
-		return stepped * base;
-	}
-	function niceUp(m: number): number {
-		if (m <= 0) return 0;
-		const pow = Math.floor(Math.log10(m));
-		const base = Math.pow(10, pow);
-		const lead = m / base;
-		const stepped = lead <= 1 ? 1 : lead <= 2 ? 2 : lead <= 5 ? 5 : 10;
-		return stepped * base;
+				st: state.sentenceTransformersOnly ? '1' : null
+			};
+			for (const f of allFacets) patch[f.urlParam] = f.urlValue();
+			updateUrl(patch);
+		});
 	}
 
 	function resetModelFilters() {
@@ -337,41 +286,24 @@ function createFilters() {
 		state.availability = 'both';
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
-		replaceSet(state.modelTypes, MODEL_TYPES);
-		replaceSet(state.modelModalities, MODEL_MODALITIES);
+		for (const f of modelFacets) f.reset();
 		sync();
 	}
 
 	function resetCustomize() {
-		replaceSet(state.taskTypes, state.availableTaskTypes);
-		replaceSet(state.domains, state.availableDomains);
-		replaceSet(state.modalities, state.availableModalities);
-		replaceSet(state.languages, state.availableLanguages);
-		state.tasks.clear();
-		for (const t of state.availableTasks) state.tasks.add(t.name);
+		for (const f of scopeFacets) f.reset();
 		sync();
 	}
 
-	type SetKey =
-		| 'taskTypes'
-		| 'domains'
-		| 'modalities'
-		| 'languages'
-		| 'tasks'
-		| 'modelTypes'
-		| 'modelModalities';
-
 	function toggleInSet(key: SetKey, name: string) {
-		const s = state[key];
-		if (s.has(name)) s.delete(name);
-		else s.add(name);
+		facetByKey[key].toggle(name);
 		sync();
 	}
 
 	function setAll(key: SetKey, values: readonly string[], checked: boolean) {
-		const s = state[key];
-		s.clear();
-		if (checked) for (const v of values) s.add(v);
+		const f = facetByKey[key];
+		f.picked.clear();
+		if (checked) for (const v of values) f.picked.add(v);
 		sync();
 	}
 
@@ -430,41 +362,44 @@ function createFilters() {
 			state.sentenceTransformersOnly = v;
 			sync();
 		},
-		get modelTypes() {
-			return state.modelTypes;
+		// Each get returns the underlying SvelteSet — same identity-preserving
+		// contract the legacy store provided, so SummaryTable / FilterFacet
+		// subscribers don't re-bind on every benchmark switch.
+		get modelTypes(): SvelteSet<string> {
+			return modelTypesFacet.picked;
 		},
-		get modelModalities() {
-			return state.modelModalities;
+		get modelModalities(): SvelteSet<string> {
+			return modelModalitiesFacet.picked;
 		},
-		get taskTypes() {
-			return state.taskTypes;
+		get taskTypes(): SvelteSet<string> {
+			return taskTypesFacet.picked;
 		},
-		get domains() {
-			return state.domains;
+		get domains(): SvelteSet<string> {
+			return domainsFacet.picked;
 		},
-		get modalities() {
-			return state.modalities;
+		get modalities(): SvelteSet<string> {
+			return modalitiesFacet.picked;
 		},
-		get languages() {
-			return state.languages;
+		get languages(): SvelteSet<string> {
+			return languagesFacet.picked;
 		},
-		get tasks() {
-			return state.tasks;
+		get tasks(): SvelteSet<string> {
+			return tasksFacet.picked;
 		},
 		get availableTaskTypes() {
-			return state.availableTaskTypes;
+			return availableTaskTypes;
 		},
 		get availableDomains() {
-			return state.availableDomains;
+			return availableDomains;
 		},
 		get availableModalities() {
-			return state.availableModalities;
+			return availableModalities;
 		},
 		get availableLanguages() {
-			return state.availableLanguages;
+			return availableLanguages;
 		},
 		get availableTasks() {
-			return state.availableTasks;
+			return availableTasks;
 		},
 		get availableMinModelSizeM() {
 			return state.availableMinModelSizeM;
@@ -472,7 +407,19 @@ function createFilters() {
 		get availableMaxModelSizeM() {
 			return state.availableMaxModelSizeM;
 		},
+		// Facet instances exposed for chip / count derivations in FilterContent
+		// (read-only — mutations still flow through toggleInSet / setAll so the
+		// URL sync stays automatic).
+		get modelFacets(): readonly FacetFilter[] {
+			return modelFacets;
+		},
+		get scopeFacets(): readonly FacetFilter[] {
+			return scopeFacets;
+		},
 		initFor,
+		// Public for pages without a benchmark summary (e.g. /models); /benchmark
+		// calls it implicitly inside initFor.
+		hydrateFromUrl,
 		resetModelFilters,
 		resetCustomize,
 		toggleInSet,
@@ -483,41 +430,60 @@ function createFilters() {
 export const filters = createFilters();
 
 function isFullSet(selected: Set<string>, available: string[]): boolean {
-	// "Full" = every currently-visible item is picked, so no narrowing
-	// is being applied. We deliberately do NOT treat empty as "no
-	// filter": when the user clears every chip in a category they want
-	// to see nothing match (an explicit "exclude everything" gesture).
-	//
-	// Why not the cheaper `selected.size === available.length` shortcut?
-	// After a server-scoped summary refetch (e.g. language filter
-	// trims the task-type list from 9 → 8 by dropping
-	// InstructionReranking), the user's picks may still hold the
-	// original 9 minus a different element. Both sets have size 8 but
-	// contain different elements — the shortcut would falsely report
-	// "no narrowing" and applyFilters would trust the API, leaving the
-	// user's explicitly-deselected column visible.
+	// "Full" = no narrowing. Empty universe = always full; empty pick set on a
+	// populated universe = explicit "exclude everything".
+	if (available.length === 0) return true;
 	if (selected.size === 0) return false;
+	// Element-wise check (not size===size): a server-scoped refetch can shrink
+	// the universe while the user's pick set keeps a different element of the
+	// same size.
 	return available.every((x) => selected.has(x));
 }
 
-export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
-	// Visible tasks: pass type / domain / modality / explicit task selection.
-	// Language is intentionally NOT in this list — the backend already
-	// returns a language-scoped summary (via `?languages=` on /scores),
-	// so re-filtering tasks client-side by language would either be a
-	// no-op (server-trimmed lists already match) or drift wrong while
-	// the debounced refetch is in flight (showing the previous summary's
-	// task slots with current-filter narrowing produces invented values).
+// Cached per (summary, task-filter signature) so name-search keystrokes
+// reuse the previous narrowing result.
+interface NarrowingResult {
+	signature: string;
+	fullView: boolean;
+	visibleTasks: TaskMeta[];
+	taskTypesOut: string[];
+	taskNamesOut: string[];
+	tasksByType: Map<string, string[]>;
+	perRowAgg: WeakMap<
+		SummaryRow,
+		{
+			meanTask: number | null;
+			meanTaskType: number | null;
+			scoresByTaskType: Record<string, number>;
+		}
+	>;
+	// Per-task sorted (name, score) lists — backs the Borda cache,
+	// independent of the row filter (intersected at compute time).
+	sortedByTask: Map<string, readonly { name: string; v: number }[]>;
+}
+const _narrowingCache = new WeakMap<BenchmarkSummary, NarrowingResult>();
+
+function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResult {
+	// Signature of every input that flips `fullView` or changes
+	// `visibleTasks`; sets sorted so iteration order is stable.
+	const sig = [
+		lenient ? 'L' : 'S',
+		[...filters.taskTypes].sort().join('|'),
+		[...filters.domains].sort().join('|'),
+		[...filters.modalities].sort().join('|'),
+		[...filters.tasks].sort().join('|'),
+		filters.availableDomains.length,
+		filters.availableModalities.length
+	].join('§');
+	const cached = _narrowingCache.get(summary);
+	if (cached && cached.signature === sig) return cached;
+
 	const fullTypes = isFullSet(filters.taskTypes, summary.taskTypes);
 	const fullDomains = isFullSet(filters.domains, filters.availableDomains);
 	const fullModalities = isFullSet(filters.modalities, filters.availableModalities);
 	const fullTasks = isFullSet(filters.tasks, summary.tasks);
 	const fullView = fullTypes && fullDomains && fullModalities && fullTasks;
 
-	// Skip the `.filter()` allocation when no task-affecting filter is active —
-	// `visibleTasks === summary.tasksMeta`, `taskTypesOut === summary.taskTypes`,
-	// `taskNamesOut === summary.tasks`. Saves the alloc + Set creation on the
-	// common "user is only typing in the name search box" path.
 	let visibleTasks: TaskMeta[];
 	let taskTypesOut: string[];
 	let taskNamesOut: string[];
@@ -536,16 +502,11 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			if (!fullTasks && !filters.tasks.has(t.name)) return false;
 			return true;
 		});
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const visibleTaskNames = new Set(visibleTasks.map((t) => t.name));
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const visibleTaskTypes = new Set(visibleTasks.map((t) => t.type));
-		// Drop type columns no visible task feeds — backend strips spaces from
-		// display labels, so `summary.taskTypes` keys line up with `tasksMeta[i].type`.
 		taskTypesOut = summary.taskTypes.filter((t) => visibleTaskTypes.has(t));
 		taskNamesOut = summary.tasks.filter((t) => visibleTaskNames.has(t));
-		// Bucket visible tasks by raw type once so the per-row aggregate loop
-		// below is O(rows × visibleTasks) instead of O(rows × types × visibleTasks).
+		// Bucket once so the per-row aggregate loop is O(rows × visibleTasks).
 		for (const t of visibleTasks) {
 			const arr = tasksByType.get(t.type);
 			if (arr) arr.push(t.name);
@@ -553,154 +514,214 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		}
 	}
 
+	const result: NarrowingResult = {
+		signature: sig,
+		fullView,
+		visibleTasks,
+		taskTypesOut,
+		taskNamesOut,
+		tasksByType,
+		perRowAgg: new WeakMap(),
+		sortedByTask: new Map()
+	};
+	_narrowingCache.set(summary, result);
+	return result;
+}
+
+export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
+	// Empty language pick set = "exclude everything"; the backend's `?languages=`
+	// treats it as no filter, so enforce the drop client-side.
+	if (filters.availableLanguages.length > 0 && filters.languages.size === 0) {
+		return {
+			...summary,
+			rows: [],
+			tasks: [],
+			tasksMeta: [],
+			taskTypes: []
+		};
+	}
+	// Language is server-scoped via `?languages=` — don't refilter client-side.
+	const lenient =
+		filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
+	const narrow = narrowTasks(summary, lenient);
+	const { fullView, visibleTasks, taskTypesOut, taskNamesOut, tasksByType, perRowAgg } = narrow;
+
+	// All tasks filtered out → drop rows too; otherwise the table renders model
+	// names with all-`—` aggregates.
+	if (!fullView && visibleTasks.length === 0) {
+		return {
+			...summary,
+			rows: [],
+			tasks: [],
+			tasksMeta: [],
+			taskTypes: []
+		};
+	}
+
 	const q = filters.nameQuery.trim().toLowerCase();
-	const rows = summary.rows
-		.filter((row) => {
-			const m = row.model;
-			if (
-				q &&
-				!m.name.toLowerCase().includes(q) &&
-				!m.displayName.toLowerCase().includes(q) &&
-				!m.org.toLowerCase().includes(q)
-			) {
-				return false;
+	// Re-rank 1..N when an explicit filter narrows rows; name search alone is a
+	// find-in-table gesture and keeps original ranks.
+	const rowFilterActive =
+		filters.availability !== 'both' ||
+		filters.instructions !== 'both' ||
+		filters.sentenceTransformersOnly ||
+		filters.modelTypes.size !== MODEL_TYPES.length ||
+		filters.modelModalities.size !== MODEL_MODALITIES.length ||
+		filters.sizeActive ||
+		filters.zeroShot !== 'allow_all';
+	const passesRowFilter = (row: SummaryRow): boolean => {
+		const m = row.model;
+		if (q && !modelSearchKey(m).includes(q)) return false;
+		if (filters.availability === 'open' && !m.openWeights) return false;
+		if (filters.availability === 'proprietary' && m.openWeights) return false;
+
+		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
+		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
+
+		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
+
+		if (!filters.modelTypes.has(m.modelType)) return false;
+
+		if (filters.modelModalities.size < MODEL_MODALITIES.length) {
+			const mm = m.modalities ?? TEXT_ONLY;
+			let any = false;
+			for (const x of mm) {
+				if (filters.modelModalities.has(x)) {
+					any = true;
+					break;
+				}
 			}
-			if (filters.availability === 'open' && !m.openWeights) return false;
-			if (filters.availability === 'proprietary' && m.openWeights) return false;
+			if (!any) return false;
+		}
 
-			if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
-			if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
+		// Active size filter also drops unsized (proprietary) models.
+		if (filters.sizeActive) {
+			if (m.totalParamsB == null || m.totalParamsB <= 0) return false;
+			const paramsM = m.totalParamsB * 1000;
+			if (paramsM < filters.minModelSizeM) return false;
+			if (paramsM > filters.maxModelSizeM) return false;
+		}
 
-			if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
+		if (filters.zeroShot === 'only_zero_shot' && row.zeroShotPct !== 100) return false;
+		if (filters.zeroShot === 'remove_unknown' && row.zeroShotPct === -1) return false;
 
-			// Empty pick set = "deselect everything" = nothing matches.
-			// Full pick set = filter off. Partial = intersection check.
-			if (!filters.modelTypes.has(m.modelType)) return false;
+		return true;
+	};
 
-			if (filters.modelModalities.size < MODEL_MODALITIES.length) {
-				const mm = m.modalities ?? ['text'];
-				if (!mm.some((x) => filters.modelModalities.has(x))) return false;
+	let rows: SummaryRow[];
+	if (fullView) {
+		rows = summary.rows.filter(passesRowFilter);
+	} else {
+		// Strict (no language filter): every visible task must be present.
+		// Lenient (language filter on): any present value contributes — matches
+		// the backend's `_skipna_false_mean` policy.
+		const meanOrNull = (sum: number, n: number, total: number): number | null => {
+			if (lenient) return n > 0 ? sum / n : null;
+			return total > 0 && n === total ? sum / total : null;
+		};
+		const computeAgg = (row: SummaryRow) => {
+			let taskSum = 0;
+			let taskN = 0;
+			for (const t of taskNamesOut) {
+				const v = row.scoresByTask[t];
+				if (v !== undefined) {
+					taskSum += v;
+					taskN++;
+				}
 			}
+			const meanTask = meanOrNull(taskSum, taskN, taskNamesOut.length);
 
-			// Size filter is inactive until the user actually moves the slider.
-			// Once active, it both applies the [min, max] bracket AND drops
-			// unsized (proprietary) models — a deliberate "you opted in to
-			// filtering by size, so rows that can't satisfy it shouldn't pass".
-			if (filters.sizeActive) {
-				if (m.totalParamsB <= 0) return false;
-				const paramsM = m.totalParamsB * 1000;
-				if (paramsM < filters.minModelSizeM) return false;
-				if (paramsM > filters.maxModelSizeM) return false;
-			}
-
-			if (filters.zeroShot === 'only_zero_shot' && row.zeroShotPct !== 100) return false;
-			if (filters.zeroShot === 'remove_unknown' && row.zeroShotPct === -1) return false;
-
-			return true;
-		})
-		.map((row) => {
-			// Under filter: recompute every aggregate from the visible per-task
-			// scalars. Aggregation policy mirrors the backend:
-			//   • No language filter  → strict (`_skipna_false_mean`): null on
-			//     any missing task in the visible slice, so partial-coverage
-			//     models can't outrank full-coverage peers.
-			//   • Language filter ON  → lenient: the backend already switched
-			//     to lenient means for the language-scoped summary (most
-			//     models don't run every task in every language, so strict
-			//     would null nearly every cell). Mirror it here so layering
-			//     a task-type or domain filter on top of a language pick
-			//     doesn't suddenly empty the table again.
-			// `fullView` excludes languages by design, so a pure language
-			// narrowing keeps `fullView === true` and skips this branch.
-			let meanTask: number | null = row.meanTask;
-			let meanTaskType: number | null = row.meanTaskType;
-			let scoresByTaskType: Record<string, number> = row.scoresByTaskType;
-			if (!fullView) {
-				const lenient =
-					filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
-				let taskSum = 0;
-				let taskN = 0;
-				for (const t of taskNamesOut) {
-					const v = row.scoresByTask[t];
+			const scoresByTaskType: Record<string, number> = {};
+			for (const tt of taskTypesOut) {
+				const typeTasks = tasksByType.get(tt);
+				if (!typeTasks || typeTasks.length === 0) continue;
+				let typeSum = 0;
+				let typeN = 0;
+				for (const name of typeTasks) {
+					const v = row.scoresByTask[name];
 					if (v !== undefined) {
-						taskSum += v;
-						taskN++;
+						typeSum += v;
+						typeN++;
 					}
 				}
-				if (lenient) {
-					meanTask = taskN > 0 ? taskSum / taskN : null;
-				} else {
-					meanTask =
-						taskNamesOut.length > 0 && taskN === taskNamesOut.length ? taskSum / taskN : null;
-				}
-
-				scoresByTaskType = {};
-				for (const tt of taskTypesOut) {
-					const typeTasks = tasksByType.get(tt);
-					if (!typeTasks || typeTasks.length === 0) continue;
-					let typeSum = 0;
-					let typeN = 0;
-					for (const name of typeTasks) {
-						const v = row.scoresByTask[name];
-						if (v !== undefined) {
-							typeSum += v;
-							typeN++;
-						}
-					}
-					if (lenient ? typeN > 0 : typeN === typeTasks.length) {
-						scoresByTaskType[tt] = typeSum / typeN;
-					}
-				}
-
-				let mttSum = 0;
-				let mttN = 0;
-				for (const tt of taskTypesOut) {
-					const v = scoresByTaskType[tt];
-					if (v !== undefined) {
-						mttSum += v;
-						mttN++;
-					}
-				}
-				if (lenient) {
-					meanTaskType = mttN > 0 ? mttSum / mttN : null;
-				} else {
-					meanTaskType =
-						taskTypesOut.length > 0 && mttN === taskTypesOut.length ? mttSum / mttN : null;
-				}
+				const typeMean = meanOrNull(typeSum, typeN, typeTasks.length);
+				if (typeMean !== null) scoresByTaskType[tt] = typeMean;
 			}
 
-			return { ...row, meanTask, meanTaskType, scoresByTaskType };
-		});
+			let mttSum = 0;
+			let mttN = 0;
+			for (const tt of taskTypesOut) {
+				const v = scoresByTaskType[tt];
+				if (v !== undefined) {
+					mttSum += v;
+					mttN++;
+				}
+			}
+			const meanTaskType = meanOrNull(mttSum, mttN, taskTypesOut.length);
+			return { meanTask, meanTaskType, scoresByTaskType };
+		};
 
-	// Re-rank only when the task set actually changed. Row-only filters
-	// (name query, availability, model type, size, zero-shot, …) leave
-	// every visible model's relationship to the full task set intact,
-	// so the API's original Borda rank still applies — recomputing
-	// would relabel the top-visible row as #1 just because peers got
-	// hidden, which reads as a wrong ranking. Only when the task set
-	// narrows (`!fullView`) does the rank need a fresh Borda pass over
-	// the visible-task slice.
+		rows = [];
+		for (const row of summary.rows) {
+			if (!passesRowFilter(row)) continue;
+			let agg = perRowAgg.get(row);
+			if (!agg) {
+				agg = computeAgg(row);
+				perRowAgg.set(row, agg);
+			}
+			rows.push({
+				...row,
+				meanTask: agg.meanTask,
+				meanTaskType: agg.meanTaskType,
+				scoresByTaskType: agg.scoresByTaskType
+			});
+		}
+	}
+
+	// Re-rank: fresh Borda when tasks narrowed; renumber 1..N when only rows
+	// narrowed; keep API ranks for name-search-only (find-in-table gesture).
 	let rankedRows: typeof rows;
 	if (fullView) {
-		rankedRows = rows;
+		if (rowFilterActive) {
+			rankedRows = rows.map((row, i) => ({ ...row, rank: i + 1 }));
+		} else {
+			rankedRows = rows;
+		}
 	} else {
+		const { sortedByTask } = narrow;
+		if (sortedByTask.size === 0) {
+			for (const taskName of taskNamesOut) {
+				const ranked: { name: string; v: number }[] = [];
+				for (const r of summary.rows) {
+					const v = r.scoresByTask[taskName];
+					if (v !== undefined) ranked.push({ name: r.model.name, v });
+				}
+				// Stable tie-break by name for deterministic Borda points.
+				ranked.sort((a, b) => b.v - a.v || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+				sortedByTask.set(taskName, ranked);
+			}
+		}
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const visibleNames = new Set<string>();
+		for (const r of rows) visibleNames.add(r.model.name);
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const bordaPoints = new Map<string, number>();
 		for (const taskName of taskNamesOut) {
-			const ranked = rows
-				.map((r) => ({ name: r.model.name, v: r.scoresByTask[taskName] }))
-				.filter((r): r is { name: string; v: number } => r.v !== undefined)
-				.sort((a, b) => b.v - a.v);
-			ranked.forEach((r, i) => {
-				bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (ranked.length - i));
-			});
+			const ranked = sortedByTask.get(taskName);
+			if (!ranked) continue;
+			let visibleCount = 0;
+			for (const r of ranked) if (visibleNames.has(r.name)) visibleCount++;
+			let i = 0;
+			for (const r of ranked) {
+				if (!visibleNames.has(r.name)) continue;
+				bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (visibleCount - i));
+				i++;
+			}
 		}
 		rankedRows = rows
 			.map((row) => ({ row, borda: bordaPoints.get(row.model.name) ?? 0 }))
 			.sort((a, b) => {
 				if (a.borda !== b.borda) return b.borda - a.borda;
-				// Tiebreak: higher Mean(Task) first; nulls (incomplete coverage)
-				// land at the bottom of any tie.
 				const am = a.row.meanTask ?? -Infinity;
 				const bm = b.row.meanTask ?? -Infinity;
 				return bm - am;

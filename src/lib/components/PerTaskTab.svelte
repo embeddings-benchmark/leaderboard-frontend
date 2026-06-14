@@ -1,11 +1,18 @@
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
-	import { isBoundaryCross } from '$lib/cell-hover';
+	import { clampTooltipX, isBoundaryCross } from '$lib/cell-hover';
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { resolve } from '$app/paths';
-	import { bestWorstPerColumn, heat, humanizeType, rowId, slug } from '$lib/format';
+	import {
+		bestWorstPerColumn,
+		floatPinnedToTop,
+		heat,
+		humanizeType,
+		rowId,
+		slug
+	} from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { safeIdle } from '$lib/idle';
 	import MarkdownText from './MarkdownText.svelte';
@@ -32,8 +39,13 @@
 
 	interface Props {
 		summary: BenchmarkSummary;
+		// See `SummaryTable.svelte` — `false` when the pane is mounted but
+		// hidden behind another tab. Inactive panes skip the pin-state
+		// subscription so pin clicks elsewhere don't invalidate this
+		// derived.
+		active?: boolean;
 	}
-	let { summary }: Props = $props();
+	let { summary, active = true }: Props = $props();
 
 	type SortKey = 'model' | `task:${string}`;
 	const sort = createSortState<SortKey>({
@@ -50,18 +62,10 @@
 	// across every cell. 200 ms hide delay so the user can cross
 	// onto the bubble.
 	const TRAIN_TIP_MAX_WIDTH = 260;
-	const TRAIN_TIP_EDGE = 8;
 	type TrainTipState = { visible: boolean; text: string; x: number; y: number };
 	let trainTip = $state<TrainTipState>({ visible: false, text: '', x: 0, y: 0 });
 	let trainTipHideTimer: ReturnType<typeof setTimeout> | null = null;
-	function clampX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = TRAIN_TIP_MAX_WIDTH / 2;
-		const min = TRAIN_TIP_EDGE + half;
-		const max = window.innerWidth - TRAIN_TIP_EDGE - half;
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampX = (x: number) => clampTooltipX(x, TRAIN_TIP_MAX_WIDTH);
 	function cancelTrainTipHide() {
 		if (trainTipHideTimer !== null) {
 			clearTimeout(trainTipHideTimer);
@@ -93,7 +97,6 @@
 	// sticky <th>'s clipping + stacking context (same pattern as
 	// SummaryTable). One element reused across every column.
 	const TASK_TIP_MAX_WIDTH = 320;
-	const TASK_TIP_EDGE = 8;
 	type TaskTipState = {
 		visible: boolean;
 		title: string;
@@ -113,14 +116,7 @@
 		y: 0
 	});
 	let taskTipHideTimer: ReturnType<typeof setTimeout> | null = null;
-	function clampTaskTipX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = TASK_TIP_MAX_WIDTH / 2;
-		const min = TASK_TIP_EDGE + half;
-		const max = window.innerWidth - TASK_TIP_EDGE - half;
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampTaskTipX = (x: number) => clampTooltipX(x, TASK_TIP_MAX_WIDTH);
 	function cancelTaskTipHide() {
 		if (taskTipHideTimer !== null) {
 			clearTimeout(taskTipHideTimer);
@@ -214,9 +210,8 @@
 				return (va - vb) * dir;
 			});
 		}
-		if (pinnedModels.size === 0) return rows;
-		const isPinned = (r: SummaryRow) => pinnedModels.has(rowId(r));
-		return [...rows.filter(isPinned), ...rows.filter((r) => !isPinned(r))];
+		if (!active) return rows;
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(rowId(r)), pinnedModels.size);
 	});
 
 	// Heaviest table on the page (~100k cells). Stream rows in idle
@@ -294,15 +289,17 @@
 		</p>
 		<div class="tbl-scroll" use:stickyHScroll>
 			<table class="tbl" use:stickyHead>
+				<caption class="sr-only">Per-task scores</caption>
 				<thead>
 					<tr>
-						<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
-						<th class="tbl-sticky-col" aria-sort={sort.aria('model')}>
+						<th scope="col" class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
+						<th scope="col" class="tbl-sticky-col" aria-sort={sort.aria('model')}>
 							<SortHeader {sort} field="model" label="Model" align="left" />
 						</th>
 						{#each sortedTasks as task (task)}
 							{@const k = `task:${task}` as SortKey}
 							<th
+								scope="col"
 								class="tbl-num"
 								aria-sort={sort.aria(k)}
 								onpointerenter={(e) => showTaskTip(e, task)}
@@ -327,7 +324,8 @@
 							<td class="tbl-pin-col tbl-sticky-pin">
 								<PinButton name={rid} />
 							</td>
-							<td
+							<th
+								scope="row"
 								class="tbl-sticky-col"
 								data-model-type={row.model.modelType}
 								onpointerover={(e) => onCellEnter(e, row)}
@@ -336,7 +334,7 @@
 								onfocusout={onCellLeave}
 							>
 								<ModelCellName model={row.model} experiments={row.experiments} />
-							</td>
+							</th>
 							{#each sortedTasks as task (task)}
 								{@const trained = rowTrained?.has(task) ?? false}
 								{@const v = scoreFor(row, task)}
@@ -368,7 +366,7 @@
 
 	{#if trainTip.visible}
 		<div
-			class="train-tip"
+			class="train-tip tip-portal tip-portal-interactive"
 			role="tooltip"
 			style:left="{trainTip.x}px"
 			style:top="{trainTip.y}px"
@@ -381,7 +379,7 @@
 
 	{#if taskTip.visible}
 		<div
-			class="task-tip"
+			class="task-tip tip-portal tip-portal-interactive"
 			role="tooltip"
 			style:left="{taskTip.x}px"
 			style:top="{taskTip.y}px"
@@ -410,73 +408,24 @@
 	.wrap {
 		padding-top: 8px;
 	}
-	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
 		margin: 0 0 12px;
 	}
-	/* Task column headers can be long ("AmazonReviewsClassification…") — clip
-	   them so they don't push the column impossibly wide. */
-	/* Trained-on warning sits inline after the score number with a small
-	   gap so it doesn't crowd the digits. The cell already keeps its
-	   heat-shaded background, so the ⚠️ is purely additive. The
-	   tooltip itself lives in a fixed-positioned portal rendered as a
-	   sibling of `.tbl-scroll` (see `.train-tip` below) — JS sets x/y
-	   from the icon's getBoundingClientRect on pointerenter, so the
-	   bubble appears instantly without re-layout cost or browser
-	   `title` delay, and isn't clipped by the table's overflow-x. */
-	.trained-warn {
-		/* Reset <button> chrome so the inline ⚠️ icon stays purely
-		   typographic — it's a button only so a static role / tabindex
-		   isn't needed for the hover-tooltip handlers. */
-		all: unset;
-		margin-left: 4px;
-		font-size: 11px;
-		line-height: 1;
-		cursor: help;
-	}
-	.trained-warn:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 1px;
-		border-radius: 3px;
-	}
+	/* `.trained-warn` (inline ⚠️ icon) lives in
+	   src/lib/styles/leaderboard-table.css — shared with ModelScoreTable.
+	   Tooltip lives in a fixed-positioned portal sibling of `.tbl-scroll`
+	   so it isn't clipped by the table's overflow-x; JS sets x/y from the
+	   icon's getBoundingClientRect, avoiding the browser-native `title`
+	   delay. */
 	.train-tip {
-		position: fixed;
-		transform: translate(-50%, 6px);
 		max-width: 260px;
 		padding: 6px 10px;
-		font-family: var(--font-sans);
 		font-size: 11px;
 		font-weight: 500;
 		line-height: 1.4;
-		color: var(--tip-fg);
-		background: var(--tip-bg);
-		border-radius: 6px;
-		box-shadow: 0 8px 18px rgb(var(--shadow-tint) / 0.22);
-		text-align: left;
-		white-space: normal;
-		z-index: 1000;
-		pointer-events: auto;
 	}
-	/* Column-header tip — same dark-portal treatment as the
-	   trained-on bubble and SummaryTable's column tip. */
 	.task-tip {
-		position: fixed;
-		transform: translate(-50%, 6px);
-		max-width: 320px;
 		min-width: 220px;
-		padding: 10px 12px;
-		font-family: var(--font-sans);
-		font-size: 12px;
-		font-weight: 400;
-		line-height: 1.5;
-		color: var(--tip-fg);
-		background: var(--tip-bg);
-		border-radius: 8px;
-		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
-		text-align: left;
-		white-space: normal;
-		z-index: 1000;
-		pointer-events: auto;
 	}
 	.task-tip-title {
 		display: block;

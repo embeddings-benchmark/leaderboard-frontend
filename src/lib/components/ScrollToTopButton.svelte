@@ -1,14 +1,21 @@
-<!-- Bottom-left floating "back to top" pill; bookends `ShareUrlButton`. -->
+<!-- Bottom-left floating "back to top" pill; bookends `ShareUrlButton`.
+     IntersectionObserver on a sentinel at top: 320px replaces a per-scroll
+     listener. FUTURE: `@container scroll-state(scrollable: top)` on the root
+     would drop the JS once it leaves Chrome-only. -->
 <script lang="ts">
+	import ArrowUp from 'lucide-svelte/icons/arrow-up';
+
 	let visible = $state(false);
+	let sentinel: HTMLDivElement | undefined = $state();
 
 	$effect(() => {
-		const onScroll = () => {
-			visible = window.scrollY > 320;
-		};
-		onScroll();
-		window.addEventListener('scroll', onScroll, { passive: true });
-		return () => window.removeEventListener('scroll', onScroll);
+		if (!sentinel) return;
+		const io = new IntersectionObserver(([entry]) => {
+			// Sentinel sits at 320px; out of view = user has scrolled past it.
+			visible = !entry.isIntersecting;
+		});
+		io.observe(sentinel);
+		return () => io.disconnect();
 	});
 
 	function scrollTop() {
@@ -16,9 +23,11 @@
 	}
 </script>
 
+<div bind:this={sentinel} class="scroll-sentinel" aria-hidden="true"></div>
+
 <button
 	type="button"
-	class="top-btn"
+	class="top-btn floating-pill"
 	class:visible
 	aria-label="Back to top"
 	title="Back to top"
@@ -26,45 +35,27 @@
 	aria-hidden={!visible}
 	onclick={scrollTop}
 >
-	<svg
-		viewBox="0 0 24 24"
-		width="16"
-		height="16"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2.2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		aria-hidden="true"
-	>
-		<path d="M12 19V5" />
-		<path d="m5 12 7-7 7 7" />
-	</svg>
+	<ArrowUp size={16} strokeWidth={2.2} aria-hidden="true" />
 	<span>Top</span>
 </button>
 
 <style>
+	/* `position: absolute` (not `fixed`) so the sentinel sits at a fixed
+	   document position rather than scrolling with the viewport. */
+	.scroll-sentinel {
+		position: absolute;
+		top: 320px;
+		left: 0;
+		width: 1px;
+		height: 1px;
+		pointer-events: none;
+		visibility: hidden;
+	}
 	.top-btn {
 		position: fixed;
-		left: 22px;
-		bottom: 22px;
+		left: max(22px, env(safe-area-inset-left));
+		bottom: max(22px, env(safe-area-inset-bottom));
 		z-index: 60;
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		height: 38px;
-		padding: 0 14px;
-		font-size: 13px;
-		font-weight: 600;
-		font-family: inherit;
-		color: var(--primary-strong);
-		background: var(--surface);
-		border: 1.5px solid var(--primary);
-		border-radius: 999px;
-		box-shadow:
-			0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
-			0 6px 18px rgb(var(--shadow-tint) / 0.12);
-		cursor: pointer;
 		opacity: 0;
 		pointer-events: none;
 		transform: translateY(6px);
@@ -82,22 +73,7 @@
 		transform: translateY(0);
 	}
 	.top-btn:hover {
-		background: color-mix(in srgb, var(--primary) 12%, var(--surface));
-		border-color: var(--primary-strong);
-		box-shadow:
-			0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent),
-			0 10px 22px rgb(var(--shadow-tint) / 0.16);
 		transform: translateY(-1px);
-	}
-	.top-btn:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 2px;
-	}
-	@supports (padding: env(safe-area-inset-bottom)) {
-		.top-btn {
-			bottom: max(22px, env(safe-area-inset-bottom));
-			left: max(22px, env(safe-area-inset-left));
-		}
 	}
 	@media (max-width: 480px) {
 		.top-btn span {

@@ -1,19 +1,28 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-	webServer: {
-		// PUBLIC_USE_MOCK=1 makes service.ts return the deterministic mock data
-		// instead of throwing on a missing PUBLIC_API_URL — so the e2e suite
-		// runs against a self-contained build with no backend dependency.
-		// PUBLIC_API_URL is explicitly cleared so a developer's `.env.local`
-		// (which may point at a local backend) doesn't get baked into the
-		// test build — service.ts prefers API over USE_MOCK when both are set.
-		command: 'npm run build && npm run preview -- --port 4173',
-		env: { PUBLIC_USE_MOCK: '1', PUBLIC_API_URL: '' },
-		port: 4173,
-		reuseExistingServer: true,
-		timeout: 180_000
-	},
+	// Two-stage webServer: the mock API boots first, then the build (which
+	// hits the mock during prerender `entries()`) and preview run pointed
+	// at it. `wait-on` blocks the build until the mock's port is bound,
+	// avoiding a race during `vite build`.
+	webServer: [
+		{
+			command: 'npx tsx tests/mock-api.ts',
+			port: 8787,
+			reuseExistingServer: true,
+			timeout: 30_000
+		},
+		{
+			// Custom `tests/preview-server.mjs` over `npm run preview` because
+			// vite preview fails to URL-decode benchmark filenames with
+			// special chars (parens / commas) — see comment in that file.
+			command: 'npx wait-on -t 30s tcp:8787 && npm run build && node tests/preview-server.mjs',
+			env: { PUBLIC_API_URL: 'http://localhost:8787' },
+			port: 4173,
+			reuseExistingServer: true,
+			timeout: 180_000
+		}
+	],
 	use: { baseURL: 'http://localhost:4173' },
 	testMatch: '**/*.e2e.{ts,js}',
 	forbidOnly: !!process.env.CI,

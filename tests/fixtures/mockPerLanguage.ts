@@ -3,7 +3,7 @@
 // formula doesn't ship in the always-loaded chunk — it'll disappear entirely
 // once the backend exposes the real per-language breakdown.
 
-import type { SummaryRow } from '$lib/types';
+import type { SummaryRow } from '../../src/lib/types';
 
 /**
  * Deterministic synthetic score for a (row, langIdx) pair.

@@ -16,9 +16,14 @@ describe('encodeSet / decodeSet', () => {
 		expect(decodeSet(encoded)).toEqual(['MTEB(eng, v2)', 'BEIR']);
 	});
 
-	it('empty / falsy values drop out of the encoded form', () => {
-		expect(encodeSet([])).toBeNull();
-		expect(encodeSet(['', '', ''])).toBeNull();
+	it('empty / falsy values produce an empty string, not null', () => {
+		// Empty input serialises as `''` (not `null`) so it round-trips
+		// through the URL as `?key=` — a "user deselected everything"
+		// gesture distinct from "no param at all" (= no narrowing).
+		// `updateUrl`'s null-vs-empty-string handling consumes this
+		// distinction; see url-state.ts.
+		expect(encodeSet([])).toBe('');
+		expect(encodeSet(['', '', ''])).toBe('');
 		expect(encodeSet(['a', '', 'b'])).toBe('a,b');
 	});
 

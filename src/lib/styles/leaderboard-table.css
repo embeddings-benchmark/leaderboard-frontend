@@ -35,7 +35,6 @@
 	border-radius: 8px;
 	background: var(--surface);
 	box-shadow: var(--shadow-sm);
-	-webkit-overflow-scrolling: touch;
 	overscroll-behavior-x: contain;
 	/* `contain: layout style paint` isolates the table's layout/style/paint
 	   cost from the rest of the page — a hover or sort-indicator change
@@ -90,10 +89,10 @@
    the chained selector beats `.heat-N` 0,0,2,3 vs 0,0,1,0 and every even
    row paints `--row-alt` over its heat shade. Pinned rows below keep their
    full specificity so they stay visually distinct over heat. */
-:where(.tbl tbody tr:nth-child(even)) td {
+:where(.tbl tbody tr:nth-child(even)) :is(td, th) {
 	background: var(--row-alt);
 }
-.tbl tbody tr:hover td {
+.tbl tbody tr:hover :is(td, th) {
 	/* Layer a translucent dark over the cell instead of swapping
 	   the background. Heat-shaded score cells set their own
 	   `background-color: color-mix(...)`, which has higher
@@ -105,10 +104,13 @@
 	   "fill the box" trick. */
 	box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 7%, transparent);
 }
-.tbl tbody tr.pinned td {
-	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+.tbl tbody tr.pinned :is(td, th) {
+	background: var(--row-pinned-bg);
 }
-.tbl tbody tr.pinned + tr:not(.pinned) td {
+.tbl tbody tr.pinned:nth-child(even) :is(td, th) {
+	background: var(--row-pinned-bg-alt);
+}
+.tbl tbody tr.pinned + tr:not(.pinned) :is(td, th) {
 	border-top: 2px solid color-mix(in srgb, var(--primary) 50%, var(--border));
 }
 
@@ -176,11 +178,27 @@
 	padding: 0;
 	text-align: center;
 }
+/* Pin column width — single source of truth so `.tbl-sticky-col` anchors
+   at the same offset and the model column can't slip under the pin cell
+   if a future change adds content. 44px gives the 22px pin button ~11px
+   of breathing room on each side. */
+.tbl {
+	--pin-col-w: 44px;
+	/* Pinned-row tints — a base for odd rows and a slightly darker
+	   alt for even rows so pinned rows keep their own zebra rhythm.
+	   `--row-pinned-bg-alt` mixes the pinned tint with `--row-alt`
+	   so the difference scales with the theme automatically. */
+	--row-pinned-bg: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+	--row-pinned-bg-alt: color-mix(in srgb, var(--primary-soft) 65%, var(--row-alt));
+}
 .tbl-sticky-pin {
 	position: sticky;
 	left: 0;
 	background: var(--surface);
 	z-index: 2;
+	width: var(--pin-col-w);
+	min-width: var(--pin-col-w);
+	max-width: var(--pin-col-w);
 }
 .tbl thead th.tbl-sticky-pin {
 	background: var(--surface-muted);
@@ -189,11 +207,11 @@
 .tbl tbody tr:nth-child(even) td.tbl-sticky-pin {
 	background: var(--row-alt);
 }
-.tbl tbody tr:hover td.tbl-sticky-pin {
-	background: var(--row-hover);
-}
 .tbl tbody tr.pinned td.tbl-sticky-pin {
-	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+	background: var(--row-pinned-bg);
+}
+.tbl tbody tr.pinned:nth-child(even) td.tbl-sticky-pin {
+	background: var(--row-pinned-bg-alt);
 }
 
 .tbl-pin-btn {
@@ -232,7 +250,7 @@
    SummaryTable overrides per-model-type tints in its own \3c style>). */
 .tbl-sticky-col {
 	position: sticky;
-	left: 32px;
+	left: var(--pin-col-w);
 	background: var(--surface);
 	z-index: 2;
 	min-width: 220px;
@@ -244,14 +262,21 @@
 	background: var(--surface-muted);
 	z-index: 3;
 }
-.tbl tbody tr:nth-child(even) td.tbl-sticky-col {
+/* Reset UA `<th>` defaults (centered, bold) on every row-header cell in
+   any leaderboard table. Per-component sticky classes (.sticky-model,
+   .tbl-sticky-col, .sticky) share this base. */
+.tbl tbody th {
+	font-weight: normal;
+	text-align: start;
+}
+.tbl tbody tr:nth-child(even) th.tbl-sticky-col {
 	background: var(--row-alt);
 }
-.tbl tbody tr:hover td.tbl-sticky-col {
-	background: var(--row-hover);
+.tbl tbody tr.pinned th.tbl-sticky-col {
+	background: var(--row-pinned-bg);
 }
-.tbl tbody tr.pinned td.tbl-sticky-col {
-	background: color-mix(in srgb, var(--primary-soft) 65%, var(--surface));
+.tbl tbody tr.pinned:nth-child(even) th.tbl-sticky-col {
+	background: var(--row-pinned-bg-alt);
 }
 
 /* Mobile: a 220 px sticky Model column behind a 32 px pin column
@@ -327,4 +352,143 @@
 	background: var(--surface-muted);
 	color: var(--ink-strong);
 	font-variant-numeric: tabular-nums;
+}
+
+/* ─── Overview-page tables (Benchmarks / Models / Tasks index views) ─────
+   The `stickyHead` action clones the `<thead>` into a viewport-pinned
+   overlay. `--sticky-head-base` overrides the bar's `offsetHeight` (which
+   includes a 1px border) with the CSS header-height so the overlay aligns
+   exactly with the sticky `.toolbar`. `--search-group-h` matches the
+   toolbar's height — 56px in the one-row flex layout, 102px in the phone
+   grid layout (see app.css). */
+.tbl-overview {
+	--search-group-h: 56px;
+	--sticky-head-base: var(--header-height);
+	--sticky-head-extra: var(--search-group-h);
+}
+@media (max-width: 480px) {
+	.tbl-overview {
+		--search-group-h: 102px;
+	}
+}
+.tbl-overview .tbl {
+	width: 100%;
+}
+.tbl-overview .tbl-col-name {
+	min-width: 220px;
+	max-width: 380px;
+}
+.tbl-overview .tbl-col-num {
+	width: 1%;
+}
+.tbl-overview .tbl-col-chips {
+	min-width: 140px;
+	padding: 6px 12px;
+	white-space: normal;
+}
+.tbl-overview tbody th.tbl-col-name {
+	padding: 0;
+}
+.tbl-overview .tbl-row-link {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 12px;
+	color: var(--text);
+	text-decoration: none;
+	line-height: 1.35;
+}
+.tbl-overview .tbl-row-link:hover .tbl-row-title {
+	color: var(--primary-strong);
+}
+/* Make the whole row clickable — the link's `::after` pseudo is
+   absolutely positioned over the entire `<tr>` (which is the nearest
+   positioned ancestor). Cells stay visually as-is; clicks anywhere
+   navigate via the link. */
+.tbl-overview tbody tr {
+	position: relative;
+}
+.tbl-overview .tbl-row-link::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
+.tbl-overview .row-link-icon {
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 10px;
+}
+.tbl-overview .row-icon {
+	--icon-size: 24px;
+	--icon-font-size: 16px;
+	margin-top: 1px;
+}
+.tbl-overview .row-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.tbl-overview .tbl-row-title {
+	font-weight: 600;
+	word-break: break-word;
+	white-space: normal;
+}
+.tbl-overview .tbl-row-sub {
+	font-size: 11px;
+	color: var(--text-subtle);
+}
+.tbl-overview .tbl-row-id {
+	font-size: 11px;
+	color: var(--text-subtle);
+	font-family: var(--font-mono);
+}
+.tbl-overview .tbl-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+/* Per-stype tinted chip — `data-stype` pulls `--category-tint(-fg)` from
+   the global map in app.css, matching the task card's group-chip look. */
+.tbl-stype-chip {
+	display: inline-block;
+	padding: 2px 7px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	border-radius: 999px;
+	background: var(--category-tint, var(--surface-muted));
+	color: var(--category-tint-fg, var(--text-muted));
+	border: 1px solid color-mix(in srgb, var(--category-tint-fg, var(--border)) 30%, transparent);
+	white-space: nowrap;
+}
+/* Model-type tint chip (dense/cross-encoder/late-interaction/...). */
+.tbl-type-chip {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: 999px;
+	text-transform: lowercase;
+	background: var(--category-tint, var(--surface-muted));
+	color: var(--category-tint-fg, var(--text-muted));
+	border: 1px solid color-mix(in srgb, var(--category-tint-fg, var(--border)) 35%, transparent);
+}
+/* Inline ⚠️ icon for "model trained on this task" — used by PerTaskTab and
+   ModelScoreTable. Button reset so it renders as a pure typographic icon;
+   the <button> tag exists so hover/focus tooltip handlers don't need a
+   role/tabindex polyfill. */
+.trained-warn {
+	all: unset;
+	margin-left: 4px;
+	font-size: 11px;
+	line-height: 1;
+	cursor: help;
+}
+.trained-warn:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 1px;
+	border-radius: 3px;
 }

@@ -2,9 +2,9 @@ name: Type check
 
 on:
   push:
-    branches: [main, integration]
+    branches: [main]
   pull_request:
-    branches: [main, integration]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -14,14 +14,11 @@ concurrency:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
+    env:
+      PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL || 'https://mteb-leaderboard-backend.hf.space' }}
+      PUBLIC_SITE_URL: ${{ vars.HF_SITE_URL || 'https://mteb-leaderboardv3.hf.space' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/common
       - name: svelte-check
-        # `$env/static/public` types are generated from env vars present
-        # at `svelte-kit sync` time. CI has no .env, so seed the public
-        # vars here — values don't matter, only that the keys exist.
-        env:
-          PUBLIC_API_URL: https://mteb-leaderboard-backend.hf.space
-          PUBLIC_SITE_URL: https://mteb-leaderboardv3.hf.space
         run: npm run check

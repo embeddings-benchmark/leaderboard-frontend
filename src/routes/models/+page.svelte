@@ -1,67 +1,71 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { SvelteSet } from 'svelte/reactivity';
-	import { loadModels } from '$lib/data/service';
 	import { safeIdle } from '$lib/idle';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import ModelsTable from '$lib/components/ModelsTable.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { sortModalities } from '$lib/format';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
+	import type { SortState } from '$lib/stores/sort.svelte';
 	import type { ModelMeta } from '$lib/types';
-	import { modelPath, fmtInt } from '$lib/format';
+	import {
+		ariaSort,
+		COLLATOR,
+		fmtInt,
+		fmtParamsCompact,
+		modelPath,
+		modelSearchKey,
+		sortIcon,
+		sortModalities
+	} from '$lib/format';
+	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
+	import { getParam, updateUrl } from '$lib/url-state';
+	import type { PageData } from './$types';
+	import type { ModelsData } from './+page';
 
-	let ALL_MODELS = $state<ModelMeta[]>([]);
-	let loadingData = $state(true);
+	let { data }: { data: PageData } = $props();
+
+	// Stale-guard via `data.models === p` so a slow earlier promise can't
+	// overwrite a fresh nav.
+	let resolved = $state<ModelsData | null>(null);
 	let loadError = $state<string | null>(null);
-
-	// Local language filter state. Lives in the page (not the shared
-	// `filters` store) because /models is the only place that uses it.
-	// Same "all on = filter off" semantic as the shared store:
-	// `languagesPicked.size === LANGUAGES.length` ⇒ no narrowing.
-	// The UI (search input, cap-and-expand, pills) is rendered inside
-	// the shared FilterSidebar — we just pass the data and handlers in.
-	let LANGUAGES = $state<string[]>([]);
-	const languagesPicked = new SvelteSet<string>();
-
 	$effect(() => {
-		// Re-fetch whenever the modality picker (now in the FilterSidebar)
-		// changes. When all modalities are selected we omit the param so the
-		// server returns the full registry from its hot cache slot.
-		const all = filters.modelModalities.size === MODEL_MODALITIES.length;
-		const mods = all ? undefined : [...filters.modelModalities];
-		loadingData = true;
+		const p = data.models;
 		loadError = null;
-		loadModels(mods ? { modalities: mods } : {})
-			.then((m) => {
-				ALL_MODELS = m;
-				// Compute available languages from the loaded models.
-				// `ModelMeta.languages` may be missing (older backends, models
-				// with no declared language scope) — those rows pass the
-				// filter trivially via the "everything checked" default.
-				// Plain Set is correct here — used as a throwaway local
-				// accumulator, never read reactively.
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const langSet = new Set<string>();
-				for (const x of m) for (const l of x.languages ?? []) langSet.add(l);
-				LANGUAGES = [...langSet].sort();
-				languagesPicked.clear();
-				for (const l of LANGUAGES) languagesPicked.add(l);
-				loadingData = false;
-			})
-			.catch((e) => {
-				loadError = e instanceof Error ? e.message : String(e);
-				loadingData = false;
-			});
+		p.then((r) => {
+			if (data.models === p) resolved = r;
+		}).catch((e) => {
+			if (data.models === p) loadError = e instanceof Error ? e.message : String(e);
+		});
+	});
+
+	let ALL_MODELS = $derived<ModelMeta[]>(resolved?.models ?? []);
+
+	// Page-local — /models is the only page with this language pill list.
+	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
+	const languageFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipLabel: 'Lang',
+		universe: () => LANGUAGES
+	});
+	const languagesPicked = languageFacet.picked;
+	$effect(() => {
+		if (resolved) languageFacet.seed();
 	});
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
+		{ id: 'type', label: 'Type' },
 		{ id: 'params', label: 'Parameters' },
+		{ id: 'embedDim', label: 'Embed dim' },
+		{ id: 'maxTokens', label: 'Max tokens' },
 		{ id: 'released', label: 'Release date' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];
@@ -71,13 +75,28 @@
 	// that default; the explicit toggle below lets them override.
 	const NATURAL_DIR: Record<SortId, SortDir> = {
 		name: 'asc',
+		type: 'asc',
 		params: 'desc',
+		embedDim: 'desc',
+		maxTokens: 'desc',
 		released: 'desc'
 	};
-	// Default sort: newest release first. Surfaces just-shipped models at
-	// the top so visitors see what's current without scrolling.
-	let sort = $state<SortId>('released');
-	let sortDir = $state<SortDir>(NATURAL_DIR.released);
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
+	const SORT_IDS = new Set(SORTS.map((s) => s.id));
+	const DEFAULT_SORT: SortId = 'released';
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	// Gate URL writes until the onMount URL→state sync has run, otherwise the
+	// default-state write nukes deep-link params.
+	let urlHydrated = $state(false);
+	$effect(() => {
+		if (!urlHydrated) return;
+		const isDefault = sort === DEFAULT_SORT && sortDir === NATURAL_DIR[DEFAULT_SORT];
+		updateUrl({
+			's.models': isDefault ? null : sort,
+			'd.models': isDefault ? null : sortDir
+		});
+	});
 
 	function onSortKeyChange(next: SortId) {
 		sort = next;
@@ -87,71 +106,140 @@
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
 
+	let view = $state<ViewMode>('cards');
+	$effect(() => {
+		if (!urlHydrated) return;
+		updateUrl({ view: view === 'cards' ? null : view });
+	});
+
+	// Page-local `?langs=` sync; shared filters handle their own params.
+	// `resolved` gate: empty pre-load universe would delete `?langs=` deep links.
+	$effect(() => {
+		if (!urlHydrated || !resolved) return;
+		updateUrl({ langs: languageFacet.urlValue() });
+	});
+
+	onMount(() => {
+		const us = getParam('s.models');
+		const ud = getParam('d.models');
+		const uv = getParam('view');
+		if (us && SORT_IDS.has(us as SortId)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		// No summary here, so call hydrateFromUrl directly.
+		filters.hydrateFromUrl();
+		urlHydrated = true;
+	});
+	const sortAdapter: SortState<SortId> = {
+		get key() {
+			return sort;
+		},
+		get dir() {
+			return sortDir;
+		},
+		click(k: SortId) {
+			if (sort !== k) onSortKeyChange(k);
+			else toggleSortDir();
+		},
+		icon(k: SortId) {
+			return sortIcon(k, sort, sortDir, '↕');
+		},
+		aria(k: SortId) {
+			return ariaSort(k, sort, sortDir);
+		}
+	};
+
 	// Apply the shared leaderboard filter store's predicates to a flat model
 	// list. Same logic as applyFilters() in filters.svelte.ts, just minus the
 	// benchmark-scope / sort / re-rank parts that only make sense for a
 	// summary's rows.
-	function passes(m: ModelMeta): boolean {
+	function buildPasses(): (m: ModelMeta) => boolean {
+		// All cross-row inputs read once at the top so the per-row predicate
+		// doesn't re-read them 800x per keystroke.
 		const q = filters.nameQuery.trim().toLowerCase();
-		if (
-			q &&
-			!m.name.toLowerCase().includes(q) &&
-			!m.displayName.toLowerCase().includes(q) &&
-			!m.org.toLowerCase().includes(q)
-		)
-			return false;
-		if (filters.availability === 'open' && !m.openWeights) return false;
-		if (filters.availability === 'proprietary' && m.openWeights) return false;
-		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
-		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
-		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
-		// Empty pick set = "deselect everything" → nothing matches.
-		if (!filters.modelTypes.has(m.modelType)) return false;
-		if (m.totalParamsB > 0) {
-			const paramsM = m.totalParamsB * 1000;
-			if (paramsM < filters.minModelSizeM) return false;
-			if (paramsM > filters.maxModelSizeM) return false;
-		}
-		// Language predicate: "all on" = filter off; otherwise require
-		// at least one declared language to be in the picked set.
-		// Models with no declared languages (`undefined`/`[]`) get a
-		// pass — language metadata is optional upstream and we don't
-		// want to silently drop pre-tagged models.
-		if (LANGUAGES.length > 0 && languagesPicked.size !== LANGUAGES.length) {
-			const mlangs = m.languages ?? [];
-			if (mlangs.length > 0 && !mlangs.some((l) => languagesPicked.has(l))) return false;
-		}
-		return true;
-	}
-
-	function toggleLanguage(l: string) {
-		if (languagesPicked.has(l)) languagesPicked.delete(l);
-		else languagesPicked.add(l);
-	}
-	function toggleAllLanguages() {
-		if (languagesPicked.size === LANGUAGES.length) languagesPicked.clear();
-		else for (const l of LANGUAGES) languagesPicked.add(l);
+		const availability = filters.availability;
+		const instructions = filters.instructions;
+		const stOnly = filters.sentenceTransformersOnly;
+		const modelTypes = filters.modelTypes;
+		const modelTypesSize = modelTypes.size;
+		const sizeMin = filters.minModelSizeM;
+		const sizeMax = filters.maxModelSizeM;
+		const sizeActive = filters.sizeActive;
+		const langPicked = languagesPicked;
+		const langCount = LANGUAGES.length;
+		const langActive = langCount > 0 && langPicked.size !== langCount;
+		// Client-side modality filter; models without declared modalities default to ['text'].
+		const modalitiesPicked = filters.modelModalities;
+		const modalitiesActive = modalitiesPicked.size !== MODEL_MODALITIES.length;
+		return (m: ModelMeta) => {
+			if (q && !modelSearchKey(m).includes(q)) return false;
+			if (availability === 'open' && !m.openWeights) return false;
+			if (availability === 'proprietary' && m.openWeights) return false;
+			if (instructions === 'only_instruction' && !m.instructionTuned) return false;
+			if (instructions === 'only_non_instruction' && m.instructionTuned) return false;
+			if (stOnly && !m.sentenceTransformersCompatible) return false;
+			// Empty pick set = "deselect everything" → nothing matches.
+			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
+			if (modalitiesActive) {
+				const mods = m.modalities ?? ['text'];
+				let any = false;
+				for (const x of mods) {
+					if (modalitiesPicked.has(x)) {
+						any = true;
+						break;
+					}
+				}
+				if (!any) return false;
+			}
+			if (sizeActive) {
+				if (m.totalParamsB == null || m.totalParamsB <= 0) return false;
+				const paramsM = m.totalParamsB * 1000;
+				if (paramsM < sizeMin) return false;
+				if (paramsM > sizeMax) return false;
+			}
+			// Language predicate: "all on" = filter off; otherwise require
+			// at least one declared language to be in the picked set.
+			// Models with no declared languages (`undefined`/`[]`) get a
+			// pass — language metadata is optional upstream and we don't
+			// want to silently drop pre-tagged models.
+			if (langActive) {
+				const mlangs = m.languages;
+				if (mlangs && mlangs.length > 0 && !mlangs.some((l) => langPicked.has(l))) return false;
+			}
+			return true;
+		};
 	}
 
 	// Split filter / sort so name-query keystrokes (which only narrow rows)
 	// don't trigger a full re-sort. The sort only re-runs when its inputs
 	// (`sort`, `sortDir`, or the filtered list identity) change.
-	let matched = $derived(ALL_MODELS.filter(passes));
+	let matched = $derived.by(() => ALL_MODELS.filter(buildPasses()));
 	let filtered = $derived.by(() => {
 		const list = [...matched];
 		list.sort((a, b) => {
 			let cmp: number;
 			if (sort === 'name') {
-				cmp = a.name.localeCompare(b.name);
+				cmp = COLLATOR.compare(a.name, b.name);
+			} else if (sort === 'type') {
+				cmp = COLLATOR.compare(a.modelType ?? '', b.modelType ?? '');
 			} else if (sort === 'params') {
 				const aP = a.totalParamsB || -1;
 				const bP = b.totalParamsB || -1;
 				cmp = aP - bP;
+			} else if (sort === 'embedDim') {
+				cmp = (a.embeddingDim ?? -1) - (b.embeddingDim ?? -1);
+			} else if (sort === 'maxTokens') {
+				cmp = (a.maxTokens ?? -1) - (b.maxTokens ?? -1);
 			} else if (sort === 'released') {
-				cmp = (a.releaseDate ?? '').localeCompare(b.releaseDate ?? '');
+				cmp = COLLATOR.compare(a.releaseDate ?? '', b.releaseDate ?? '');
 			} else {
 				cmp = 0;
 			}
+			if (cmp === 0) cmp = COLLATOR.compare(a.name, b.name);
 			return sortDir === 'asc' ? cmp : -cmp;
 		});
 		return list;
@@ -189,11 +277,6 @@
 		}, 80);
 	});
 	let visibleModels = $derived(filtered.slice(0, visibleCount));
-
-	function fmtParams(b: number): string {
-		if (!b) return '—';
-		return b >= 1 ? `${b.toFixed(1)}B` : `${(b * 1000).toFixed(0)}M`;
-	}
 </script>
 
 <ShareMeta
@@ -201,9 +284,9 @@
 	description={`Every embedding model on the MTEB Leaderboard — ${ALL_MODELS.length || '700+'} models with architecture type, parameter count, embedding dimension, context length, release date, and supported languages.`}
 />
 
-<div class="app">
-	<main class="main">
-		<header class="hero">
+<div class="layout-sidebar">
+	<main id="main-content" tabindex="-1" class="layout-main">
+		<header class="hero index-hero">
 			<h1>Models</h1>
 			<p class="lead">
 				Every model in the leaderboard with its architecture type, parameter count, embedding
@@ -250,20 +333,23 @@
 					<SortDirIcon dir={sortDir} />
 				</button>
 			</div>
+			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
 		</div>
 
-		{#if loadingData}
-			<p class="empty">Loading models…</p>
+		{#if !resolved && !loadError}
+			<SkeletonGrid />
 		{:else if loadError}
 			<p class="empty">Failed to load models: {loadError}</p>
 		{:else if filtered.length === 0}
 			<p class="empty">No models match those filters.</p>
+		{:else if view === 'table'}
+			<ModelsTable rows={filtered} sort={sortAdapter} />
 		{:else}
-			<div class="grid">
+			<div class="grid card-grid">
 				{#each visibleModels as m (m.name)}
 					<a
-						class="card"
-						href={resolve('/models/[...name]', { name: modelPath(m.name) })}
+						class="card card-link card-link-vis accent-rail"
+						href={resolve('/models/[...name=modelName]', { name: modelPath(m.name) })}
 						data-type={m.modelType}
 						title={m.modelType}
 					>
@@ -277,10 +363,10 @@
 								<span>{m.modelType}</span>
 							</span>
 						</div>
-						<dl class="stats">
+						<dl class="card-stats">
 							<div>
 								<dt>Params</dt>
-								<dd>{fmtParams(m.totalParamsB)}</dd>
+								<dd>{fmtParamsCompact(m.totalParamsB)}</dd>
 							</div>
 							<div>
 								<dt>Embed dim</dt>
@@ -307,11 +393,11 @@
 							{/if}
 						</div>
 						{#if m.modalities && m.modalities.length > 0}
-							<div class="modality-row" aria-label="Supported modalities">
+							<div class="chip-row modality-row" aria-label="Supported modalities">
 								{#each sortModalities(m.modalities) as mod (mod)}
-									<span class="mod-chip modality-tint" data-modality={mod} title={mod}>
+									<span class="badge modality-tint" data-modality={mod} title={mod}>
 										<ModalityIcon modality={mod} size={12} />
-										<span class="mod-label">{mod}</span>
+										<span>{mod}</span>
 									</span>
 								{/each}
 							</div>
@@ -325,10 +411,12 @@
 	<FilterSidebar
 		hideScope
 		flatModel
+		hideZeroShot
 		languageOptions={LANGUAGES}
 		languagesPicked={languagesPicked as unknown as Set<string>}
-		onToggleLanguage={toggleLanguage}
-		onToggleAllLanguages={toggleAllLanguages}
+		onToggleLanguage={(l) => languageFacet.toggle(l)}
+		onToggleAllLanguages={() => languageFacet.toggleAll()}
+		onResetLanguages={() => languageFacet.reset()}
 	/>
 </div>
 
@@ -336,123 +424,16 @@
 <ShareUrlButton />
 
 <style>
-	.app {
-		display: flex;
-		min-height: 100vh;
-	}
-	.main {
-		flex: 1;
-		min-width: 0;
-		max-width: 1280px;
-		margin: 0 auto;
-		padding: 28px 28px 64px;
-	}
-	.hero {
-		padding: 24px 0 16px;
-	}
-	.hero h1 {
-		font-size: 32px;
-		margin: 0 0 10px;
-		letter-spacing: -0.01em;
-	}
-	/* `.lead`, `.sort*`, `.dir-btn*` live in src/app.css — same
-	   markup is on /tasks so the rules were exact duplicates. */
-	/* `.toolbar` (sticky shell + mobile rules) is shared in src/app.css. */
-	/* Cards ---------------------------------------------------------------- */
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 12px;
-	}
+	/* `min-height` gives `.modality-row { margin-top: auto }` slack
+	   to push the modalities to the card bottom — without it the
+	   column collapses to content and the auto margin resolves to 0. */
 	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		padding: 14px 16px;
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		/* `min-height` gives `.modality-row { margin-top: auto }` slack to
-		   push the modalities to the card bottom — without it the column
-		   collapses to content and the auto margin resolves to 0. */
+		--card-intrinsic: 220px;
 		min-height: 220px;
-		position: relative;
-		overflow: hidden;
-		text-decoration: none;
-		color: inherit;
-		transition:
-			transform 0.12s ease,
-			border-color 0.12s ease,
-			box-shadow 0.12s ease;
-		/* Skip render/paint for off-screen cards (the registry is long); the
-		   `min-height` above doubles as the intrinsic-size placeholder. */
-		content-visibility: auto;
-		contain-intrinsic-size: 220px;
 	}
-	.card:focus-visible {
-		outline: 2px solid var(--card-accent, var(--primary));
-		outline-offset: 2px;
-	}
-	.card:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 8px 22px rgb(var(--shadow-tint) / 0.08);
-	}
-	.card::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		height: 3px;
-		background: var(--card-accent, var(--border));
-	}
-	/* Per-type cards: a flat surface so dark mode reads cleanly, plus the
-	   accent bar (.card::before) and a soft 40% tint at the very top via
-	   the theme-aware --tint-* tokens. */
-	.card[data-type='dense'] {
-		--card-accent: var(--tint-blue-fg);
-		--card-tint: var(--tint-blue);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-blue) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-type='cross-encoder'] {
-		--card-accent: var(--tint-orange-fg);
-		--card-tint: var(--tint-orange);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-orange) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-type='late-interaction'] {
-		--card-accent: var(--tint-green-fg);
-		--card-tint: var(--tint-green);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-green) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-type='sparse'] {
-		--card-accent: var(--tint-amber-fg);
-		--card-tint: var(--tint-amber);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-amber) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
-	}
-	.card[data-type='router'] {
-		--card-accent: var(--tint-purple-fg);
-		--card-tint: var(--tint-purple);
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--tint-purple) 55%, var(--surface)) 0%,
-			var(--surface) 64px
-		);
+	.card[data-type] {
+		--card-tint: var(--category-tint);
+		--card-accent: var(--category-tint-fg);
 	}
 	.card:hover {
 		border-color: color-mix(in srgb, var(--card-accent) 50%, var(--border));
@@ -468,33 +449,8 @@
 		flex: 1;
 		min-width: 0;
 	}
-	/* Bottom-of-card modality strip: small color-keyed chips that read
-	   "the model can encode <icon> text / image / audio / video". Sits
-	   below the open-weights / instruction-tuned badges so the card
-	   reads top-to-bottom as identity → stats → capability → modality.
-	   `margin-top: auto` pins the strip to the bottom edge of the flex
-	   card so the row aligns across the grid no matter how many soft
-	   badges (Instruction-tuned / ST compatible) the model carries. */
 	.modality-row {
-		display: flex;
-		flex-wrap: wrap;
 		gap: 6px;
-		margin-top: auto;
-	}
-	/* Geometry only — per-modality tint comes from `.modality-tint` in
-	   src/app.css, shared with the /models/[name] hero badges. */
-	.mod-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 3px 8px;
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.01em;
-		border-radius: 999px;
-	}
-	.mod-label {
-		text-transform: lowercase;
 	}
 	.title {
 		display: block;
@@ -515,43 +471,14 @@
 		margin: 0 1px;
 		font-weight: 400;
 	}
-	.stats {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 8px 14px;
-		margin: 0;
-	}
-	.stats > div {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.stats dt {
-		font-size: 10px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.stats dd {
-		margin: 0;
-		font-size: 14px;
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
-	}
-
-	/* Mobile: keep the 2x2 KPI grid (params / embed dim / max tokens /
-	   released) so the card carries real information. Tighten the gap +
-	   font sizes so the card stays compact, and drop the min-height
-	   floor since the stats now fill the body naturally. */
 	@media (max-width: 640px) {
-		.stats {
+		.card-stats {
 			gap: 6px 12px;
 		}
-		.stats dt {
+		.card-stats dt {
 			font-size: 9px;
 		}
-		.stats dd {
+		.card-stats dd {
 			font-size: 13px;
 		}
 		.card {
@@ -579,33 +506,14 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: 5px;
 	}
-	.badge {
-		font-size: 10px;
-		padding: 3px 8px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
+	/* Outline-only on the card (overrides the global filled defaults). */
+	.badge.open,
+	.badge.soft {
+		background: transparent;
 	}
-	/* Reuse the shared `--tint-green` pair so dark mode picks up the
-	   pre-tuned dark-green variant instead of a washed-out light bg.
-	   Dark mode gets a slightly deeper green than the default
-	   `--tint-green` so the pill reads as a distinct chip against the
-	   `--surface` card body (which itself is in the same green family
-	   territory under the gradient header band). */
 	.badge.open {
-		background: light-dark(var(--tint-green), #0d2a1c);
 		color: var(--tint-green-fg);
 	}
-	.badge.closed {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
-	.badge.soft {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
-
-	/* `.empty` lives in src/app.css. */
 </style>

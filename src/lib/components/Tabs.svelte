@@ -5,22 +5,43 @@
 		onSelect: (id: T) => void;
 	}
 	let { tabs, active, onSelect }: Props = $props();
+
+	let visibleTabs = $derived(tabs.filter((t) => t.visible !== false));
+	// Roving tabindex per WAI-ARIA tablist pattern.
+	let buttons: HTMLButtonElement[] = $state([]);
+
+	function onKeyDown(e: KeyboardEvent) {
+		const i = visibleTabs.findIndex((t) => t.id === active);
+		if (i === -1) return;
+		const n = visibleTabs.length;
+		let next = -1;
+		if (e.key === 'ArrowLeft') next = (i - 1 + n) % n;
+		else if (e.key === 'ArrowRight') next = (i + 1) % n;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = n - 1;
+		else return;
+		e.preventDefault();
+		onSelect(visibleTabs[next].id);
+		// Defer focus until after the re-render swaps the active tab.
+		queueMicrotask(() => buttons[next]?.focus());
+	}
 </script>
 
-<div class="tabs" role="tablist">
-	{#each tabs as tab (tab.id)}
-		{#if tab.visible !== false}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={active === tab.id}
-				class="tab"
-				class:active={active === tab.id}
-				onclick={() => onSelect(tab.id)}
-			>
-				{tab.label}
-			</button>
-		{/if}
+<!-- tabindex=-1 for a11y lint; real focus is on buttons via roving tabindex. -->
+<div class="tabs" role="tablist" tabindex="-1" onkeydown={onKeyDown}>
+	{#each visibleTabs as tab, i (tab.id)}
+		<button
+			bind:this={buttons[i]}
+			type="button"
+			role="tab"
+			aria-selected={active === tab.id}
+			tabindex={active === tab.id ? 0 : -1}
+			class="tab"
+			class:active={active === tab.id}
+			onclick={() => onSelect(tab.id)}
+		>
+			{tab.label}
+		</button>
 	{/each}
 </div>
 
@@ -36,18 +57,9 @@
 		flex-wrap: nowrap;
 		overflow-x: auto;
 		overflow-y: hidden;
-		scrollbar-width: thin;
 		/* Snap each tab so quick swipes settle on a button edge instead
 		   of stopping mid-label. */
 		scroll-snap-type: x proximity;
-		-webkit-overflow-scrolling: touch;
-	}
-	.tabs::-webkit-scrollbar {
-		height: 4px;
-	}
-	.tabs::-webkit-scrollbar-thumb {
-		background: var(--border-strong);
-		border-radius: 2px;
 	}
 	.tab {
 		position: relative;

@@ -5,7 +5,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { type CsvCell } from '$lib/csv';
-	import { heat as heatBase, rowId } from '$lib/format';
+	import { floatPinnedToTop, heat, rowId } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { loadPerLanguage } from '$lib/data/service';
 	import ModelCellName from './ModelCellName.svelte';
@@ -56,8 +56,13 @@
 		// Mirrors `Benchmark.language_view`. `'all'` = union of every
 		// task's languages. Parent hides the tab when not set.
 		languageView: string[] | 'all';
+		// See `SummaryTable.svelte` — `false` when the pane is mounted but
+		// hidden behind another tab. Inactive panes skip the pin-state
+		// subscription so pin clicks elsewhere don't invalidate this
+		// derived.
+		active?: boolean;
 	}
-	let { summary, languageView }: Props = $props();
+	let { summary, languageView, active = true }: Props = $props();
 
 	let LANGUAGES = $derived.by(() => {
 		if (languageView === 'all') {
@@ -78,49 +83,46 @@
 		return [...languageView];
 	});
 
-	function rowMean(row: SummaryRow): number | null {
-		const vals: number[] = [];
-		for (const lang of LANGUAGES) {
-			const v = langScore(row, lang);
-			if (v != null) vals.push(v);
-		}
-		if (vals.length === 0) return null;
-		return vals.reduce((a, b) => a + b, 0) / vals.length;
-	}
-
-	function extremaPerLang(): { best: Record<string, number>; worst: Record<string, number> } {
+	// Single O(rows × LANGUAGES) pass produces every per-row mean + per-lang
+	// extrema + cross-row mean extrema. Replaces three separate passes (one
+	// per quantity) and removes the O(N²) `rowMean` calls inside the sort
+	// comparator. The row→mean map gives the comparator a constant-time
+	// lookup.
+	let rowStats = $derived.by(() => {
+		const rowMeanMap = new WeakMap<SummaryRow, number | null>();
 		const best: Record<string, number> = {};
 		const worst: Record<string, number> = {};
 		for (const lang of LANGUAGES) {
-			let max = -Infinity;
-			let min = Infinity;
-			for (const r of summary.rows) {
+			best[lang] = -Infinity;
+			worst[lang] = Infinity;
+		}
+		let bestMeanV = -Infinity;
+		let worstMeanV = Infinity;
+		for (const r of summary.rows) {
+			let sum = 0;
+			let n = 0;
+			for (const lang of LANGUAGES) {
 				const v = langScore(r, lang);
 				if (v == null) continue;
-				if (v > max) max = v;
-				if (v < min) min = v;
+				sum += v;
+				n++;
+				if (v > best[lang]) best[lang] = v;
+				if (v < worst[lang]) worst[lang] = v;
 			}
-			best[lang] = max;
-			worst[lang] = min;
+			const mean = n > 0 ? sum / n : null;
+			rowMeanMap.set(r, mean);
+			if (mean != null) {
+				if (mean > bestMeanV) bestMeanV = mean;
+				if (mean < worstMeanV) worstMeanV = mean;
+			}
 		}
-		return { best, worst };
-	}
-	let langExtrema = $derived(extremaPerLang());
-	let best = $derived(langExtrema.best);
-	let worst = $derived(langExtrema.worst);
-	let meanExtrema = $derived.by(() => {
-		let max = -Infinity;
-		let min = Infinity;
-		for (const r of summary.rows) {
-			const v = rowMean(r);
-			if (v == null) continue;
-			if (v > max) max = v;
-			if (v < min) min = v;
-		}
-		return { max, min };
+		return { rowMeanMap, best, worst, bestMean: bestMeanV, worstMean: worstMeanV };
 	});
-	let bestMean = $derived(meanExtrema.max);
-	let worstMean = $derived(meanExtrema.min);
+	const rowMean = (r: SummaryRow): number | null => rowStats.rowMeanMap.get(r) ?? null;
+	let best = $derived(rowStats.best);
+	let worst = $derived(rowStats.worst);
+	let bestMean = $derived(rowStats.bestMean);
+	let worstMean = $derived(rowStats.worstMean);
 
 	type SortKey = 'model' | 'mean' | `lang:${string}`;
 	const sort = createSortState<SortKey>({
@@ -150,15 +152,8 @@
 				return (va - vb) * dir;
 			});
 		}
-		if (pinnedModels.size === 0) return rows;
-		// Single-pass partition: pinned first, others in original order.
-		const pinned: SummaryRow[] = [];
-		const unpinned: SummaryRow[] = [];
-		for (const r of rows) {
-			if (pinnedModels.has(rowId(r))) pinned.push(r);
-			else unpinned.push(r);
-		}
-		return [...pinned, ...unpinned];
+		if (!active) return rows;
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(rowId(r)), pinnedModels.size);
 	});
 
 	function fmt(n: number | null): string {
@@ -181,11 +176,6 @@
 		]);
 		return { headers, rows };
 	}
-
-	// Heat scales per-column: the strongest mean / per-language cell
-	// gets full tint, others shade down proportionally. Both score and
-	// `max` are on the same 0–100 scale so ratio works directly.
-	const heat = heatBase;
 </script>
 
 <div class="wrap">
@@ -195,18 +185,19 @@
 	</p>
 	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl lang-table" use:stickyHead>
+			<caption class="sr-only">Per-language scores</caption>
 			<thead>
 				<tr>
-					<th class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
-					<th class="tbl-sticky-col" aria-sort={sort.aria('model')}>
+					<th scope="col" class="tbl-pin-col tbl-sticky-pin" aria-label="Pinned"></th>
+					<th scope="col" class="tbl-sticky-col" aria-sort={sort.aria('model')}>
 						<SortHeader {sort} field="model" label="Model" align="left" />
 					</th>
-					<th class="tbl-num" aria-sort={sort.aria('mean')}>
+					<th scope="col" class="tbl-num" aria-sort={sort.aria('mean')}>
 						<SortHeader {sort} field="mean" label="Mean" />
 					</th>
 					{#each LANGUAGES as lang (lang)}
 						{@const k = `lang:${lang}` as SortKey}
-						<th class="tbl-num" aria-sort={sort.aria(k)}>
+						<th scope="col" class="tbl-num" aria-sort={sort.aria(k)}>
 							<SortHeader {sort} field={k} label={lang} />
 						</th>
 					{/each}
@@ -220,7 +211,8 @@
 						<td class="tbl-pin-col tbl-sticky-pin">
 							<PinButton name={rid} />
 						</td>
-						<td
+						<th
+							scope="row"
 							class="tbl-sticky-col"
 							data-model-type={row.model.modelType}
 							onpointerover={(e) => onCellEnter(e, row)}
@@ -229,7 +221,7 @@
 							onfocusout={onCellLeave}
 						>
 							<ModelCellName model={row.model} experiments={row.experiments} />
-						</td>
+						</th>
 						<td
 							class="tbl-num {heat(mean, worstMean, bestMean)}"
 							class:tbl-best={mean != null && mean === bestMean}

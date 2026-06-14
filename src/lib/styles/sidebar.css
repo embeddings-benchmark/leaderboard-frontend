@@ -2,36 +2,38 @@
    FilterSidebar component used by /benchmark/[name] + /models). One source
    of truth so the three filter surfaces stay in lock-step. */
 
-/* In-flow flex column so the main content reflows when the drawer
-   toggles. Content shrinks/grows instead of being covered, which
-   keeps wide tables from being clipped under the panel. */
-.sidebar {
-	--header-offset: 64px;
+/* In-flow flex column: main content reflows when the drawer toggles
+   instead of being covered, so wide tables don't clip under the panel.
+   `overflow: hidden` + `display: flex` so `.filters` can `flex: 1` and
+   the last facet (Language) absorbs leftover height. */
+/* Open-sidebar width — ShareUrlButton reads this for its right offset. */
+body:has(.sidebar:not(.collapsed)) {
+	--sidebar-active-width: min(340px, 100dvw);
+}
 
-	flex: 0 0 340px;
-	min-width: 320px;
-	max-width: 380px;
-	margin-left: auto;
-	border-left: 1px solid var(--border);
+.sidebar {
+	/* Single `width` transition (Firefox refuses to interpolate
+	   `max-width: 380px ↔ none`). `overflow: clip` keeps content from
+	   bleeding past the right edge during the collapse. */
+	width: var(--sidebar-active-width, 340px);
+	flex: 0 0 auto;
+	margin-inline-start: auto;
+	border-inline-start: 1px solid var(--border);
 	background: var(--surface);
-	height: calc(100vh - var(--header-offset));
+	height: calc(100dvh - var(--header-height));
 	position: sticky;
-	top: var(--header-offset);
-	overflow-y: auto;
+	top: var(--header-height);
+	display: flex;
+	flex-direction: column;
+	overflow: clip;
 	z-index: 5;
 	transition:
-		flex-basis 0.18s ease,
-		min-width 0.18s ease,
-		max-width 0.18s ease;
+		width 0.22s ease,
+		border-inline-start-width 0.22s ease;
 }
 .sidebar.collapsed {
-	flex: 0 0 0;
-	min-width: 0;
-	max-width: none;
 	width: 0;
-	border-left: none;
-	background: none;
-	overflow: visible;
+	border-inline-start-width: 0;
 }
 
 .sidebar-toggle {
@@ -50,16 +52,30 @@
 	color: var(--text-muted);
 	cursor: pointer;
 	z-index: 2;
+	/* Match the sidebar's collapse timing so the toggle slides out
+	   alongside the panel instead of snapping into its pill form. */
+	transition:
+		transform 0.18s ease,
+		padding 0.18s ease,
+		border-radius 0.18s ease,
+		box-shadow 0.18s ease,
+		background 0.12s,
+		color 0.12s;
 }
 .sidebar.collapsed .sidebar-toggle {
-	position: relative;
-	transform: translateX(-100%);
-	margin-top: 56px;
-	margin-right: 8px;
-	padding: 6px 10px;
-	width: auto;
+	/* `fixed` escapes flow — `relative + translateX(-100%)` left a
+	   layout box past the viewport's right edge (Firefox → horizontal
+	   scrollbar). Top offset clears the bar + sticky table-head. */
+	position: fixed;
+	top: calc(2 * var(--header-height));
+	right: 8px;
+	width: 38px;
+	height: 38px;
+	margin: 0;
+	padding: 0;
+	justify-content: center;
 	border: 1px solid var(--border);
-	border-radius: 6px;
+	border-radius: 8px;
 	background: var(--surface);
 	box-shadow: var(--shadow-sm);
 	z-index: 11;
@@ -71,8 +87,7 @@
 
 .chev {
 	display: inline-block;
-	font-size: 18px;
-	line-height: 1;
+	flex-shrink: 0;
 	transition: transform 0.18s ease;
 	color: var(--text-subtle);
 }
@@ -89,13 +104,21 @@
 	flex-direction: column;
 	gap: 18px;
 	padding: 14px 16px 24px;
+	/* `min-height: 0` lets the inner scrollport shrink past intrinsic
+	   content on short viewports. */
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	/* Reserve scrollbar space so pills don't jitter when the thumb appears. */
+	scrollbar-gutter: stable;
 }
 .group {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	min-width: 0;
-	flex: 1;
+	/* Natural-height so leftover space lands on `:last-child` only. */
+	flex: 0 0 auto;
 }
 .group-head {
 	display: flex;
@@ -110,22 +133,18 @@
 	text-transform: uppercase;
 	color: var(--text-subtle);
 }
+.muted-inline {
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-subtle);
+	font-variant-numeric: tabular-nums;
+}
 
+/* Cap width + tighter padding so the in-block search doesn't fill
+   the whole sidebar. */
 .type-search {
-	width: 100%;
 	max-width: 320px;
 	padding: 5px 9px;
-	font-size: 12px;
-	font-family: inherit;
-	background: var(--surface);
-	color: var(--text);
-	border: 1px solid var(--border);
-	border-radius: 6px;
-}
-.type-search:focus {
-	outline: none;
-	border-color: var(--primary);
-	box-shadow: 0 0 0 3px var(--primary-soft);
 }
 .no-match {
 	margin: 0;
@@ -144,33 +163,40 @@
 .link-btn:hover {
 	text-decoration: underline;
 }
-/* Expand button under a capped pill list (e.g. /tasks Language group's
-   "Show all 1037" affordance). Inline-block so it sits in flow under
-   the scrollport instead of stretching the sidebar to its width. */
-.show-more-btn {
-	display: inline-block;
-	margin-top: 6px;
-	padding: 2px 0;
-}
-
 .pills {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
+	padding: 8px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--surface-muted);
 }
-/* Long task-type / domain lists scroll internally — leave the rest of the
-   sidebar room. */
-/* Add `.scroll-thin` (from app.css) alongside `.scroll` to get the styled
-   scrollbar; this rule just sizes the scrollport itself. */
 /* `contain: layout` isolates the inner flex-wrap layout from the ancestor
-   `<aside>`'s scroll calculation. Without it Chromium leaks each
-   inner-overflowed row into the sidebar's `scrollHeight`, leaving the
-   user with a phantom ~350 px tall empty band below the last facet. */
+   sidebar's scroll calculation — without it Chromium leaks each
+   inner-overflowed row into the sidebar's `scrollHeight` (phantom ~350 px
+   band below the last facet). */
 .pills.scroll {
-	max-height: 320px;
+	max-height: 380px;
 	overflow-y: auto;
-	padding-right: 4px;
 	contain: layout;
+}
+/* Marker for the facet that absorbs leftover sidebar height (Language).
+   `flex-basis: 0` so growth comes from leftover space, not the natural
+   content size of a long pill list. */
+.group.grow {
+	flex: 1 1 0;
+	min-height: 280px;
+}
+/* The `.scroll{,Y}` qualifier is needed to outrank FilterContent's
+   scoped `.pills.scroll-y` cap (max-height: 220 px). */
+.group.grow > .pills:is(.scroll, .scroll-y) {
+	flex: 1;
+	min-height: 0;
+	max-height: none;
+	/* `flex-wrap: wrap` defaults to `align-content: stretch` — without
+	   this, wrapped rows balloon to fill the scrollport. */
+	align-content: flex-start;
 }
 .pill {
 	display: inline-flex;
@@ -236,6 +262,42 @@
 	border-color: var(--primary);
 	color: var(--primary-strong);
 }
+/* Per-modality tint when checked — text → teal, image → blue,
+   audio → amber, video → purple. Reads the `--modality-tint*` pair set
+   globally by `[data-modality=…]` in app.css. Pill itself carries the
+   `data-modality` attribute so the tint kicks in only on the benchmarks
+   / tasks catalog pages where modalities are facet-style filters. */
+.modality-fill[data-modality]:has(input:checked) {
+	background: var(--modality-tint);
+	border-color: color-mix(in srgb, var(--modality-tint-fg) 35%, transparent);
+	color: var(--modality-tint-fg);
+}
+.modality-fill[data-modality]:has(input:checked):hover {
+	filter: brightness(0.97);
+	background: var(--modality-tint);
+}
+
+/* Per-stype tint when checked — same shape as the modality tint
+   above, used on /tasks for the Task group facet. */
+.type-pill[data-stype]:not([data-stype='']):has(input:checked) {
+	background: var(--category-tint);
+	border-color: color-mix(in srgb, var(--category-tint-fg) 35%, transparent);
+	color: var(--category-tint-fg);
+}
+/* Same pattern for model-type pills inside FilterContent — `data-type`
+   drives the per-category tint via app.css. */
+.model-type-pill[data-type]:not([data-type='']):has(input:checked) {
+	background: var(--category-tint);
+	border-color: color-mix(in srgb, var(--category-tint-fg) 35%, transparent);
+	color: var(--category-tint-fg);
+}
+
+/* Long unbroken names (e.g. `XM3600T2IRetrieval`) wrap inside the
+   pill instead of overflowing. */
+.pill-label {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
 
 @media (max-width: 640px) {
 	/* Mobile: in-flow at 340 px would leave the main column ~50 px wide;
@@ -243,14 +305,17 @@
 	   filters without losing the cards. */
 	.sidebar {
 		position: fixed;
-		top: var(--header-offset);
+		top: var(--header-height);
 		right: 0;
 		flex: 0 0 auto;
-		width: min(340px, 100vw);
+		width: var(--sidebar-active-width);
 		min-width: 0;
 		max-width: none;
-		margin-left: 0;
-		z-index: 30;
+		margin-inline-start: 0;
+		/* Above the sticky table-head overlay (z-index 50) — when the
+		   drawer is open on mobile, the overlay would otherwise paint
+		   over the drawer's own toggle row at the top. */
+		z-index: 60;
 		box-shadow: -8px 0 24px rgb(var(--shadow-tint) / 0.18);
 	}
 	.sidebar.collapsed {

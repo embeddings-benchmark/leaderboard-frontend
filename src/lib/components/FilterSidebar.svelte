@@ -1,28 +1,35 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+	import ChevronLeft from 'lucide-svelte/icons/chevron-left';
 	import FilterContent from './FilterContent.svelte';
 
 	interface Props {
 		hideScope?: boolean;
 		flatModel?: boolean;
-		// Optional inline Language facet — forwarded to FilterContent.
-		// Only /models passes these; on every other page the block is
-		// omitted because there's no language data to bind to.
+		/** Zero-shot is benchmark-scoped; /models hides it. */
+		hideZeroShot?: boolean;
+		/** Inline Language facet — only /models passes these. */
 		languageOptions?: string[];
 		languagesPicked?: Set<string>;
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
+		onResetLanguages?: () => void;
+		/** When provided, replaces FilterContent — used by /benchmarks. */
+		children?: Snippet;
 	}
 	let {
 		hideScope = false,
 		flatModel = false,
+		hideZeroShot = false,
 		languageOptions,
 		languagesPicked,
 		onToggleLanguage,
-		onToggleAllLanguages
+		onToggleAllLanguages,
+		onResetLanguages,
+		children
 	}: Props = $props();
 
-	// Collapsed on narrow viewports so the drawer doesn't overlap content;
-	// SSR has no `window` so it stays expanded until hydration.
+	// Collapsed on narrow viewports; SSR stays expanded until hydration.
 	let collapsed = $state(
 		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 	);
@@ -36,22 +43,31 @@
 		aria-expanded={!collapsed}
 		title={collapsed ? 'Expand filters' : 'Collapse filters'}
 	>
-		<span class="chev" class:open={!collapsed}>‹</span>
+		<ChevronLeft
+			class="chev {!collapsed ? 'open' : ''}"
+			size={16}
+			strokeWidth={2.4}
+			aria-hidden="true"
+		/>
 		{#if !collapsed}
 			<span class="toggle-label">Filters</span>
 		{/if}
 	</button>
 
 	{#if !collapsed}
-		<FilterContent
-			{hideScope}
-			{flatModel}
-			{languageOptions}
-			{languagesPicked}
-			{onToggleLanguage}
-			{onToggleAllLanguages}
-		/>
+		{#if children}
+			<div class="filters">{@render children()}</div>
+		{:else}
+			<FilterContent
+				{hideScope}
+				{flatModel}
+				{hideZeroShot}
+				{languageOptions}
+				{languagesPicked}
+				{onToggleLanguage}
+				{onToggleAllLanguages}
+				{onResetLanguages}
+			/>
+		{/if}
 	{/if}
 </aside>
-
-<!-- Shell + toggle styles live in $lib/styles/sidebar.css. -->

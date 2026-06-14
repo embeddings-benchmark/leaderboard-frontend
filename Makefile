@@ -1,4 +1,4 @@
-.PHONY: help install setup dev build deploy-build preview check check-watch lint format test test-ui clean kill-ports
+.PHONY: help install setup dev dev-mock mock-api build deploy-build preview check check-watch lint format test test-ui clean kill-ports
 
 .DEFAULT_GOAL := help
 
@@ -14,8 +14,21 @@ install: ## Install npm dependencies (clean, lockfile-respecting)
 setup: install ## First-time setup: install deps and sync SvelteKit types
 	npx svelte-kit sync
 
-dev: ## Start vite dev server (http://localhost:5173)
+dev: ## Start vite dev server (http://localhost:5173). Requires PUBLIC_API_URL.
 	npm run dev
+
+mock-api: ## Run only the e2e mock API on http://localhost:8787
+	npx tsx tests/mock-api.ts
+
+dev-mock: ## Start vite dev + the mock API (no live backend needed)
+	@# Boots the mock API in the background, waits for the port, then
+	@# runs vite dev with PUBLIC_API_URL pointed at it. `trap … EXIT`
+	@# kills the mock when vite exits (Ctrl-C or natural).
+	@trap 'kill $$MOCK_PID 2>/dev/null' INT TERM EXIT; \
+		npx tsx tests/mock-api.ts & \
+		MOCK_PID=$$!; \
+		npx wait-on -t 30s tcp:8787 && \
+		PUBLIC_API_URL=http://localhost:8787 npm run dev
 
 build: ## Build for production (no base path — local serving)
 	npm run build
@@ -47,6 +60,10 @@ test-ui: ## Open the Playwright UI runner
 clean: ## Remove build artifacts, caches, and node_modules
 	rm -rf node_modules build .svelte-kit test-results playwright-report
 
-kill-ports: ## Kill anything bound to the dev (5173/5174) and preview (4173) ports
-	-@lsof -ti:5173,5174,4173 | xargs kill 2>/dev/null || true
+kill-ports: ## Kill anything bound to dev (5173/5174), preview (4173), or mock API (8787)
+	@# `-sTCP:LISTEN` so we only target the actual server processes —
+	@# without it, lsof also returns PIDs of CLIENTS connected to those
+	@# ports (e.g. the browser tab holding vite's HMR websocket) and
+	@# `kill` would SIGTERM the browser too.
+	-@lsof -ti:5173,5174,4173,8787 -sTCP:LISTEN | xargs kill 2>/dev/null || true
 	@echo "ports cleared"

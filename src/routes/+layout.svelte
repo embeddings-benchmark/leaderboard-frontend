@@ -2,28 +2,46 @@
 	import '../app.css';
 	import '$lib/styles/leaderboard-table.css';
 	import '$lib/styles/sidebar.css';
+	import '$lib/styles/detail-page.css';
 	import { onMount } from 'svelte';
-	import { beforeNavigate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate } from '$app/navigation';
 	import { page, updated } from '$app/state';
 	import { base, resolve } from '$app/paths';
+	import { PUBLIC_API_URL } from '$env/static/public';
+	import BookText from 'lucide-svelte/icons/book-text';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
-	
+	import { filters } from '$lib/stores/filters.svelte';
+
+	// Preconnect to the backend so the first fetch lands ~150ms faster on cold
+	// hits. URL tracks `PUBLIC_API_URL` per build.
+	let preconnectHref = (() => {
+		try {
+			const u = new URL(PUBLIC_API_URL);
+			return u.origin;
+		} catch {
+			return null;
+		}
+	})();
+
 	let { children } = $props();
 
-	// $app/state's `updated.current` flips to true when the poll detects a new
-	// deployed version (svelte.config.js `kit.version.pollInterval`). Force a
-	// full reload on the next client-side navigation so the new build lands
-	// without users needing to clear cache.
+	// Name search is per-page — clear on cross-page nav. Pages restore via `?q=`.
+	afterNavigate(({ from, to }) => {
+		if (!to) return;
+		if (from?.url?.pathname === to.url.pathname) return;
+		const urlQ = to.url.searchParams.get('q') ?? '';
+		if (filters.nameQuery !== urlQ) filters.nameQuery = urlQ;
+	});
+
+	// Hard reload on next nav when a new deploy is detected.
 	beforeNavigate(({ willUnload, to }) => {
 		if (updated.current && !willUnload && to?.url) {
 			location.href = to.url.href;
 		}
 	});
 
-	// As a belt-and-suspenders fallback: if no navigation happens but the page
-	// is idle for a while after detecting an update, refresh once it goes
-	// hidden so the next foreground visit is fresh.
+	// Fallback: reload on visibilitychange when an update is pending.
 	onMount(() => {
 		function onVisibility() {
 			if (document.visibilityState === 'hidden' && updated.current) {
@@ -40,9 +58,7 @@
 		return base && p.startsWith(base) ? p.slice(base.length) || '/' : p;
 	});
 
-	// `/` (home) and `/benchmarks` (all-list) are now separate top-nav
-	// entries. `/benchmark/{name}` (the per-benchmark detail page) is owned
-	// by Benchmarks so the detail view doesn't sit "outside" any nav tab.
+	// `/benchmark/{name}` matches the Benchmarks tab too.
 	function isHomeRoute(p: string) {
 		const trimmed = p.replace(/\/$/, '') || '/';
 		return trimmed === '/';
@@ -64,6 +80,9 @@
 
 <svelte:head>
 	<link rel="icon" href="{base}/dots-icon.ico" type="image/x-icon" />
+	{#if preconnectHref}
+		<link rel="preconnect" href={preconnectHref} crossorigin="anonymous" />
+	{/if}
 </svelte:head>
 
 <!-- ShareMeta is intentionally NOT rendered at the layout level. Every
@@ -75,6 +94,9 @@
      ShareMeta into the page level eliminates the duplicate. -->
 
 <div class="shell">
+	<!-- Skip link — targets each route's `#main-content` (WCAG 2.4.1). -->
+	<a class="skip-link" href="#main-content">Skip to content</a>
+
 	<header class="bar">
 		<a class="brand" href={resolve('/')}>
 			<img class="brand-icon" src="{base}/dots-icon.png" alt="MTEB logo" width="22" height="22" />
@@ -122,22 +144,7 @@
 				rel="noreferrer"
 				title="Documentation site"
 			>
-				<svg
-					viewBox="0 0 24 24"
-					width="16"
-					height="16"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.8"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-					<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-					<path d="M9 7h7" />
-					<path d="M9 11h7" />
-				</svg>
+				<BookText size={16} strokeWidth={1.8} aria-hidden="true" />
 				<span>Documentation</span>
 			</a>
 		</div>
@@ -181,7 +188,7 @@
 	.shell {
 		display: flex;
 		flex-direction: column;
-		min-height: 100vh;
+		min-height: 100dvh;
 		/* Light-mode: a barely-there dark-noise grain over the cool
 		   off-white --bg. Dark mode swaps the grain mask below. */
 		background: var(--grain-dark), var(--bg);
@@ -207,6 +214,11 @@
 		padding: 10px 28px;
 		background: var(--bar-bg);
 		border-bottom: 1px solid var(--border);
+		/* `min-height` (not `height`) so content growth can still push
+		   the bar taller — sidebar/toolbar still dock cleanly because
+		   they read the same token. */
+		min-height: var(--header-height);
+		box-sizing: border-box;
 	}
 	.subnav {
 		justify-self: center;
@@ -326,9 +338,11 @@
 		outline-offset: 2px;
 	}
 
-	@media (max-width: 900px) {
-		/* On narrow viewports keep the icons but drop the labels — the
-		   `title=` attribute still announces them on hover/focus. */
+	@media (max-width: 920px) {
+		/* Drop the labels (icons + `title=` remain). 920, not 900: the
+		   bar with labels is ~913 px wide, so 901-919 would overflow and
+		   trigger a Firefox horizontal scrollbar that shifts every
+		   bottom-anchored fixed element up by ~15 px. */
 		.icon-link span {
 			display: none;
 		}
@@ -336,11 +350,12 @@
 			padding: 6px 8px;
 		}
 	}
-	@media (max-width: 720px) {
-		/* Keep everything on one row: brand | nav (scrolls) | ext-links.
-		   The middle column is `minmax(0, 1fr)` so it doesn't push the
-		   ext-links offscreen; long nav lists scroll horizontally
-		   within their column instead. */
+	@media (max-width: 800px) {
+		/* Compact grid: brand | scrolling nav | ext-links, all one row.
+		   `minmax(0, 1fr)` lets the nav scroll inside its cell instead
+		   of pushing ext-links offscreen. 800, not 720: same Firefox-
+		   scrollbar reason as the 920 breakpoint — bar with icon-only
+		   ext-links is ~763 px, so 721-799 would overflow. */
 		.bar {
 			grid-template-columns: auto minmax(0, 1fr) auto;
 		}
@@ -354,7 +369,10 @@
 			justify-self: start;
 			min-width: 0;
 			overflow-x: auto;
+			/* Hide the scrollbar (paints under labels on a one-row strip);
+			   the right-edge mask fade is the affordance instead. */
 			scrollbar-width: none;
+			mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 		}
 		.subnav::-webkit-scrollbar {
 			display: none;

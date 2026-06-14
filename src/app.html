@@ -8,12 +8,7 @@
 		     The inline script below pins it to the user's saved choice (if any)
 		     before first paint to avoid a flash of un-themed content. -->
 		<meta name="color-scheme" content="light dark" />
-		<!-- Open the TLS handshake to the mteb FastAPI host (Hugging Face Space) in
-		     parallel with the HTML parse — every page makes at least one fetch
-		     against it, so the first request lands ~150 ms faster on cold hits.
-		     `preconnect` already implies DNS resolution, so a separate
-		     `dns-prefetch` would be redundant. -->
-		<link rel="preconnect" href="https://mteb-leaderboardv2-api.hf.space" crossorigin />
+		<!-- Backend preconnect is emitted by +layout.svelte from PUBLIC_API_URL. -->
 		<!-- Theme pin runs first so it lands before any layout / speculation
 		     work — keeps the no-flash invariant tight on slow CPUs. -->
 		<script>
@@ -63,6 +58,7 @@
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
-		%sveltekit.body%
+		<!-- display:contents wrapper protects hydration from extension-injected siblings. -->
+		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

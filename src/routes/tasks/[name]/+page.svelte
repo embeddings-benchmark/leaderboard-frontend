@@ -1,22 +1,26 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { loadBenchmarkMenu, loadTask, loadTaskScores } from '$lib/data/service';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
+	import { loadTaskDescriptiveStats, loadTaskScores } from '$lib/data/service';
 	import { languageLabel } from '$lib/data/languages';
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
+	import DescriptiveStatsSection from '$lib/components/DescriptiveStatsSection.svelte';
+	import InfoDot from '$lib/components/InfoDot.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import ModelScoreTable, { type ModelScore } from '$lib/components/ModelScoreTable.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import Segmented from '$lib/components/Segmented.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { sortModalities } from '$lib/format';
+	import { slug, sortModalities } from '$lib/format';
+	import { clampTooltipX } from '$lib/cell-hover';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
-	import { slug } from '$lib/format';
-	import { flattenMenu, type Benchmark, type TaskMeta, type TaskScores } from '$lib/types';
+	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
+	import type { TaskDescriptiveStats, TaskMeta, TaskScores } from '$lib/types';
+	import type { PageData } from './$types';
 
-	let taskName = $derived(decodeURIComponent(page.params.name ?? ''));
+	let { data }: { data: PageData } = $props();
 
 	interface TaskWithBenchmark {
 		meta: TaskMeta;
@@ -24,66 +28,60 @@
 		benchmarkDisplay: string;
 	}
 
-	// Three independent fetches — the card renders as soon as taskMeta and
-	// menu land (both sub-ms), while the (potentially slow) scores call
-	// streams in behind a skeleton.
-	let allBenchmarks = $state<Benchmark[]>([]);
-	let taskMeta = $state<TaskMeta | null>(null);
-	let metaError = $state<string | null>(null);
+	let taskName = $derived(data.taskName);
+	let allBenchmarks = $derived(data.allBenchmarks);
+	let taskMeta = $derived(data.taskMeta);
+
+	// Scores aren't in the loader — fetched client-side here so prerender
+	// only awaits the hero metadata. Stale-guard via `taskName === name`
+	// on rapid task→task nav.
 	let scoresPayload = $state<TaskScores | null>(null);
 	let loadingScores = $state(true);
 	let scoresError = $state<string | null>(null);
-
-	$effect(() => {
-		(async () => {
-			const menu = await loadBenchmarkMenu();
-			allBenchmarks = flattenMenu(menu);
-		})();
-	});
-
-	// Card metadata: /tasks/{name} — fast endpoint that just returns the
-	// TaskMeta. Cleared and re-fetched whenever the URL param changes.
 	$effect(() => {
 		const name = taskName;
-		if (!name) return;
-		taskMeta = null;
-		metaError = null;
-		loadTask(name)
-			.then((t) => {
-				taskMeta = t;
-			})
-			.catch((e) => {
-				console.error('loadTask', e);
-				metaError = e instanceof Error ? e.message : String(e);
-			});
-	});
-
-	// Scores table: /tasks/{name}/scores — slower (cold builds iterate every
-	// per-task result). Lives in its own state with its own loading flag so
-	// the card stays visible while we wait.
-	$effect(() => {
-		const name = taskName;
-		if (!name) return;
 		scoresPayload = null;
 		scoresError = null;
 		loadingScores = true;
-		loadTaskScores(name)
-			.then((s) => {
+		loadTaskScores(name).then(
+			(s) => {
+				if (taskName !== name) return;
 				scoresPayload = s;
-			})
-			.catch((e) => {
-				console.error('loadTaskScores', e);
-				scoresError = e instanceof Error ? e.message : String(e);
-			})
-			.finally(() => {
 				loadingScores = false;
-			});
+			},
+			(e) => {
+				if (taskName !== name) return;
+				scoresError = e instanceof Error ? e.message : String(e);
+				loadingScores = false;
+			}
+		);
 	});
 
-	// Hosting benchmarks come from the menu (cheap) — we don't need the
-	// scores payload to render the "In benchmarks: …" strip on the card.
-	// Pre-index task membership so we don't re-scan every benchmark's tasks
-	// array (~100 benchmarks × ~100 tasks worth of compares on every nav).
+	// Descriptive stats live behind a separate endpoint — same client-side
+	// fetch pattern as scores so prerender doesn't pay for them. Failures
+	// silently hide the section (vs. blocking the page) since stats are
+	// supplementary metadata.
+	let descriptiveStats = $state.raw<TaskDescriptiveStats | null>(null);
+	let loadingStats = $state(true);
+	$effect(() => {
+		const name = taskName;
+		descriptiveStats = null;
+		loadingStats = true;
+		loadTaskDescriptiveStats(name).then(
+			(s) => {
+				if (taskName !== name) return;
+				descriptiveStats = s;
+				loadingStats = false;
+			},
+			() => {
+				if (taskName !== name) return;
+				loadingStats = false;
+			}
+		);
+	});
+	let hasStats = $derived(descriptiveStats != null && Object.keys(descriptiveStats).length > 0);
+
+	// Pre-index task membership for the "In benchmarks: …" strip.
 	let benchTasksSets = $derived(allBenchmarks.map((b) => new Set(b.tasks)));
 	let benchmarks = $derived.by(() => {
 		if (!taskName || allBenchmarks.length === 0) return [];
@@ -97,8 +95,8 @@
 		return out;
 	});
 
-	let task = $derived.by<TaskWithBenchmark | null>(() => {
-		if (!taskMeta) return null;
+	// Loader guarantees `taskMeta` (a miss throws error(404)).
+	let task = $derived.by<TaskWithBenchmark>(() => {
 		const first = benchmarks[0];
 		return {
 			meta: taskMeta,
@@ -107,25 +105,96 @@
 		};
 	});
 
-	// Real per-hf_subset scores come straight from /tasks/{name}/scores.
-	// For single-subset tasks (most retrieval benchmarks) the per-subset
-	// breakdown adds nothing — the Mean column already shows the value.
-	// Drop the subset list when there's only one (regardless of whether
-	// it's the literal `default` name or some other singleton) so the
-	// table renders without the redundant subset column.
+	// Single-subset tasks: the Mean column already shows the only value.
 	let subsets = $derived<string[]>(
 		(scoresPayload?.subsets ?? []).length > 1 ? (scoresPayload?.subsets ?? []) : []
 	);
 
+	type SplitMode = 'all' | (string & {});
+	let availableSplits = $derived(scoresPayload?.splits ?? []);
+	let splitMode = $state<SplitMode>('all');
+	$effect(() => {
+		void taskName;
+		splitMode = 'all';
+	});
+	// Picker only renders for multi-split tasks; single-split tasks pin "all".
+	let splitOptions = $derived(
+		availableSplits.length > 1
+			? [
+					{ label: 'All splits', value: 'all' as SplitMode },
+					...availableSplits.map((s) => ({ label: s, value: s as SplitMode }))
+				]
+			: []
+	);
+
+	// "all" mode: per-cell mean across every split the task offers; any missing
+	// split nulls the cell so partial-coverage models aren't ranked against
+	// fully-evaluated ones. Specific split: literal cell value, or undefined.
+	function projectSubsetScores(
+		nested: Record<string, Record<string, number>>,
+		mode: SplitMode,
+		allSplits: readonly string[]
+	): Record<string, number> {
+		const out: Record<string, number> = {};
+		for (const [sub, perSplit] of Object.entries(nested)) {
+			if (mode === 'all') {
+				let sum = 0;
+				let complete = true;
+				for (const sp of allSplits) {
+					const v = perSplit[sp];
+					if (v === undefined) {
+						complete = false;
+						break;
+					}
+					sum += v;
+				}
+				if (complete && allSplits.length > 0) out[sub] = sum / allSplits.length;
+			} else if (perSplit[mode] !== undefined) {
+				out[sub] = perSplit[mode];
+			}
+		}
+		return out;
+	}
+
 	let scores = $derived.by<ModelScore[]>(() => {
 		if (!scoresPayload) return [];
-		return scoresPayload.rows.map((r) => ({
-			model: r.model,
-			score: r.score,
-			rank: r.rank,
-			benchmarkName: r.benchmarks[0] ?? '',
-			subsetScores: r.subsetScores
-		}));
+		const subsetList = scoresPayload.subsets;
+		const splitList = scoresPayload.splits;
+		const projected = scoresPayload.rows.map((r) => {
+			const flat = projectSubsetScores(r.subsetScores, splitMode, splitList);
+			// Mean over subsets; null on any missing subset cell.
+			let score: number | null = null;
+			let sum = 0;
+			let n = 0;
+			let complete = true;
+			for (const sub of subsetList) {
+				const v = flat[sub];
+				if (v === undefined) {
+					complete = false;
+					break;
+				}
+				sum += v;
+				n++;
+			}
+			if (complete && n > 0) score = sum / n;
+			return {
+				model: r.model,
+				score,
+				benchmarkName: r.benchmarks[0] ?? '',
+				subsetScores: flat,
+				trainedOn: r.trainedOn
+			};
+		});
+		// Re-rank per mode — the API's rank reflects its own rollup, not what
+		// the user sees once a split is picked.
+		const sorted = [...projected].sort((a, b) => {
+			if (a.score === null && b.score === null) return a.model.name.localeCompare(b.model.name);
+			if (a.score === null) return 1;
+			if (b.score === null) return -1;
+			if (a.score === b.score) return a.model.name.localeCompare(b.model.name);
+			return b.score - a.score;
+		});
+		return sorted.map((row, i) => ({ ...row, rank: i + 1 }));
 	});
 
 	let multipleBenchmarks = $derived(benchmarks.length > 1);
@@ -166,18 +235,10 @@
 	};
 
 	const INFO_TIP_MAX_WIDTH = 360;
-	const INFO_TIP_EDGE = 8;
 	type InfoTipState = { visible: boolean; tip: InfoTip | null; x: number; y: number };
 	let infoTip = $state<InfoTipState>({ visible: false, tip: null, x: 0, y: 0 });
 	let infoTipHideTimer: ReturnType<typeof setTimeout> | null = null;
-	function clampInfoX(rawX: number): number {
-		if (typeof window === 'undefined') return rawX;
-		const half = INFO_TIP_MAX_WIDTH / 2;
-		const min = INFO_TIP_EDGE + half;
-		const max = window.innerWidth - INFO_TIP_EDGE - half;
-		if (min > max) return window.innerWidth / 2;
-		return Math.min(max, Math.max(min, rawX));
-	}
+	const clampInfoX = (x: number) => clampTooltipX(x, INFO_TIP_MAX_WIDTH);
 	function cancelInfoTipHide() {
 		if (infoTipHideTimer !== null) {
 			clearTimeout(infoTipHideTimer);
@@ -220,13 +281,13 @@
 
 <ShareMeta
 	title={taskName}
-	description={task?.meta?.description
+	description={task.meta.description
 		? `${task.meta.type} task · ${task.meta.languages.length} languages · ${task.meta.domains.length} domains — ${task.meta.description}`
 		: `${taskName} on the MTEB Leaderboard.`}
 	entity={{ kind: 'task', name: taskName }}
 />
 
-<div class="page">
+<main id="main-content" tabindex="-1" class="page">
 	<nav class="breadcrumb" aria-label="Breadcrumb">
 		<a href={resolve('/')}>Home</a>
 		<span class="sep">/</span>
@@ -235,178 +296,167 @@
 		<span class="current">{taskName}</span>
 	</nav>
 
-	{#if !task && !metaError}
-		<p class="muted">Loading task…</p>
-	{:else if !task}
-		<section class="empty card">
-			<h1>Unknown task</h1>
-			<p>{metaError ?? `No task named “${taskName}” found.`}</p>
-			<a class="back" href={resolve('/tasks')}>← All tasks</a>
-		</section>
-	{:else}
-		<section class="hero card" data-stype={task.meta.simplifiedType}>
-			<div class="hero-left">
-				<div class="kicker">
-					<!-- Hero badge mirrors the task-group chip on the index card:
+	<section class="hero panel hero-grid" data-stype={task.meta.simplifiedType}>
+		<div class="hero-left">
+			<div class="kicker">
+				<!-- Hero badge mirrors the task-group chip on the index card:
 					     simplified type name (e.g. "retrieval") with the matching
 					     per-group tint. The raw `type` value lives in the
 					     spec-list row below. -->
-					<span class="type-badge" data-stype={task.meta.simplifiedType}>
-						{task.meta.simplifiedType || task.meta.type}
+				<span class="category-badge" data-stype={task.meta.simplifiedType}>
+					{task.meta.simplifiedType || task.meta.type}
+				</span>
+				{#each sortModalities(task.meta.modalities) as m (m)}
+					<span class="badge modality-tint" data-modality={m} title={m}>
+						<ModalityIcon modality={m} size={12} />
+						<span>{m}</span>
 					</span>
-					{#each sortModalities(task.meta.modalities) as m (m)}
-						<span class="badge modality-tint" data-modality={m} title={m}>
-							<ModalityIcon modality={m} size={12} />
-							<span>{m}</span>
-						</span>
+				{/each}
+			</div>
+			<h1>{taskName}</h1>
+			<p class="desc"><MarkdownText text={task.meta.description} /></p>
+			{#if task.meta.domains.length > 0}
+				<div class="domains">
+					<span class="eyebrow dim">Domains:</span>
+					{#each task.meta.domains as d (d)}
+						<span class="chip-neutral">{d}</span>
 					{/each}
 				</div>
-				<h1>{taskName}</h1>
-				<p class="desc"><MarkdownText text={task.meta.description} /></p>
-				{#if task.meta.domains.length > 0}
-					<div class="domains">
-						<span class="dim">Domains:</span>
-						{#each task.meta.domains as d (d)}
-							<span class="dom-chip">{d}</span>
-						{/each}
-					</div>
-				{/if}
-				{#if task.meta.languages.length > 0}
-					<div class="langs">
-						<span class="dim">Languages:</span>
-						{#each task.meta.languages as l (l)}
-							<span class="lang-chip" title={l}>{languageLabel(l)}</span>
-						{/each}
-					</div>
-				{/if}
-				<div class="bench-links">
-					<span class="dim">In benchmark{multipleBenchmarks ? 's' : ''}:</span>
-					{#each benchmarks as b (b.name)}
-						<a class="bench-chip" href={resolve('/benchmark/[name]', { name: slug(b.name) })}
-							>{b.display}</a
-						>
+			{/if}
+			{#if task.meta.languages.length > 0}
+				<div class="langs">
+					<span class="eyebrow dim">Languages:</span>
+					{#each task.meta.languages as l (l)}
+						<span class="chip-neutral" title={l}>{languageLabel(l)}</span>
 					{/each}
 				</div>
-				<dl class="spec-list">
-					{#if task.meta.type}
-						<div class="row">
-							<dt>Task type</dt>
-							<dd>{task.meta.type}</dd>
-						</div>
-					{/if}
-					{#if task.meta.mainScore}
-						<div class="row">
-							<dt>Main metric</dt>
-							<dd><code>{task.meta.mainScore}</code></dd>
-						</div>
-					{/if}
+			{/if}
+			<div class="bench-links">
+				<span class="eyebrow dim">In benchmark{multipleBenchmarks ? 's' : ''}:</span>
+				{#each benchmarks as b (b.name)}
+					<a class="bench-chip" href={resolve('/benchmark/[name]', { name: slug(b.name) })}
+						>{b.display}</a
+					>
+				{/each}
+			</div>
+			<dl class="spec-list">
+				{#if task.meta.type}
 					<div class="row">
-						<dt>Reference</dt>
+						<dt>Task type</dt>
+						<dd>{task.meta.type}</dd>
+					</div>
+				{/if}
+				{#if task.meta.mainScore}
+					<div class="row">
+						<dt>Main metric</dt>
+						<dd><code>{task.meta.mainScore}</code></dd>
+					</div>
+				{/if}
+				<div class="row">
+					<dt>Reference</dt>
+					<dd>
+						{#if task.meta.reference}
+							<!-- External paper URL -->
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+							<a href={task.meta.reference} target="_blank" rel="noreferrer">
+								{task.meta.reference}
+							</a>
+						{:else}
+							<span class="muted-dd">—</span>
+						{/if}
+					</dd>
+				</div>
+				{#if task.meta.sourceDataset}
+					<div class="row">
+						<dt>Source dataset</dt>
 						<dd>
-							{#if task.meta.reference}
-								<!-- External paper URL -->
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-								<a href={task.meta.reference} target="_blank" rel="noreferrer">
-									{task.meta.reference}
-								</a>
-							{:else}
-								<span class="muted-dd">—</span>
-							{/if}
+							<a
+								href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
+								target="_blank"
+								rel="noreferrer"
+								class="ds-link"
+							>
+								{task.meta.sourceDataset}
+							</a>
 						</dd>
 					</div>
-					{#if task.meta.sourceDataset}
-						<div class="row">
-							<dt>Source dataset</dt>
-							<dd>
-								<a
-									href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
-									target="_blank"
-									rel="noreferrer"
-									class="ds-link"
-								>
-									{task.meta.sourceDataset}
-								</a>
-							</dd>
-						</div>
-					{/if}
-					{#if task.meta.license}
-						<div class="row">
-							<dt>License</dt>
-							<dd>{task.meta.license}</dd>
-						</div>
-					{/if}
-					{#if task.meta.dateFrom || task.meta.dateTo}
-						<div class="row">
-							<dt>Dates</dt>
-							<dd>
-								{task.meta.dateFrom ?? '?'} → {task.meta.dateTo ?? '?'}
-							</dd>
-						</div>
-					{/if}
-					{#if task.meta.annotationsCreators}
-						<div class="row">
-							<dt>
-								Annotations
-								<button
-									type="button"
-									class="info-dot"
-									aria-label="What does this mean?"
-									data-tip-key="annotations"
-									onpointerenter={showInfoTip}
-									onpointerleave={hideInfoTip}
-									onfocusin={showInfoTip}
-									onfocusout={hideInfoTip}>?</button
-								>
-							</dt>
-							<dd>{task.meta.annotationsCreators}</dd>
-						</div>
-					{/if}
-					{#if task.meta.dialect && task.meta.dialect.length > 0}
-						<div class="row">
-							<dt>Dialect</dt>
-							<dd>
-								<span class="chips">
-									{#each task.meta.dialect as d (d)}
-										<span class="chip">{d}</span>
-									{/each}
-								</span>
-							</dd>
-						</div>
-					{/if}
-					{#if task.meta.sampleCreation}
-						<div class="row">
-							<dt>
-								Sample creation
-								<button
-									type="button"
-									class="info-dot"
-									aria-label="What does this mean?"
-									data-tip-key="sample-creation"
-									onpointerenter={showInfoTip}
-									onpointerleave={hideInfoTip}
-									onfocusin={showInfoTip}
-									onfocusout={hideInfoTip}>?</button
-								>
-							</dt>
-							<dd>{task.meta.sampleCreation}</dd>
-						</div>
-					{/if}
-				</dl>
-				<CiteBlock kind="task" citation={task.meta.citation} />
+				{/if}
+				{#if task.meta.license}
+					<div class="row">
+						<dt>License</dt>
+						<dd>{task.meta.license}</dd>
+					</div>
+				{/if}
+				{#if task.meta.dateFrom || task.meta.dateTo}
+					<div class="row">
+						<dt>Dates</dt>
+						<dd>
+							{task.meta.dateFrom ?? '?'} → {task.meta.dateTo ?? '?'}
+						</dd>
+					</div>
+				{/if}
+				{#if task.meta.annotationsCreators}
+					<div class="row">
+						<dt>
+							Annotations
+							<InfoDot
+								as="button"
+								ariaLabel="What does this mean?"
+								tipKey="annotations"
+								onPointerEnter={showInfoTip}
+								onPointerLeave={hideInfoTip}
+								onFocusIn={showInfoTip}
+								onFocusOut={hideInfoTip}
+							/>
+						</dt>
+						<dd>{task.meta.annotationsCreators}</dd>
+					</div>
+				{/if}
+				{#if task.meta.dialect && task.meta.dialect.length > 0}
+					<div class="row">
+						<dt>Dialect</dt>
+						<dd>
+							<span class="chips">
+								{#each task.meta.dialect as d (d)}
+									<span class="chip">{d}</span>
+								{/each}
+							</span>
+						</dd>
+					</div>
+				{/if}
+				{#if task.meta.sampleCreation}
+					<div class="row">
+						<dt>
+							Sample creation
+							<InfoDot
+								as="button"
+								ariaLabel="What does this mean?"
+								tipKey="sample-creation"
+								onPointerEnter={showInfoTip}
+								onPointerLeave={hideInfoTip}
+								onFocusIn={showInfoTip}
+								onFocusOut={hideInfoTip}
+							/>
+						</dt>
+						<dd>{task.meta.sampleCreation}</dd>
+					</div>
+				{/if}
+			</dl>
+			<CiteBlock kind="task" citation={task.meta.citation} />
+		</div>
+		<div class="kpis">
+			<div class="kpi">
+				<span class="kpi-label">Models scored</span>
+				<span class="kpi-value">
+					{#if loadingScores}<span class="loading-dot" aria-label="Loading">…</span
+						>{:else}{scores.length}{/if}
+				</span>
 			</div>
-			<div class="kpis">
-				<div class="kpi">
-					<span class="kpi-label">Models scored</span>
-					<span class="kpi-value">
-						{#if loadingScores}<span class="loading-dot" aria-label="Loading">…</span
-							>{:else}{scores.length}{/if}
-					</span>
-				</div>
-			</div>
-		</section>
+		</div>
+	</section>
 
-		{#if task.meta.isPublic !== false && task.meta.sourceDataset}
-			<!-- Embedded HuggingFace dataset viewer in a collapsible section
+	{#if task.meta.isPublic !== false && task.meta.sourceDataset}
+		<!-- Embedded HuggingFace dataset viewer in a collapsible section
 			     so the (heavy) iframe doesn't push the scores below the
 			     fold for users who only came to see the leaderboard.
 			     Closed by default; `loading="lazy"` further defers the
@@ -414,59 +464,78 @@
 			     view. Only shown for public datasets — RTEB private
 			     hold-outs and similar are skipped so we don't surface a
 			     404'ing iframe. -->
-			<details class="dataset-preview">
-				<summary>
-					<span class="preview-title">Dataset preview</span>
-					<span class="preview-source">{task.meta.sourceDataset}</span>
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-					<a
-						class="ext-link"
-						href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
-						target="_blank"
-						rel="noreferrer"
-						onclick={(e) => e.stopPropagation()}
-					>
-						Open on HuggingFace →
-					</a>
-				</summary>
-				<iframe
-					src="https://huggingface.co/datasets/{task.meta.sourceDataset}/embed/viewer/default/test"
-					title="HuggingFace dataset viewer for {task.meta.sourceDataset}"
-					loading="lazy"
-					frameborder="0"
-					width="100%"
-					height="560"
-				></iframe>
-			</details>
-		{/if}
-
-		<section class="scores">
-			<header class="scores-head">
-				<h2>Model scores</h2>
-				<span class="muted">
-					{#if loadingScores}Loading…
-					{:else}{scores.length} {scores.length === 1 ? 'entry' : 'entries'}{/if}
-				</span>
-				{#if scores.length > 0}
-					<DownloadButton filename="{sanitizeFilename(taskName)}_models" build={buildCsv} />
-				{/if}
-			</header>
-			{#if loadingScores}
-				<p class="muted">Fetching scores — this can take a few seconds on cold cache…</p>
-			{:else if scoresError}
-				<p class="muted">Failed to load scores: {scoresError}</p>
-			{:else if scores.length === 0}
-				<p class="muted">No model has been scored on this task yet.</p>
-			{:else}
-				<ModelScoreTable rows={scores} {subsets} />
-			{/if}
-		</section>
+		<details class="dataset-preview details-flat">
+			<summary>
+				<span class="preview-title">Dataset preview</span>
+				<span class="preview-source">{task.meta.sourceDataset}</span>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a
+					class="ext-link"
+					href="https://huggingface.co/datasets/{task.meta.sourceDataset}"
+					target="_blank"
+					rel="noreferrer"
+					onclick={(e) => e.stopPropagation()}
+				>
+					Open on HuggingFace →
+				</a>
+			</summary>
+			<iframe
+				src="https://huggingface.co/datasets/{task.meta.sourceDataset}/embed/viewer/default/test"
+				title="HuggingFace dataset viewer for {task.meta.sourceDataset}"
+				loading="lazy"
+				frameborder="0"
+				width="100%"
+				height="560"
+			></iframe>
+		</details>
 	{/if}
-</div>
+
+	{#if !loadingStats && hasStats && descriptiveStats}
+		<DescriptiveStatsSection stats={descriptiveStats} />
+	{/if}
+
+	<section class="scores">
+		<header class="scores-head">
+			<h2>Model scores</h2>
+			<span class="muted">
+				{#if loadingScores}Loading…
+				{:else}{scores.length} {scores.length === 1 ? 'entry' : 'entries'}{/if}
+			</span>
+			{#if splitOptions.length > 0}
+				<div class="split-picker">
+					<span class="picker-label">Split</span>
+					<Segmented
+						ariaLabel="Split"
+						options={splitOptions}
+						value={splitMode}
+						onChange={(v) => (splitMode = v)}
+					/>
+				</div>
+			{/if}
+			{#if scores.length > 0}
+				<DownloadButton
+					filename="{sanitizeFilename(taskName)}_models{splitMode === 'all'
+						? ''
+						: '_' + sanitizeFilename(splitMode)}"
+					build={buildCsv}
+				/>
+			{/if}
+		</header>
+		{#if loadingScores}
+			<SkeletonTable rows={8} cols={6} />
+		{:else if scoresError}
+			<p class="muted">Failed to load scores: {scoresError}</p>
+		{:else if scores.length === 0}
+			<p class="muted">No model has been scored on this task yet.</p>
+		{:else}
+			<ModelScoreTable rows={scores} {subsets} />
+		{/if}
+	</section>
+</main>
 
 {#if infoTip.visible && infoTip.tip}
 	<div
-		class="info-tip"
+		class="info-tip tip-portal tip-portal-interactive"
 		role="tooltip"
 		style:left="{infoTip.x}px"
 		style:top="{infoTip.y}px"
@@ -487,183 +556,18 @@
 <ShareUrlButton />
 
 <style>
-	/* `.page` (1280 px centred, 18/28/56 padding) and `.breadcrumb`
-	   family live in src/app.css. */
-
-	.card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: 0 1px 3px rgb(var(--shadow-tint) / 0.04);
-	}
-
-	/* Hero ----------------------------------------------------------------- */
-	.hero {
-		display: grid;
-		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-		gap: 28px;
-		padding: 26px 28px;
-		margin-bottom: 18px;
-		position: relative;
-		overflow: hidden;
-	}
+	/* Left-edge accent strip — `data-stype` resolves
+	   `--category-tint-fg` via the global mapping in app.css. */
 	.hero::before {
 		content: '';
 		position: absolute;
 		top: 0;
+		bottom: 0;
 		left: 0;
-		right: 0;
-		height: 4px;
-		background: var(--accent, var(--border));
-	}
-	/* Hero gradient pulls its tint from the shared --tint-* palette so the
-	   dark-mode variants drop in automatically — no more white→dark wash.
-	   Keyed off `data-stype` (the simplified task group) to match the
-	   group-chip / type-badge mapping. */
-	.hero[data-stype='classification'] {
-		--accent: var(--tint-blue-fg);
-		--hero-tint: var(--tint-blue);
-	}
-	.hero[data-stype='clustering'] {
-		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
-	}
-	.hero[data-stype='pair-classification'] {
-		--accent: var(--tint-green-fg);
-		--hero-tint: var(--tint-green);
-	}
-	.hero[data-stype='reranking'] {
-		--accent: var(--tint-amber-fg);
-		--hero-tint: var(--tint-amber);
-	}
-	.hero[data-stype='retrieval'] {
-		--accent: var(--tint-purple-fg);
-		--hero-tint: var(--tint-purple);
-	}
-	.hero[data-stype='semantic-similarity'] {
-		--accent: var(--tint-pink-fg);
-		--hero-tint: var(--tint-pink);
-	}
-	.hero[data-stype='bitext-mining'] {
-		--accent: var(--tint-azure-fg);
-		--hero-tint: var(--tint-azure);
-	}
-	.hero[data-stype='instruction-reranking'] {
-		--accent: var(--tint-orange-fg);
-		--hero-tint: var(--tint-orange);
-	}
-	.hero[data-stype='summarization'] {
-		--accent: var(--tint-teal-fg);
-		--hero-tint: var(--tint-teal);
-	}
-	.hero[data-stype] {
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--hero-tint) 55%, var(--surface)) 0%,
-			var(--surface) 200px
-		);
-	}
-	@media (max-width: 640px) {
-		.hero {
-			padding: 18px 16px;
-			gap: 16px;
-			margin-bottom: 12px;
-		}
-		.kpis {
-			gap: 8px;
-		}
-		.kpi {
-			padding: 8px 10px;
-		}
-		.kpi-value {
-			font-size: 17px;
-		}
-		.spec-list {
-			grid-template-columns: 110px minmax(0, 1fr);
-			column-gap: 12px;
-			row-gap: 8px;
-		}
-		.spec-list .chip {
-			overflow-wrap: anywhere;
-		}
-		.spec-list dd {
-			overflow-wrap: anywhere;
-		}
-	}
-	@media (max-width: 1000px) {
-		.hero {
-			grid-template-columns: minmax(0, 1fr);
-		}
+		width: 3px;
+		background: var(--category-tint-fg, var(--border));
 	}
 
-	.kicker {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-		margin-bottom: 12px;
-	}
-	.type-badge {
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		font-weight: 700;
-		padding: 4px 10px;
-		border-radius: 999px;
-		/* `currentColor` is the per-stype foreground tint set below, so
-		   one rule covers every variant — no need to repeat per-stype. */
-		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-	}
-	/* Per-task-group tints, matching the TaskCard `.group-chip` mapping
-	   and the parent card's `data-stype` accent. */
-	.type-badge[data-stype='classification'] {
-		background: var(--tint-blue);
-		color: var(--tint-blue-fg);
-	}
-	.type-badge[data-stype='clustering'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-	}
-	.type-badge[data-stype='pair-classification'] {
-		background: var(--tint-green);
-		color: var(--tint-green-fg);
-	}
-	.type-badge[data-stype='reranking'] {
-		background: var(--tint-amber);
-		color: var(--tint-amber-fg);
-	}
-	.type-badge[data-stype='retrieval'] {
-		background: var(--tint-purple);
-		color: var(--tint-purple-fg);
-	}
-	.type-badge[data-stype='semantic-similarity'] {
-		background: var(--tint-pink);
-		color: var(--tint-pink-fg);
-	}
-	.type-badge[data-stype='bitext-mining'] {
-		background: var(--tint-azure);
-		color: var(--tint-azure-fg);
-	}
-	.type-badge[data-stype='instruction-reranking'] {
-		background: var(--tint-orange);
-		color: var(--tint-orange-fg);
-	}
-	.type-badge[data-stype='summarization'] {
-		background: var(--tint-teal);
-		color: var(--tint-teal-fg);
-	}
-	.badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		padding: 4px 9px;
-		border-radius: 999px;
-		font-weight: 600;
-		letter-spacing: 0.02em;
-		/* Modality badges set their colour via `.modality-tint`, so the
-		   currentColor border picks up that same tint automatically. */
-		border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-	}
 	.hero h1 {
 		font-size: 26px;
 		font-weight: 800;
@@ -678,11 +582,6 @@
 		line-height: 1.5;
 	}
 	.dim {
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		font-weight: 600;
-		color: var(--text-subtle);
 		margin-right: 4px;
 	}
 	.domains,
@@ -697,17 +596,6 @@
 	.hero-left :global(.cite) {
 		margin-top: 10px;
 	}
-	.dom-chip,
-	.lang-chip {
-		display: inline-block;
-		padding: 2px 8px;
-		font-size: 11px;
-		font-weight: 500;
-		border-radius: 999px;
-		background: var(--surface-muted);
-		color: var(--text);
-		border: 1px solid var(--border);
-	}
 	.bench-chip {
 		display: inline-block;
 		padding: 3px 10px;
@@ -715,121 +603,27 @@
 		font-weight: 600;
 		border-radius: 999px;
 		background: var(--surface);
-		color: var(--accent, var(--primary-strong));
+		color: var(--category-tint-fg, var(--primary-strong));
 		border: 1px solid var(--border);
 		text-decoration: none;
 	}
 	.bench-chip:hover {
-		border-color: var(--accent, var(--primary));
+		border-color: var(--category-tint-fg, var(--primary));
 	}
 
-	.kpis {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 10px;
-		align-content: start;
-	}
-	.kpi {
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		padding: 10px 12px;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.kpi-label {
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-		font-weight: 600;
-	}
-	.kpi-value {
-		font-size: 20px;
-		font-weight: 700;
-		color: var(--text);
-		font-variant-numeric: tabular-nums;
-	}
-
-	/* Dataset spec — definition list rendered inline in the hero card. */
-	.spec-list {
-		display: grid;
-		grid-template-columns: 160px minmax(0, 1fr);
-		row-gap: 6px;
-		column-gap: 14px;
-		margin: 12px 0 0;
-	}
-	.spec-list .row {
-		display: contents;
-	}
+	/* `<dt>` wraps a label + inline (?) info-dot, so align them on a
+	   baseline. */
 	.spec-list dt {
-		font-size: 12px;
-		font-weight: 500;
-		color: var(--text-subtle);
-		letter-spacing: 0.02em;
-		padding-top: 3px;
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-	}
-	.spec-list dd {
-		font-size: 13px;
-		color: var(--text);
-		margin: 0;
-		min-width: 0;
-		word-break: break-word;
-	}
-	.spec-list dd a {
-		color: var(--link);
-	}
-	.spec-list .muted-dd {
-		color: var(--text-subtle);
 	}
 	.spec-list .ds-link {
 		font-family: var(--font-mono);
 		font-size: 12.5px;
 	}
-	.spec-list .chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.spec-list .chip {
-		font-family: var(--font-mono);
-		font-size: 11.5px;
-		padding: 2px 8px;
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		color: var(--text);
-	}
-	/* Tiny inline (?) hint button. Hover surfaces the explanation in
-	   the fixed-positioned `.info-tip` portal below — same pattern as
-	   SummaryTable's column tips, so the bubble appears instantly
-	   without the browser-native `title` attribute's ~700 ms delay. */
-	.info-dot {
-		all: unset;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 14px;
-		height: 14px;
-		font-size: 9px;
-		font-weight: 700;
-		font-family: var(--font-mono);
-		color: var(--text-subtle);
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 50%;
-		cursor: help;
-	}
-	.info-dot:hover,
-	.info-dot:focus-visible {
-		color: var(--ink-strong, var(--text));
-		background: var(--primary-soft);
-		border-color: color-mix(in srgb, var(--primary) 30%, transparent);
-	}
+	/* Tip bubbles appear instantly without the browser-native `title`
+	   attribute's ~700 ms delay. */
 	/* Portal tip body — fixed position so it escapes any ancestor
 	   overflow / stacking context. Pointer-events: auto + the
 	   matching `cancelInfoTipHide` on enter lets the user mouse onto
@@ -837,22 +631,7 @@
 	   structured as a definition list: each row is a `<code>` term
 	   followed by its plain-prose explanation. */
 	.info-tip {
-		position: fixed;
-		transform: translate(-50%, 6px);
-		max-width: 360px;
 		padding: 10px 14px;
-		font-family: var(--font-sans);
-		font-size: 12px;
-		font-weight: 400;
-		line-height: 1.45;
-		color: var(--tip-fg);
-		background: var(--tip-bg);
-		border-radius: 6px;
-		box-shadow: 0 8px 18px rgb(var(--shadow-tint) / 0.22);
-		text-align: left;
-		white-space: normal;
-		z-index: 1000;
-		pointer-events: auto;
 	}
 	.info-tip-title {
 		margin: 0 0 6px;
@@ -882,7 +661,7 @@
 		font-family: var(--font-mono);
 		font-size: 11px;
 		padding: 1px 6px;
-		background: rgb(255, 255, 255, 0.08);
+		background: color-mix(in srgb, var(--tip-fg) 10%, transparent);
 		border-radius: 4px;
 		color: var(--tip-fg);
 		white-space: nowrap;
@@ -890,7 +669,7 @@
 	.info-tip-list dd {
 		margin: 0;
 		min-width: 0;
-		color: #c4cad2;
+		color: var(--tip-label);
 		overflow-wrap: anywhere;
 	}
 	@media (max-width: 720px) {
@@ -921,12 +700,8 @@
 		gap: 10px;
 		padding: 12px 16px;
 		cursor: pointer;
-		list-style: none;
 		user-select: none;
 		font-size: 14px;
-	}
-	.dataset-preview > summary::-webkit-details-marker {
-		display: none;
 	}
 	.dataset-preview > summary::before {
 		content: '';
@@ -987,6 +762,20 @@
 	.scores-head .muted {
 		flex: 1;
 	}
+	/* Split picker sits between the entry count and the download button,
+	   only renders for tasks with >1 eval split (most tasks: just "test"). */
+	.split-picker {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.picker-label {
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
 	.scores h2 {
 		font-size: 18px;
 		font-weight: 700;
@@ -1002,21 +791,5 @@
 		color: var(--text-subtle);
 		letter-spacing: 0.1em;
 		font-weight: 500;
-	}
-	.empty {
-		padding: 48px 28px;
-		text-align: center;
-	}
-	.empty h1 {
-		font-size: 22px;
-		margin: 0 0 6px;
-	}
-	.empty p {
-		color: var(--text-muted);
-	}
-	.back {
-		display: inline-block;
-		margin-top: 12px;
-		font-weight: 600;
 	}
 </style>

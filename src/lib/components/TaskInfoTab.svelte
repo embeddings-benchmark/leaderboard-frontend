@@ -58,7 +58,7 @@
 	{#if filtered.length === 0}
 		<p class="empty">No tasks match the current filter.</p>
 	{:else}
-		<div class="grid">
+		<div class="card-grid">
 			{#each filtered as row (row.name)}
 				<TaskCard
 					name={row.name}
@@ -99,9 +99,15 @@
 		font-size: 13px;
 		font-family: inherit;
 	}
-	.filter input:focus {
+	.filter input:focus-visible {
 		outline: none;
 		border-color: var(--primary);
+	}
+	@media (forced-colors: active) {
+		.filter input:focus-visible {
+			outline: 2px solid Highlight;
+			outline-offset: 1px;
+		}
 	}
 	.count {
 		color: var(--text-muted);
@@ -114,11 +120,5 @@
 		background: var(--surface);
 		border: 1px dashed var(--border);
 		border-radius: 8px;
-	}
-	/* Same grid as /tasks — TaskCard handles the chrome, we just lay them out. */
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 12px;
 	}
 </style>

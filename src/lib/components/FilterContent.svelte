@@ -10,9 +10,16 @@
 		type Availability,
 		type InstructionMode
 	} from '$lib/stores/filters.svelte';
-	import RangeSlider from './RangeSlider.svelte';
-	import { humanizeType } from '$lib/format';
+	import ActiveFilterStrip from './ActiveFilterStrip.svelte';
+	import FilterFacet from './FilterFacet.svelte';
+	import HoverPortal from './HoverPortal.svelte';
+	import InfoDot from './InfoDot.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
+	import RangeSlider from './RangeSlider.svelte';
+	import Segmented from './Segmented.svelte';
+	import Switch from './Switch.svelte';
+	import { clampTooltipX } from '$lib/cell-hover';
+	import { humanizeType } from '$lib/format';
 
 	// Size slider works in log10(M-of-params). Bounds are derived per benchmark
 	// from filters.availableMin/MaxModelSizeM and clamp into the global
@@ -97,6 +104,9 @@
 		// directory), drop the collapsible "Model filters" card chrome so the
 		// controls read as the section itself instead of a card-in-a-sidebar.
 		flatModel?: boolean;
+		// /models is benchmark-agnostic, so the per-benchmark "Zero-shot"
+		// segmented control doesn't apply there — hide it entirely.
+		hideZeroShot?: boolean;
 		// Optional inline "Language" facet shown inside the model-filters
 		// block. Wired up only by /models, which holds the picked/available
 		// state locally (it's the only page that filters models by language
@@ -107,33 +117,28 @@
 		languagesPicked?: Set<string>;
 		onToggleLanguage?: (l: string) => void;
 		onToggleAllLanguages?: () => void;
+		/** Restore the page-local language pick set to "all selected". */
+		onResetLanguages?: () => void;
 	}
 	let {
 		defaultModelOpen = true,
 		defaultScopeOpen = false,
 		hideScope = false,
 		flatModel = false,
+		hideZeroShot = false,
 		languageOptions,
 		languagesPicked,
 		onToggleLanguage,
-		onToggleAllLanguages
+		onToggleAllLanguages,
+		onResetLanguages
 	}: Props = $props();
 
-	// Same cap-then-expand pattern the inline rail used: hide the long
-	// tail behind a "Show all N" until the user opts in.
 	let modelLangQuery = $state('');
-	let modelLangsExpanded = $state(false);
-	const MODEL_LANGUAGE_CAP = 40;
 	let filteredModelLangs = $derived.by(() => {
 		const all = languageOptions ?? [];
 		const q = modelLangQuery.trim().toLowerCase();
 		return q ? all.filter((l) => l.toLowerCase().includes(q)) : all;
 	});
-	let visibleModelLangs = $derived(
-		modelLangsExpanded || filteredModelLangs.length <= MODEL_LANGUAGE_CAP
-			? filteredModelLangs
-			: filteredModelLangs.slice(0, MODEL_LANGUAGE_CAP)
-	);
 	let allModelLangsOn = $derived(
 		!!languagesPicked && !!languageOptions && languagesPicked.size === languageOptions.length
 	);
@@ -165,10 +170,10 @@
 		label: string;
 		clear: () => void;
 	}
-	// Split into per-section derived so toggling a model filter doesn't
-	// invalidate the customize chips (and vice versa) — each section only
-	// re-runs when its own inputs change.
-	let modelChips = $derived.by(() => {
+	// Scalar (non-facet) model filters — hand-written chips because each has a
+	// custom label format. Set-based facets fold into `modelFacetChips` /
+	// `scopeFacetChips` below via the FacetFilter.chip() method.
+	let scalarModelChips = $derived.by(() => {
 		const list: Chip[] = [];
 		if (filters.nameQuery.trim()) {
 			list.push({
@@ -206,127 +211,69 @@
 				clear: () => (filters.sentenceTransformersOnly = false)
 			});
 		}
-		if (
-			filters.minModelSizeM > filters.availableMinModelSizeM ||
-			filters.maxModelSizeM < filters.availableMaxModelSizeM
-		) {
+		// An active size filter also drops unsized (proprietary) models —
+		// surface that in the chip so vanishing rows aren't a mystery.
+		if (filters.sizeActive) {
 			list.push({
 				key: 'size',
-				label: `Size ${formatParams(filters.minModelSizeM)}–${formatParams(filters.maxModelSizeM)}`,
+				label: `Size ${formatParams(filters.minModelSizeM)}–${formatParams(filters.maxModelSizeM)} (excl. unsized)`,
 				clear: () => {
 					filters.minModelSizeM = filters.availableMinModelSizeM;
 					filters.maxModelSizeM = filters.availableMaxModelSizeM;
 				}
 			});
 		}
-		if (filters.modelTypes.size !== MODEL_TYPES.length) {
-			list.push({
-				key: 'mtype',
-				label: `Type · ${filters.modelTypes.size}/${MODEL_TYPES.length}`,
-				clear: () => filters.setAll('modelTypes', MODEL_TYPES, true)
-			});
-		}
-		if (filters.modelModalities.size !== MODEL_MODALITIES.length) {
-			list.push({
-				key: 'mmod',
-				label: `Modality · ${filters.modelModalities.size}/${MODEL_MODALITIES.length}`,
-				clear: () => filters.setAll('modelModalities', MODEL_MODALITIES, true)
-			});
-		}
 		return list;
 	});
-	let customizeChips = $derived.by(() => {
+	// Set-based model facets — modelTypes, modelModalities — fold straight into
+	// chips via FacetFilter.chip().
+	let modelFacetChips = $derived.by<Chip[]>(() => {
 		const list: Chip[] = [];
-		const hasTT = filters.availableTaskTypes.length > 0;
-		if (hasTT && filters.taskTypes.size !== filters.availableTaskTypes.length) {
-			list.push({
-				key: 'tt',
-				label: `Task type · ${filters.taskTypes.size}/${filters.availableTaskTypes.length}`,
-				clear: () => filters.setAll('taskTypes', filters.availableTaskTypes, true)
-			});
-		}
-		const hasD = filters.availableDomains.length > 0;
-		if (hasD && filters.domains.size !== filters.availableDomains.length) {
-			list.push({
-				key: 'dom',
-				label: `Domain · ${filters.domains.size}/${filters.availableDomains.length}`,
-				clear: () => filters.setAll('domains', filters.availableDomains, true)
-			});
-		}
-		const hasM = filters.availableModalities.length > 0;
-		if (hasM && filters.modalities.size !== filters.availableModalities.length) {
-			list.push({
-				key: 'mod',
-				label: `Modality · ${filters.modalities.size}/${filters.availableModalities.length}`,
-				clear: () => filters.setAll('modalities', filters.availableModalities, true)
-			});
-		}
-		const hasL = filters.availableLanguages.length > 0;
-		if (hasL && filters.languages.size !== filters.availableLanguages.length) {
-			list.push({
-				key: 'lang',
-				label: `Lang · ${filters.languages.size}/${filters.availableLanguages.length}`,
-				clear: () => filters.setAll('languages', filters.availableLanguages, true)
-			});
-		}
-		const hasT = filters.availableTasks.length > 0;
-		if (hasT && filters.tasks.size !== filters.availableTasks.length) {
-			list.push({
-				key: 'task',
-				label: `Task · ${filters.tasks.size}/${filters.availableTasks.length}`,
-				clear: () =>
-					filters.setAll(
-						'tasks',
-						filters.availableTasks.map((t) => t.name),
-						true
-					)
-			});
+		for (const f of filters.modelFacets) {
+			const c = f.chip();
+			if (c) list.push(c);
 		}
 		return list;
 	});
-	let chips = $derived([...modelChips, ...customizeChips]);
+	let scopeFacetChips = $derived.by<Chip[]>(() => {
+		const list: Chip[] = [];
+		for (const f of filters.scopeFacets) {
+			const c = f.chip();
+			if (c) list.push(c);
+		}
+		return list;
+	});
+	// Page-local Language facet (only on /models — not part of the global store).
+	let pageLocalLangChip = $derived.by<Chip | null>(() => {
+		if (
+			!languagesPicked ||
+			!languageOptions ||
+			languageOptions.length === 0 ||
+			languagesPicked.size === languageOptions.length ||
+			!onResetLanguages
+		)
+			return null;
+		return {
+			key: 'mlang',
+			label: `Lang · ${languagesPicked.size}/${languageOptions.length}`,
+			clear: () => onResetLanguages()
+		};
+	});
+	let chips = $derived.by<Chip[]>(() => {
+		const list = [...scalarModelChips, ...modelFacetChips];
+		if (pageLocalLangChip) list.push(pageLocalLangChip);
+		return [...list, ...scopeFacetChips];
+	});
 
 	let activeModelCount = $derived.by(() => {
-		let n = 0;
-		if (filters.availability !== 'both') n++;
-		if (filters.zeroShot !== 'allow_all') n++;
-		if (filters.instructions !== 'both') n++;
-		if (filters.sentenceTransformersOnly) n++;
-		if (
-			filters.minModelSizeM > filters.availableMinModelSizeM ||
-			filters.maxModelSizeM < filters.availableMaxModelSizeM
-		)
-			n++;
-		if (filters.modelTypes.size !== MODEL_TYPES.length) n++;
-		if (filters.modelModalities.size !== MODEL_MODALITIES.length) n++;
+		// Search-name chip is a find-in-table gesture, not a filter narrowing
+		// for count purposes (mirrors the legacy count which ignored nameQuery).
+		const scalarN = scalarModelChips.length - (filters.nameQuery.trim() ? 1 : 0);
+		let n = scalarN + modelFacetChips.length;
+		if (pageLocalLangChip) n++;
 		return n;
 	});
-	let activeScopeCount = $derived.by(() => {
-		let n = 0;
-		if (
-			filters.availableTaskTypes.length > 0 &&
-			filters.taskTypes.size !== filters.availableTaskTypes.length
-		)
-			n++;
-		if (
-			filters.availableDomains.length > 0 &&
-			filters.domains.size !== filters.availableDomains.length
-		)
-			n++;
-		if (
-			filters.availableModalities.length > 0 &&
-			filters.modalities.size !== filters.availableModalities.length
-		)
-			n++;
-		if (
-			filters.availableLanguages.length > 0 &&
-			filters.languages.size !== filters.availableLanguages.length
-		)
-			n++;
-		if (filters.availableTasks.length > 0 && filters.tasks.size !== filters.availableTasks.length)
-			n++;
-		return n;
-	});
+	let activeScopeCount = $derived(scopeFacetChips.length);
 
 	let filteredLanguages = $derived.by(() => {
 		// Lowercase + trim the query ONCE; `.filter` callback then only
@@ -350,60 +297,76 @@
 		filters.resetCustomize();
 		filters.resetModelFilters();
 		filters.nameQuery = '';
+		// No-op on pages that don't own a page-local language facet.
+		onResetLanguages?.();
+	}
+
+	// Tip portal for filter group-labels (mirrors the SummaryTable pattern
+	// so the bubble carries real styling instead of relying on the slow,
+	// unstyled native `title=` lag). Trigger nodes set `data-tip-title` /
+	// `data-tip` and wire up the pointer handlers below.
+	let tipState = $state({ visible: false, title: '', text: '', x: 0, y: 0 });
+	const TIP_MAX_WIDTH = 320;
+	function showTip(e: PointerEvent | FocusEvent) {
+		const el = e.currentTarget as HTMLElement;
+		const title = el.dataset.tipTitle ?? '';
+		const text = el.dataset.tip ?? '';
+		if (!text) return;
+		const r = el.getBoundingClientRect();
+		tipState = {
+			visible: true,
+			title,
+			text,
+			x: clampTooltipX(r.left + r.width / 2, TIP_MAX_WIDTH),
+			y: r.bottom
+		};
+	}
+	function hideTip() {
+		tipState = { ...tipState, visible: false };
 	}
 </script>
 
 <div class="filter-content">
-	{#if chips.length > 0}
-		<div class="active-strip">
-			<div class="chips">
-				{#each chips as c (c.key)}
-					<button type="button" class="active-chip" onclick={c.clear} title="Click to clear">
-						<span>{c.label}</span>
-						<span class="x" aria-hidden="true">×</span>
-					</button>
-				{/each}
-			</div>
-			<button type="button" class="reset-all" onclick={resetAll}>Reset all</button>
-		</div>
-	{/if}
+	<ActiveFilterStrip {chips} onResetAll={resetAll} />
 
 	{#snippet modelGroups()}
 		<div class="group">
 			<div class="group-label">Availability</div>
-			<div class="segmented" role="radiogroup" aria-label="Availability">
-				{#each AVAILABILITY_OPTS as opt (opt.value)}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={filters.availability === opt.value}
-						class="seg"
-						class:on={filters.availability === opt.value}
-						onclick={() => (filters.availability = opt.value)}
-					>
-						{opt.label}
-					</button>
-				{/each}
-			</div>
+			<Segmented
+				ariaLabel="Availability"
+				options={AVAILABILITY_OPTS}
+				value={filters.availability}
+				onChange={(v) => (filters.availability = v)}
+			/>
 		</div>
 
-		<div class="group">
-			<div class="group-label">Zero-shot</div>
-			<div class="segmented" role="radiogroup" aria-label="Zero-shot">
-				{#each ZERO_SHOT_OPTS as opt (opt.value)}
+		{#if !hideZeroShot}
+			<div class="group">
+				<div class="group-label">
+					Zero-shot
 					<button
 						type="button"
-						role="radio"
-						aria-checked={filters.zeroShot === opt.value}
-						class="seg"
-						class:on={filters.zeroShot === opt.value}
-						onclick={() => (filters.zeroShot = opt.value)}
+						class="tip-anchor"
+						aria-label="Zero-shot info"
+						data-tip-title="Zero-shot"
+						data-tip="Zero-shot indicates the portion of the benchmark a model has not been trained on. 'Only zero-shot' keeps fully out-of-distribution models; 'Hide unknown zero-shot' drops models whose training overlap is unknown."
+						onpointerenter={showTip}
+						onpointerleave={hideTip}
+						onfocusin={showTip}
+						onfocusout={hideTip}
+						onclick={(e) => e.stopPropagation()}
 					>
-						{opt.label}
+						<InfoDot ariaLabel="Zero-shot info" />
 					</button>
-				{/each}
+				</div>
+				<Segmented
+					ariaLabel="Zero-shot"
+					options={ZERO_SHOT_OPTS}
+					value={filters.zeroShot}
+					onChange={(v) => (filters.zeroShot = v)}
+				/>
 			</div>
-		</div>
+		{/if}
 
 		<div class="group">
 			<div class="group-label">
@@ -428,139 +391,70 @@
 
 		<div class="group">
 			<div class="group-label">Instructions</div>
-			<div class="segmented" role="radiogroup" aria-label="Instructions">
-				{#each INSTRUCTION_OPTS as opt (opt.value)}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={filters.instructions === opt.value}
-						class="seg"
-						class:on={filters.instructions === opt.value}
-						onclick={() => (filters.instructions = opt.value)}
-					>
-						{opt.label}
-					</button>
-				{/each}
-			</div>
+			<Segmented
+				ariaLabel="Instructions"
+				options={INSTRUCTION_OPTS}
+				value={filters.instructions}
+				onChange={(v) => (filters.instructions = v)}
+			/>
 		</div>
 
 		<div class="group">
-			<label class="switch">
-				<input
-					type="checkbox"
-					checked={filters.sentenceTransformersOnly}
-					onchange={(e) =>
-						(filters.sentenceTransformersOnly = (e.currentTarget as HTMLInputElement).checked)}
-				/>
-				<span class="switch-track"><span class="switch-knob"></span></span>
-				<span class="switch-label">Sentence-Transformers compatible only</span>
-			</label>
+			<Switch
+				label="Sentence-Transformers compatible"
+				checked={filters.sentenceTransformersOnly}
+				onChange={(v) => (filters.sentenceTransformersOnly = v)}
+			/>
 		</div>
 
-		<div class="group">
-			<div class="group-header">
-				<span class="group-label">Model type</span>
-				<button
-					type="button"
-					class="link-btn"
-					onclick={() =>
-						filters.setAll(
-							'modelTypes',
-							MODEL_TYPES,
-							filters.modelTypes.size !== MODEL_TYPES.length
-						)}
-				>
-					{filters.modelTypes.size === MODEL_TYPES.length ? 'Clear' : 'All'}
-				</button>
-			</div>
-			<div class="pills">
-				{#each MODEL_TYPES as t (t)}
-					<button
-						type="button"
-						class="pill model-type-pill"
-						data-type={t}
-						class:on={filters.modelTypes.has(t)}
-						onclick={() => filters.toggleInSet('modelTypes', t)}
-						aria-pressed={filters.modelTypes.has(t)}
-					>
-						<span>{t}</span>
-					</button>
-				{/each}
-			</div>
-		</div>
+		<FilterFacet
+			label="Model type"
+			items={MODEL_TYPES}
+			picked={filters.modelTypes}
+			onToggle={(t) => filters.toggleInSet('modelTypes', t)}
+			onToggleAll={() =>
+				filters.setAll('modelTypes', MODEL_TYPES, filters.modelTypes.size !== MODEL_TYPES.length)}
+			allSelected={filters.modelTypes.size === MODEL_TYPES.length}
+			pillClass="model-type-pill type-fill"
+			pillAttrs={(t) => ({ 'data-type': t })}
+		/>
 
-		<div class="group">
-			<div class="group-header">
-				<span class="group-label">Modality</span>
-				<button
-					type="button"
-					class="link-btn"
-					onclick={() =>
-						filters.setAll(
-							'modelModalities',
-							MODEL_MODALITIES,
-							filters.modelModalities.size !== MODEL_MODALITIES.length
-						)}
-				>
-					{filters.modelModalities.size === MODEL_MODALITIES.length ? 'Clear' : 'All'}
-				</button>
-			</div>
-			<div class="pills">
-				{#each MODEL_MODALITIES as m (m)}
-					<button
-						type="button"
-						class="pill"
-						class:on={filters.modelModalities.has(m)}
-						onclick={() => filters.toggleInSet('modelModalities', m)}
-						aria-pressed={filters.modelModalities.has(m)}
-					>
-						<ModalityIcon modality={m} size={12} />
-						<span>{m}</span>
-					</button>
-				{/each}
-			</div>
-		</div>
+		<FilterFacet
+			label="Modality"
+			items={MODEL_MODALITIES}
+			picked={filters.modelModalities}
+			onToggle={(m) => filters.toggleInSet('modelModalities', m)}
+			onToggleAll={() =>
+				filters.setAll(
+					'modelModalities',
+					MODEL_MODALITIES,
+					filters.modelModalities.size !== MODEL_MODALITIES.length
+				)}
+			allSelected={filters.modelModalities.size === MODEL_MODALITIES.length}
+			pillClass="modality-fill"
+			pillAttrs={(m) => ({ 'data-modality': m })}
+		>
+			{#snippet pillIcon(m)}<ModalityIcon modality={m} size={12} />{/snippet}
+		</FilterFacet>
 
 		{#if languageOptions && languageOptions.length > 0 && languagesPicked}
 			<!-- Language facet, only rendered when the host page wires up
 			     `languageOptions` (currently /models). State lives in the
 			     parent so the sidebar stays generic. -->
-			<div class="group">
-				<div class="group-header">
-					<span class="group-label">Language</span>
-					<button type="button" class="link-btn" onclick={() => onToggleAllLanguages?.()}>
-						{allModelLangsOn ? 'Clear' : 'All'}
-					</button>
-				</div>
-				<input
-					type="search"
-					class="lang-search"
-					placeholder="Search languages…"
-					bind:value={modelLangQuery}
-				/>
-				<div class="pills">
-					{#each visibleModelLangs as l (l)}
-						<button
-							type="button"
-							class="pill"
-							class:on={languagesPicked.has(l)}
-							onclick={() => onToggleLanguage?.(l)}
-							aria-pressed={languagesPicked.has(l)}
-						>
-							<span>{l}</span>
-						</button>
-					{/each}
-				</div>
-				{#if filteredModelLangs.length > MODEL_LANGUAGE_CAP}
-					<button
-						type="button"
-						class="link-btn show-more-btn"
-						onclick={() => (modelLangsExpanded = !modelLangsExpanded)}
-					>
-						{modelLangsExpanded ? 'Show fewer' : `Show all ${filteredModelLangs.length}`}
-					</button>
-				{/if}
-			</div>
+			<FilterFacet
+				label="Language"
+				items={filteredModelLangs}
+				picked={languagesPicked}
+				onToggle={(l) => onToggleLanguage?.(l)}
+				onToggleAll={() => onToggleAllLanguages?.()}
+				allSelected={allModelLangsOn}
+				pillClass="type-fill"
+				searchPlaceholder="Search languages…"
+				bind:searchValue={modelLangQuery}
+				scrollable
+				grow
+				emptyMessage="No matches."
+			/>
 		{/if}
 	{/snippet}
 
@@ -610,211 +504,110 @@
 
 			{#if scopeOpen}
 				<div class="block-body">
-					<div class="group">
-						<div class="group-header">
-							<span class="group-label"
-								>Task type
-								<span class="muted-inline"
-									>{filters.taskTypes.size}/{filters.availableTaskTypes.length}</span
-								></span
-							>
-							<button
-								type="button"
-								class="link-btn"
-								onclick={() =>
-									filters.setAll(
-										'taskTypes',
-										filters.availableTaskTypes,
-										filters.taskTypes.size !== filters.availableTaskTypes.length
-									)}
-							>
-								{filters.taskTypes.size === filters.availableTaskTypes.length ? 'Clear' : 'All'}
-							</button>
-						</div>
-						<div class="pills">
-							{#each filters.availableTaskTypes as tt (tt)}
-								<button
-									type="button"
-									class="pill"
-									class:on={filters.taskTypes.has(tt)}
-									onclick={() => filters.toggleInSet('taskTypes', tt)}
-									aria-pressed={filters.taskTypes.has(tt)}
-								>
-									{humanizeType(tt)}
-								</button>
-							{/each}
-						</div>
-					</div>
+					<FilterFacet
+						label="Task type"
+						items={filters.availableTaskTypes}
+						picked={filters.taskTypes}
+						onToggle={(tt) => filters.toggleInSet('taskTypes', tt)}
+						onToggleAll={() =>
+							filters.setAll(
+								'taskTypes',
+								filters.availableTaskTypes,
+								filters.taskTypes.size !== filters.availableTaskTypes.length
+							)}
+						allSelected={filters.taskTypes.size === filters.availableTaskTypes.length}
+						count={`${filters.taskTypes.size}/${filters.availableTaskTypes.length}`}
+						pillClass="type-fill"
+						pillLabel={humanizeType}
+					/>
 
-					<div class="group">
-						<div class="group-header">
-							<span class="group-label"
-								>Domain
-								<span class="muted-inline"
-									>{filters.domains.size}/{filters.availableDomains.length}</span
-								></span
-							>
-							<button
-								type="button"
-								class="link-btn"
-								onclick={() =>
-									filters.setAll(
-										'domains',
-										filters.availableDomains,
-										filters.domains.size !== filters.availableDomains.length
-									)}
-							>
-								{filters.domains.size === filters.availableDomains.length ? 'Clear' : 'All'}
-							</button>
-						</div>
-						<div class="pills">
-							{#each filters.availableDomains as d (d)}
-								<button
-									type="button"
-									class="pill"
-									class:on={filters.domains.has(d)}
-									onclick={() => filters.toggleInSet('domains', d)}
-									aria-pressed={filters.domains.has(d)}
-								>
-									{d}
-								</button>
-							{/each}
-						</div>
-					</div>
+					<FilterFacet
+						label="Domain"
+						items={filters.availableDomains}
+						picked={filters.domains}
+						onToggle={(d) => filters.toggleInSet('domains', d)}
+						onToggleAll={() =>
+							filters.setAll(
+								'domains',
+								filters.availableDomains,
+								filters.domains.size !== filters.availableDomains.length
+							)}
+						allSelected={filters.domains.size === filters.availableDomains.length}
+						count={`${filters.domains.size}/${filters.availableDomains.length}`}
+						pillClass="type-fill"
+					/>
 
 					{#if filters.availableModalities.length > 0}
-						<div class="group">
-							<div class="group-header">
-								<span class="group-label"
-									>Modality
-									<span class="muted-inline"
-										>{filters.modalities.size}/{filters.availableModalities.length}</span
-									></span
-								>
-								<button
-									type="button"
-									class="link-btn"
-									onclick={() =>
-										filters.setAll(
-											'modalities',
-											filters.availableModalities,
-											filters.modalities.size !== filters.availableModalities.length
-										)}
-								>
-									{filters.modalities.size === filters.availableModalities.length ? 'Clear' : 'All'}
-								</button>
-							</div>
-							<div class="pills">
-								{#each filters.availableModalities as m (m)}
-									<button
-										type="button"
-										class="pill"
-										class:on={filters.modalities.has(m)}
-										onclick={() => filters.toggleInSet('modalities', m)}
-										aria-pressed={filters.modalities.has(m)}
-									>
-										<ModalityIcon modality={m} size={12} />
-										<span>{m}</span>
-									</button>
-								{/each}
-							</div>
-						</div>
+						<FilterFacet
+							label="Modality"
+							items={filters.availableModalities}
+							picked={filters.modalities}
+							onToggle={(m) => filters.toggleInSet('modalities', m)}
+							onToggleAll={() =>
+								filters.setAll(
+									'modalities',
+									filters.availableModalities,
+									filters.modalities.size !== filters.availableModalities.length
+								)}
+							allSelected={filters.modalities.size === filters.availableModalities.length}
+							count={`${filters.modalities.size}/${filters.availableModalities.length}`}
+							pillClass="modality-fill"
+							pillAttrs={(m) => ({ 'data-modality': m })}
+						>
+							{#snippet pillIcon(m)}<ModalityIcon modality={m} size={12} />{/snippet}
+						</FilterFacet>
 					{/if}
 
-					<div class="group">
-						<div class="group-header">
-							<span class="group-label"
-								>Languages
-								<span class="muted-inline"
-									>{filters.languages.size}/{filters.availableLanguages.length}</span
-								></span
-							>
-							<button
-								type="button"
-								class="link-btn"
-								onclick={() =>
-									filters.setAll(
-										'languages',
-										filters.availableLanguages,
-										filters.languages.size !== filters.availableLanguages.length
-									)}
-							>
-								{filters.languages.size === filters.availableLanguages.length ? 'Clear' : 'All'}
-							</button>
-						</div>
-						<input
-							type="search"
-							class="search"
-							placeholder="Search languages…"
-							bind:value={langQuery}
-						/>
-						<div class="pills scroll-y scroll-thin">
-							{#each filteredLanguages as l (l)}
-								<button
-									type="button"
-									class="pill"
-									class:on={filters.languages.has(l)}
-									onclick={() => filters.toggleInSet('languages', l)}
-									aria-pressed={filters.languages.has(l)}
-								>
-									{l}
-								</button>
-							{/each}
-							{#if filteredLanguages.length === 0}
-								<p class="muted">No matches.</p>
-							{/if}
-						</div>
-					</div>
+					<FilterFacet
+						label="Languages"
+						items={filteredLanguages}
+						picked={filters.languages}
+						onToggle={(l) => filters.toggleInSet('languages', l)}
+						onToggleAll={() =>
+							filters.setAll(
+								'languages',
+								filters.availableLanguages,
+								filters.languages.size !== filters.availableLanguages.length
+							)}
+						allSelected={filters.languages.size === filters.availableLanguages.length}
+						count={`${filters.languages.size}/${filters.availableLanguages.length}`}
+						pillClass="type-fill"
+						searchPlaceholder="Search languages…"
+						bind:searchValue={langQuery}
+						scrollable
+						emptyMessage="No matches."
+					/>
 
-					<div class="group">
-						<div class="group-header">
-							<span class="group-label"
-								>Tasks
-								<span class="muted-inline"
-									>{filters.tasks.size}/{filters.availableTasks.length}</span
-								></span
-							>
-							<button
-								type="button"
-								class="link-btn"
-								onclick={() =>
-									filters.setAll(
-										'tasks',
-										filters.availableTasks.map((t) => t.name),
-										filters.tasks.size !== filters.availableTasks.length
-									)}
-							>
-								{filters.tasks.size === filters.availableTasks.length ? 'Clear' : 'All'}
-							</button>
-						</div>
-						<input
-							type="search"
-							class="search"
-							placeholder="Search tasks…"
-							bind:value={taskQuery}
-						/>
-						<div class="pills scroll-y scroll-thin">
-							{#each filteredTasks as name (name)}
-								<button
-									type="button"
-									class="pill"
-									class:on={filters.tasks.has(name)}
-									onclick={() => filters.toggleInSet('tasks', name)}
-									aria-pressed={filters.tasks.has(name)}
-								>
-									<span class="ellipsis" title={name}>{name}</span>
-								</button>
-							{/each}
-							{#if filteredTasks.length === 0}
-								<p class="muted">No matches.</p>
-							{/if}
-						</div>
-					</div>
+					<FilterFacet
+						label="Tasks"
+						items={filteredTasks}
+						picked={filters.tasks}
+						onToggle={(t) => filters.toggleInSet('tasks', t)}
+						onToggleAll={() =>
+							filters.setAll(
+								'tasks',
+								filters.availableTasks.map((t) => t.name),
+								filters.tasks.size !== filters.availableTasks.length
+							)}
+						allSelected={filters.tasks.size === filters.availableTasks.length}
+						count={`${filters.tasks.size}/${filters.availableTasks.length}`}
+						pillClass="type-fill"
+						pillTextClass="pill-label"
+						pillTitle={(name) => name}
+						searchPlaceholder="Search tasks…"
+						bind:searchValue={taskQuery}
+						scrollable
+						emptyMessage="No matches."
+					/>
 				</div>
 			{/if}
 		</section>
 	{/if}
 </div>
+
+<HoverPortal visible={tipState.visible} title={tipState.title} x={tipState.x} y={tipState.y}>
+	{tipState.text}
+</HoverPortal>
 
 <style>
 	.filter-content {
@@ -822,78 +615,23 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-	}
-
-	/* Active filter chips ----------------------------------------------------- */
-	.active-strip {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 6px;
-		padding: 10px 12px;
-		background: var(--primary-soft);
-		border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
-		border-radius: 10px;
-	}
-	.chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
+		/* Scroll container when total content overflows the sidebar; also
+		   bounds `.flat-groups` so its last facet can `flex: 1`. */
 		flex: 1;
-		min-width: 0;
-	}
-	/* Selected-filter chip — sits on the page surface, so use the soft
-	   primary fill (theme-aware via app.css) instead of pure white,
-	   which read as a glaring patch in dark mode. Hover still flips to
-	   the full primary tint as a "clear this filter" affordance. */
-	.active-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 3px 8px 3px 10px;
-		background: var(--primary-soft);
-		border: 1px solid var(--primary);
-		border-radius: 999px;
-		font-size: 11px;
-		font-weight: 500;
-		color: var(--primary-strong);
-		cursor: pointer;
-		max-width: 100%;
-		transition:
-			background 0.12s,
-			color 0.12s;
-	}
-	.active-chip:hover {
-		background: var(--primary);
-		color: var(--surface);
-	}
-	.active-chip .x {
-		font-size: 14px;
-		line-height: 1;
-		opacity: 0.8;
-		font-weight: 600;
-	}
-	.reset-all {
-		background: none;
-		border: none;
-		font-size: 11px;
-		font-weight: 600;
-		color: var(--primary-strong);
-		cursor: pointer;
-		text-decoration: underline;
-		text-underline-offset: 2px;
-		padding: 0 2px;
-	}
-	.reset-all:hover {
-		color: var(--text);
+		min-height: 0;
+		overflow-y: auto;
 	}
 
 	/* Block sections ---------------------------------------------------------- */
+	/* `flex-shrink: 0`: flex column siblings shrink by default, and our
+	   `overflow: hidden` (for rounded corners) would clip the body
+	   instead of letting `.filter-content` scroll. */
 	.block {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		overflow: hidden;
+		flex-shrink: 0;
 	}
 	.block-head {
 		display: flex;
@@ -924,7 +662,7 @@
 		height: 18px;
 		padding: 0 6px;
 		background: var(--primary);
-		color: #fff;
+		color: var(--surface);
 		border-radius: 999px;
 		font-size: 11px;
 		font-weight: 700;
@@ -946,24 +684,25 @@
 		gap: 16px;
 		border-top: 1px solid var(--border);
 	}
-	/* Sibling of `.block` used in flat mode — no card chrome, just the groups. */
+	/* Sibling of `.block` used in flat mode — no card chrome, just the groups.
+	   `flex: 1; min-height: 0` fills `.filter-content` so the last facet
+	   absorbs leftover height. The `> .group:last-child` rule lives in
+	   `$lib/styles/sidebar.css` (shared with `.filters`). */
 	.flat-groups {
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
 		padding: 0 2px;
+		flex: 1;
+		min-height: 0;
 	}
 
-	/* Groups ------------------------------------------------------------------ */
+	/* Local `.group` only — wraps the Segmented controls + the
+	   sentence-transformers switch + the size slider. FilterFacet
+	   instances render their own `.group` from sidebar.css. */
 	.group {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-	}
-	.group-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
 		gap: 8px;
 	}
 	.group-label {
@@ -975,241 +714,27 @@
 		letter-spacing: 0.02em;
 		color: var(--text);
 	}
+	/* Inline trigger for the HoverPortal — wrapper button owns the
+	   data-tip attrs + pointer/focus listeners, so the bubble can render
+	   real markup (vs the slow, unstyled native `title=` lag). Keyboard
+	   focus also fires the tip via onfocusin/onfocusout. */
+	.tip-anchor {
+		display: inline-flex;
+		align-items: center;
+		padding: 0;
+		background: none;
+		border: none;
+		cursor: help;
+	}
+	.tip-anchor:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+		border-radius: 999px;
+	}
 	.muted-inline {
 		font-size: 11px;
 		font-weight: 500;
 		color: var(--text-subtle);
 		font-variant-numeric: tabular-nums;
-	}
-	/* Search input inside the Language facet — mirrors the
-	   `.type-search` style on /tasks so the controls feel uniform
-	   across sidebars. */
-	.lang-search {
-		width: 100%;
-		padding: 5px 10px;
-		font-size: 12px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		color: var(--text);
-	}
-	.lang-search:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 1px;
-		border-color: var(--primary);
-	}
-	.link-btn {
-		background: none;
-		border: none;
-		color: var(--link);
-		font-size: 11px;
-		font-weight: 600;
-		cursor: pointer;
-		padding: 2px 4px;
-	}
-	.link-btn:hover {
-		text-decoration: underline;
-	}
-
-	/* Segmented control (ternary radios) ------------------------------------- */
-	.segmented {
-		display: grid;
-		grid-auto-flow: column;
-		grid-auto-columns: 1fr;
-		gap: 2px;
-		padding: 3px;
-		background: var(--surface-muted);
-		border: 1px solid var(--border);
-		border-radius: 8px;
-	}
-	.seg {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 0; /* let the grid track shrink the button below content-box width */
-		padding: 6px 8px;
-		font-size: 12px;
-		font-weight: 600;
-		line-height: 1.25;
-		background: transparent;
-		border: none;
-		border-radius: 6px;
-		color: var(--text-muted);
-		cursor: pointer;
-		transition:
-			background 0.12s,
-			color 0.12s,
-			box-shadow 0.12s;
-		/* Allow long labels ("Instruction-tuned", "Only zero-shot", "Proprietary")
-		   to wrap within their column instead of truncating with an ellipsis. */
-		text-align: center;
-		text-wrap: balance;
-		overflow-wrap: anywhere;
-	}
-	.seg:hover {
-		color: var(--text);
-	}
-	.seg.on {
-		background: var(--surface);
-		color: var(--text);
-		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.08);
-	}
-
-	/* Multi-select pills ------------------------------------------------------ */
-	.pills {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-	.pills.scroll-y {
-		max-height: 220px;
-		overflow-y: auto;
-		padding: 8px;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface-muted);
-	}
-	.pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 5px 11px;
-		font-size: 12px;
-		font-weight: 500;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		color: var(--text-muted);
-		cursor: pointer;
-		transition:
-			background 0.12s,
-			border-color 0.12s,
-			color 0.12s;
-		max-width: 100%;
-	}
-	.pill:hover {
-		border-color: var(--border-strong);
-		color: var(--text);
-	}
-	.pill.on {
-		background: var(--primary-soft);
-		border-color: var(--primary);
-		color: var(--primary-strong);
-		font-weight: 600;
-	}
-	.pill.on:hover {
-		/* Lift the soft tint slightly toward the primary without bleaching
-		   it. Mixing against `var(--surface)` keeps the result theme-aware:
-		   on light it nudges brighter, on dark it stays dim and readable
-		   instead of blowing out to near-white. */
-		background: color-mix(in srgb, var(--primary) 22%, var(--surface));
-		border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
-	}
-	/* Model-type pills carry the type's signature color when active. Pulled
-	   from the shared --tint-* palette so they match SummaryTable's column
-	   tints exactly in both themes. */
-	.model-type-pill.on[data-type='dense'] {
-		background: var(--tint-blue);
-		border-color: color-mix(in srgb, var(--tint-blue-fg) 35%, transparent);
-		color: var(--tint-blue-fg);
-	}
-	.model-type-pill.on[data-type='cross-encoder'] {
-		background: var(--tint-orange);
-		border-color: color-mix(in srgb, var(--tint-orange-fg) 35%, transparent);
-		color: var(--tint-orange-fg);
-	}
-	.model-type-pill.on[data-type='late-interaction'] {
-		background: var(--tint-green);
-		border-color: color-mix(in srgb, var(--tint-green-fg) 35%, transparent);
-		color: var(--tint-green-fg);
-	}
-	.model-type-pill.on[data-type='sparse'] {
-		background: var(--tint-amber);
-		border-color: color-mix(in srgb, var(--tint-amber-fg) 35%, transparent);
-		color: var(--tint-amber-fg);
-	}
-	.model-type-pill.on[data-type='router'] {
-		background: var(--tint-purple);
-		border-color: color-mix(in srgb, var(--tint-purple-fg) 35%, transparent);
-		color: var(--tint-purple-fg);
-	}
-	.model-type-pill.on:hover {
-		filter: brightness(0.97);
-		background: inherit;
-	}
-	.ellipsis {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		max-width: 220px;
-	}
-
-	/* Switch (binary toggle) -------------------------------------------------- */
-	.switch {
-		display: inline-flex;
-		align-items: center;
-		gap: 10px;
-		cursor: pointer;
-		font-size: 13px;
-		color: var(--text);
-	}
-	.switch input {
-		position: absolute;
-		opacity: 0;
-		width: 0;
-		height: 0;
-		pointer-events: none;
-	}
-	.switch-track {
-		position: relative;
-		width: 34px;
-		height: 20px;
-		background: var(--border-strong);
-		border-radius: 999px;
-		transition: background 0.16s;
-		flex-shrink: 0;
-	}
-	.switch-knob {
-		position: absolute;
-		top: 2px;
-		left: 2px;
-		width: 16px;
-		height: 16px;
-		background: #fff;
-		border-radius: 50%;
-		box-shadow: 0 1px 2px rgb(var(--shadow-tint) / 0.2);
-		transition: transform 0.16s;
-	}
-	.switch input:checked + .switch-track {
-		background: var(--primary);
-	}
-	.switch input:checked + .switch-track .switch-knob {
-		transform: translateX(14px);
-	}
-	.switch-label {
-		flex: 1;
-	}
-
-	/* Search input ------------------------------------------------------------ */
-	.search {
-		width: 100%;
-		padding: 6px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		font-size: 12px;
-		font-family: inherit;
-		background: var(--surface);
-		color: var(--text);
-	}
-	.search:focus {
-		outline: none;
-		border-color: var(--primary);
-		box-shadow: 0 0 0 3px var(--primary-soft);
-	}
-
-	.muted {
-		font-size: 12px;
-		color: var(--text-muted);
-		margin: 4px 0;
 	}
 </style>

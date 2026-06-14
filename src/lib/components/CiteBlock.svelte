@@ -25,12 +25,12 @@
 </script>
 
 {#if citation}
-	<details class="cite" bind:open>
+	<details class="cite details-flat" bind:open>
 		<summary>Cite this {kind}</summary>
 		<div class="body">
 			<div class="block">
 				<div class="block-head">
-					<span class="label">Citation (BibTeX)</span>
+					<span class="eyebrow">Citation (BibTeX)</span>
 					<button type="button" class="copy" onclick={() => copy(citation!)}>
 						{copied ? 'Copied' : 'Copy'}
 					</button>
@@ -54,7 +54,6 @@
 		font-weight: 600;
 		font-size: 13px;
 		color: var(--text);
-		list-style: none;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -67,9 +66,6 @@
 	}
 	details[open] summary::after {
 		content: '−';
-	}
-	summary::-webkit-details-marker {
-		display: none;
 	}
 	.body {
 		padding: 0 14px 14px;
@@ -86,13 +82,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-	}
-	.label {
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
 	}
 	.copy {
 		padding: 3px 10px;

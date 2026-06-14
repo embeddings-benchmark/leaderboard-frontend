@@ -1,0 +1,19 @@
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write|MultiEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash .claude/hooks/css-dedup-suggest.sh"
+                    },
+                    {
+                        "type": "command",
+                        "command": "bash .claude/hooks/web-guidance-suggest.sh"
+                    }
+                ]
+            }
+        ]
+    }
+}

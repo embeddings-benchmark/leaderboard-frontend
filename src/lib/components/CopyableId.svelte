@@ -1,4 +1,7 @@
 <script lang="ts">
+	import Check from 'lucide-svelte/icons/check';
+	import Copy from 'lucide-svelte/icons/copy';
+
 	// A single pill that shows a code id and copies it to the clipboard
 	// when clicked anywhere on the pill (text or icon — the whole region
 	// is one <button>). Used next to benchmark display names so the
@@ -47,34 +50,9 @@
 	<code class="value">{value}</code>
 	<span class="copy-btn" aria-hidden="true">
 		{#if copied}
-			<!-- check -->
-			<svg
-				viewBox="0 0 24 24"
-				width="12"
-				height="12"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2.6"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M5 12l5 5L20 7" />
-			</svg>
+			<Check size={12} strokeWidth={2.6} />
 		{:else}
-			<!-- two stacked rounded squares -->
-			<svg
-				viewBox="0 0 24 24"
-				width="12"
-				height="12"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<rect x="9" y="9" width="12" height="12" rx="2" />
-				<path d="M5 15V5a2 2 0 0 1 2-2h10" />
-			</svg>
+			<Copy size={12} strokeWidth={2} />
 		{/if}
 	</span>
 </button>
@@ -106,11 +84,13 @@
 		font-size: 12px;
 		line-height: 1;
 		text-align: left;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		border: 1px solid var(--border);
+		/* Per-state colours overridable via CSS custom properties — parents
+		   can theme the pill without reaching for `:global(...)`. */
+		background: var(--copyable-bg, var(--surface-muted));
+		color: var(--copyable-text, var(--text-muted));
+		border: 1px solid var(--copyable-border, var(--border));
 		border-radius: 6px;
-		overflow: hidden;
+		overflow: clip;
 		cursor: pointer;
 		transition:
 			background 0.12s,
@@ -118,9 +98,15 @@
 			border-color 0.12s;
 	}
 	.copyable-id:hover {
-		color: var(--text);
-		background: color-mix(in srgb, var(--primary) 10%, var(--surface-muted));
-		border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+		color: var(--copyable-text-hover, var(--text));
+		background: var(
+			--copyable-bg-hover,
+			color-mix(in srgb, var(--primary) 10%, var(--surface-muted))
+		);
+		border-color: var(
+			--copyable-border-hover,
+			color-mix(in srgb, var(--primary) 40%, var(--border))
+		);
 	}
 	.copyable-id:focus-visible {
 		outline: 2px solid var(--primary);
@@ -153,8 +139,14 @@
 		width: 24px;
 		height: 100%;
 		padding: 0;
-		border-left: 1px solid var(--border);
+		border-left: 1px solid var(--copyable-border, var(--border));
 		color: inherit;
+	}
+	.copyable-id:hover .copy-btn {
+		border-left-color: var(
+			--copyable-border-hover,
+			color-mix(in srgb, var(--primary) 40%, var(--border))
+		);
 	}
 	.copyable-id.copied .copy-btn {
 		border-left-color: color-mix(in srgb, var(--primary) 40%, transparent);

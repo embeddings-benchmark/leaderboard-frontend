@@ -1,0 +1,28 @@
+# Runs the project's lint + check scripts before each commit.
+# Install once per clone: `pre-commit install`.
+# Skip a commit with: `git commit --no-verify` (avoid).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-toml
+
+  - repo: local
+    hooks:
+      - id: lint
+        name: npm run lint
+        entry: npm run lint
+        language: system
+        pass_filenames: false
+        types_or: [javascript, ts, svelte, css, html]
+
+      - id: check
+        name: npm run check
+        entry: npm run check
+        language: system
+        pass_filenames: false
+        types_or: [ts, svelte]

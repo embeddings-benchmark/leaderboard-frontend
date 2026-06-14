@@ -51,7 +51,7 @@
 	const MAX_PICKED = 4;
 	const MAX_BENCHMARKS = 6;
 	const MAX_TASKS = 12;
-	const RADAR_COLORS = ['#EE4266', '#00a6ed', '#ECA72C', '#3CBBB1'];
+	const RADAR_COLORS = ['#9333EA', '#00a6ed', '#ECA72C', '#3CBBB1'];
 
 	let ALL_BENCHMARKS = $state<Benchmark[]>([]);
 	// Local derived lookup, not held in $state — plain Map is correct.
@@ -223,6 +223,10 @@
 		});
 	});
 
+	// FUTURE: migrate to native `popover="auto"` once anchor positioning
+	// is Baseline — top-layer popovers anchor to the viewport, so JS or
+	// anchor-positioning is needed to dock to the trigger. Until then,
+	// manual click-outside + Escape is simpler.
 	function onDocClick(e: MouseEvent) {
 		const target = e.target as Node;
 		if (pickerOpen && pickerRoot && !pickerRoot.contains(target)) pickerOpen = false;
@@ -405,9 +409,9 @@
 			key: 'params',
 			label: 'Total params (B)',
 			dir: 'min',
-			valueOf: (r) => (r.totalParamsB === 0 ? null : r.totalParamsB),
+			valueOf: (r) => r.totalParamsB || null,
 			format: (r) =>
-				r.totalParamsB === 0
+				!r.totalParamsB
 					? '—'
 					: r.totalParamsB >= 1
 						? r.totalParamsB.toFixed(1)
@@ -525,10 +529,10 @@
 				{/if}
 			</div>
 			{#if benchPickerOpen}
-				<div class="picker-panel bench-panel" role="dialog" aria-label="Pick benchmark">
+				<div class="picker-panel panel bench-panel" role="dialog" aria-label="Pick benchmark">
 					<input
 						type="search"
-						class="picker-search"
+						class="picker-search input-text"
 						placeholder="Search benchmarks…"
 						bind:value={benchPickerQuery}
 					/>
@@ -585,10 +589,10 @@
 				{/if}
 			</div>
 			{#if taskPickerOpen}
-				<div class="picker-panel bench-panel" role="dialog" aria-label="Pick task">
+				<div class="picker-panel panel bench-panel" role="dialog" aria-label="Pick task">
 					<input
 						type="search"
-						class="picker-search"
+						class="picker-search input-text"
 						placeholder="Search tasks…"
 						bind:value={taskPickerQuery}
 					/>
@@ -617,11 +621,11 @@
 		<span class="bench-meta">{pickedTasks.length} / {MAX_TASKS} tasks</span>
 	</div>
 
-	<main class="page">
+	<main id="main-content" tabindex="-1" class="page">
 		{#if !primarySummary}
-			<p class="loading">Loading…</p>
+			<p class="loading" role="status">Loading…</p>
 		{:else}
-			<section class="picker-bar">
+			<section class="picker-bar panel">
 				<div class="picks">
 					{#each pickedRows as r, i (r.model.name)}
 						<span class="pick-chip" style:--c={modelColor(i)}>
@@ -649,10 +653,10 @@
 								+ Add model
 							</button>
 							{#if pickerOpen}
-								<div class="picker-panel" role="dialog" aria-label="Pick model">
+								<div class="picker-panel panel" role="dialog" aria-label="Pick model">
 									<input
 										type="search"
-										class="picker-search"
+										class="picker-search input-text"
 										placeholder="Search models…"
 										bind:value={pickerQuery}
 									/>
@@ -715,12 +719,14 @@
 							     /models/microsoft%2Fharrier-…. -->
 							<a
 								class="model-name"
-								href={resolve('/models/[...name]', { name: modelPath(r.model.name) })}
+								href={resolve('/models/[...name=modelName]', { name: modelPath(r.model.name) })}
 							>
 								{r.model.displayName}
 							</a>
 							<div class="model-meta">
-								<span class="chip type">{fmtType(r.model.modelType)}</span>
+								<span class="chip type" data-type={r.model.modelType}
+									>{fmtType(r.model.modelType)}</span
+								>
 								{#if r.model.openWeights}
 									<span class="chip open">Open</span>
 								{:else}
@@ -765,7 +771,7 @@
 						{@const rankWinners = winnersForRow(rankValues, 'min')}
 						<div class="cell metric-head sticky bench-row-head">
 							<span class="bench-label">{benchIndex.get(bv.name)?.displayName ?? bv.name}</span>
-							<span class="bench-sub">Mean(Task) · Rank</span>
+							<span class="eyebrow bench-sub">Mean(Task) · Rank</span>
 						</div>
 						{#each pickedRows as p, i (p.model.name)}
 							{@const r = rows[i]}
@@ -832,7 +838,7 @@
 							)}
 							<div class="cell metric-head sticky bench-row-head">
 								<span class="bench-label">{ts.name}</span>
-								<span class="bench-sub">{ts.type}</span>
+								<span class="eyebrow bench-sub">{ts.type}</span>
 							</div>
 							{#each ts.scores as v, i (pickedRows[i].model.name)}
 								<div
@@ -851,7 +857,7 @@
 				</section>
 
 				{#if pickedBenchmarks.length === 1 && radarSpec && pickedRows.length >= 1 && primarySummary && primarySummary.taskTypes.length >= 2}
-					<section class="radar-card">
+					<section class="radar-card panel">
 						<h3>Strengths at a glance</h3>
 						<PlotlyChart
 							data={radarSpec.data}
@@ -871,7 +877,7 @@
 
 <style>
 	.app {
-		min-height: 100vh;
+		min-height: 100dvh;
 	}
 	.bar {
 		display: flex;
@@ -922,7 +928,7 @@
 	}
 	.picker-panel.bench-panel {
 		left: 0;
-		width: min(420px, calc(100vw - 24px));
+		width: min(420px, calc(100dvw - 24px));
 	}
 	.picker-row.bench-row {
 		grid-template-columns: 1fr auto 16px;
@@ -935,14 +941,11 @@
 
 	/* Picker bar ------------------------------------------------------------- */
 	.picker-bar {
+		--panel-radius: 12px;
 		display: flex;
 		align-items: center;
 		gap: 14px;
 		padding: 12px 14px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		box-shadow: var(--shadow-sm);
 		margin-bottom: 20px;
 	}
 	.picks {
@@ -994,7 +997,7 @@
 	}
 	.pick-x:hover {
 		background: var(--c);
-		color: #fff;
+		color: var(--surface);
 	}
 
 	.picker {
@@ -1015,19 +1018,16 @@
 		color: var(--text);
 		background: var(--surface);
 	}
+	/* `width: min(…)` caps at the viewport on mobile so the panel
+	   never overflows the screen. */
 	.picker-panel {
+		--panel-radius: 12px;
+		--panel-shadow: 0 16px 36px rgb(var(--shadow-tint) / 0.16);
 		position: absolute;
 		top: calc(100% + 6px);
 		left: 0;
-		/* Cap at the viewport width (minus a small margin) so the
-		   panel never overflows the screen on mobile. The 16 px
-		   subtracts a hair of breathing room on each side. */
-		width: min(360px, calc(100vw - 24px));
+		width: min(360px, calc(100dvw - 24px));
 		max-height: 420px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		box-shadow: 0 16px 36px rgb(var(--shadow-tint) / 0.16);
 		z-index: 30;
 		display: flex;
 		flex-direction: column;
@@ -1036,16 +1036,9 @@
 	.picker-search {
 		margin: 10px 12px;
 		padding: 7px 12px;
-		border: 1px solid var(--border);
 		border-radius: 8px;
 		font-size: 12.5px;
-		font-family: inherit;
-		background: var(--surface);
-	}
-	.picker-search:focus {
-		outline: none;
-		border-color: var(--primary);
-		box-shadow: 0 0 0 3px var(--primary-soft);
+		width: auto;
 	}
 	.picker-list {
 		flex: 1;
@@ -1151,7 +1144,6 @@
 		   left-most label column anchors against this scrollport. */
 		overflow-x: auto;
 		overflow-y: hidden;
-		-webkit-overflow-scrolling: touch;
 		overscroll-behavior-x: contain;
 		box-shadow: var(--shadow-sm);
 	}
@@ -1226,8 +1218,8 @@
 		color: var(--text-muted);
 	}
 	.chip.type {
-		background: color-mix(in srgb, var(--c) 18%, var(--surface));
-		color: var(--c);
+		background: color-mix(in srgb, var(--category-tint-fg, var(--text-muted)) 18%, var(--surface));
+		color: var(--category-tint-fg, var(--text-muted));
 	}
 	.chip.open {
 		background: var(--tint-green);
@@ -1294,12 +1286,10 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	/* 10 px (vs the canonical eyebrow 11 px) so the secondary row
+	   reads as smaller than the bench label above it. */
 	.bench-sub {
 		font-size: 10px;
-		color: var(--text-subtle);
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
 	}
 	.bench-cell .score {
 		font-size: 14px;
@@ -1323,12 +1313,9 @@
 	}
 
 	.radar-card {
+		--panel-shadow: var(--shadow-sm);
 		margin-top: 20px;
 		padding: 18px 20px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: var(--shadow-sm);
 	}
 	.radar-card h3 {
 		font-size: 14px;

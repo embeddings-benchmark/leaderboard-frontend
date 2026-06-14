@@ -1,89 +1,11 @@
 <script lang="ts">
-	// Home page: three primary leader tiles (Multilingual / Retrieval /
-	// English) above four collapsible sections — Language, Modality,
-	// Retrieval, Domain — each driven by the backend's
-	// `HOME_BENCHMARK_ENTRIES` menu. Tabs are gone; the menu's flat
-	// 4-section shape now drives the layout directly.
-
-	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { loadBenchmarkMenu, loadLeaders } from '$lib/data/service';
-	import { flattenMenu, type Benchmark, type BenchmarkLeaders, type MenuEntry } from '$lib/types';
 	import MenuSection from '$lib/components/MenuSection.svelte';
 	import PrimaryLeaderTile from '$lib/components/PrimaryLeaderTile.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
+	import type { PageData } from './$types';
 
-	let menu = $state<MenuEntry[]>([]);
-	let loading = $state(true);
-
-	$effect(() => {
-		loadBenchmarkMenu().then((m) => {
-			menu = m;
-			loading = false;
-		});
-	});
-
-	// Primary tiles — eyebrow label decoupled from benchmark name so
-	// "General" can cover both MTEB(Multilingual) and MTEB(eng).
-	type Primary = {
-		key: 'multilingual' | 'retrieval' | 'english';
-		label: string;
-		preferred: string;
-	};
-	const PRIMARIES: Primary[] = [
-		{ key: 'multilingual', label: 'General', preferred: 'MTEB(Multilingual, v2)' },
-		{ key: 'retrieval', label: 'Retrieval', preferred: 'RTEB(beta)' },
-		{ key: 'english', label: 'General', preferred: 'MTEB(eng, v2)' }
-	];
-
-	let flat = $derived(flattenMenu(menu));
-
-	let byName = $derived(new Map(flat.map((b) => [b.name, b])));
-	function pick(name: string): Benchmark | undefined {
-		return byName.get(name);
-	}
-
-	// Resolve lazily so the layout still renders if a name is missing.
-	let primaries = $derived(
-		PRIMARIES.map((p) => ({ ...p, b: pick(p.preferred) })).filter((p) => !!p.b) as Array<
-			Primary & { b: Benchmark }
-		>
-	);
-
-	// Size buckets in MILLIONS of parameters (wire format expected by
-	// `/benchmarks/{name}/leaders?buckets=…`). `null` second element
-	// = open-ended top bucket. Chip labels switch units at ≥1000M.
-	const SIZE_BUCKETS: ReadonlyArray<readonly [number, number | null]> = [
-		[0, 500],
-		[500, 1000],
-		[1000, 5000],
-		[5000, null]
-	];
-
-	// Per-benchmark leaders cache for the primary hero tiles.
-	let primaryLeaders = $state<Record<string, BenchmarkLeaders | 'loading' | 'error'>>({});
-
-	$effect(() => {
-		const ps = primaries;
-		untrack(() => {
-			for (const p of ps) {
-				if (primaryLeaders[p.b.name]) continue;
-				primaryLeaders[p.b.name] = 'loading';
-				loadLeaders(p.b.name, SIZE_BUCKETS)
-					.then((r) => {
-						primaryLeaders[p.b.name] = r;
-					})
-					.catch(() => {
-						primaryLeaders[p.b.name] = 'error';
-					});
-			}
-		});
-	});
-
-	// Sections in the order the backend declares them (matches the
-	// HOME_BENCHMARK_ENTRIES order: Language → Modality → Retrieval →
-	// Domain).
-	let sections = $derived(menu);
+	let { data }: { data: PageData } = $props();
 </script>
 
 <ShareMeta
@@ -91,38 +13,70 @@
 	description="MTEB Leaderboard home — primary General / Retrieval / English benchmark winners plus curated sections for language, modality, retrieval, and domain-specific evaluations."
 />
 
-<div class="page">
+<main id="main-content" tabindex="-1" class="page">
 	<header class="hero">
 		<h1>Benchmark Overview</h1>
 		<a class="all-link" href={resolve('/benchmarks')}>See all benchmarks →</a>
 	</header>
 
-	{#if loading}
-		<p class="muted">Loading benchmarks…</p>
-	{:else}
-		<section class="primary" aria-label="Featured leaderboards">
-			<div class="section-head">
-				<span class="eyebrow">Featured</span>
-			</div>
-			<div class="primary-grid">
-				{#each primaries as p (p.key)}
-					<PrimaryLeaderTile
-						tintKey={p.key}
-						label={p.label}
-						benchmark={p.b}
-						leaders={primaryLeaders[p.b.name]}
-					/>
+	<section class="primary" aria-label="Featured leaderboards">
+		<div class="section-head">
+			<span class="eyebrow-chip">Featured</span>
+		</div>
+		<div class="primary-grid">
+			{#await data.primaries}
+				{#each [0, 1, 2] as i (i)}
+					<div class="prim-skel" aria-busy="true" aria-label="Loading featured leaderboard">
+						<div class="skel" style="width: 80px; height: 11px;"></div>
+						<div class="skel" style="width: 60%; height: 19px; margin-top: 8px;"></div>
+						<div class="skel" style="width: 40%; height: 11px; margin-top: 4px;"></div>
+						<div class="prim-skel-rows">
+							{#each [0, 1, 2, 3] as r (r)}
+								<div class="prim-skel-row">
+									<div class="skel" style="width: 64px; height: 18px; border-radius: 999px;"></div>
+									<div class="skel" style="flex: 1; height: 14px;"></div>
+								</div>
+							{/each}
+						</div>
+					</div>
 				{/each}
-			</div>
-		</section>
+			{:then primaries}
+				{#each primaries as p (p.key)}
+					<PrimaryLeaderTile tintKey={p.key} label={p.label} benchmark={p.b} leaders={p.leaders} />
+				{/each}
+			{:catch}
+				<p class="load-error" role="status">
+					Couldn't load featured leaderboards. The backend may be unavailable — try refreshing in a
+					moment.
+				</p>
+			{/await}
+		</div>
+	</section>
 
-		<div class="sections">
-			{#each sections as s (s.name)}
+	<div class="sections">
+		{#await data.menu}
+			{#each [0, 1, 2, 3] as i (i)}
+				<div class="menu-skel" aria-busy="true" aria-label="Loading benchmark sections">
+					<div class="skel" style="width: 160px; height: 14px;"></div>
+					<div class="menu-skel-grid">
+						{#each [0, 1, 2] as r (r)}
+							<div class="skel menu-skel-card"></div>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		{:then menu}
+			{#each menu as s (s.name)}
 				<MenuSection entry={s} />
 			{/each}
-		</div>
-	{/if}
-</div>
+		{:catch}
+			<p class="load-error" role="status">
+				Couldn't load benchmark sections. The backend may be unavailable — try refreshing in a
+				moment.
+			</p>
+		{/await}
+	</div>
+</main>
 
 <style>
 	.page {
@@ -156,7 +110,7 @@
 		margin-bottom: 12px;
 		flex-wrap: wrap;
 	}
-	.eyebrow {
+	.eyebrow-chip {
 		font-size: 11px;
 		font-weight: 800;
 		letter-spacing: 0.08em;
@@ -177,6 +131,52 @@
 	.sections {
 		display: flex;
 		flex-direction: column;
+	}
+	.prim-skel {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 18px 18px 14px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+	}
+	.prim-skel-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		margin-top: 14px;
+	}
+	.prim-skel-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 4px;
+	}
+	.menu-skel {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 18px 0;
+	}
+	.menu-skel-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 14px;
+	}
+	.menu-skel-card {
+		height: 130px;
+		border-radius: 14px;
+	}
+	.load-error {
+		grid-column: 1 / -1;
+		margin: 8px 0 0;
+		padding: 14px 16px;
+		font-size: 13px;
+		color: var(--text-muted);
+		background: var(--surface-muted);
+		border: 1px solid var(--border);
+		border-radius: 10px;
 	}
 
 	@media (max-width: 980px) {

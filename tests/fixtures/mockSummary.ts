@@ -1,4 +1,10 @@
-import type { BenchmarkSummary, ModelMeta, ModelType, SummaryRow, TaskMeta } from '$lib/types';
+import type {
+	BenchmarkSummary,
+	ModelMeta,
+	ModelType,
+	SummaryRow,
+	TaskMeta
+} from '../../src/lib/types';
 import { BENCHMARK_INDEX } from './mockBenchmarks';
 
 interface MockModel {

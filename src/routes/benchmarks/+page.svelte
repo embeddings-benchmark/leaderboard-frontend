@@ -1,20 +1,44 @@
 <script lang="ts">
-	import { SvelteSet } from 'svelte/reactivity';
-	import { loadBenchmarks } from '$lib/data/service';
+	import { onMount } from 'svelte';
 	import type { Benchmark } from '$lib/types';
+	import ActiveFilterStrip, { type Chip } from '$lib/components/ActiveFilterStrip.svelte';
 	import BenchmarkCard from '$lib/components/BenchmarkCard.svelte';
+	import BenchmarksTable from '$lib/components/BenchmarksTable.svelte';
+	import FilterFacet from '$lib/components/FilterFacet.svelte';
+	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import SearchInput from '$lib/components/SearchInput.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
+	import SkeletonGrid from '$lib/components/SkeletonGrid.svelte';
 	import SortDirIcon from '$lib/components/SortDirIcon.svelte';
+	import ViewModeToggle, { type ViewMode } from '$lib/components/ViewModeToggle.svelte';
+	import { ariaSort, sortIcon } from '$lib/format';
+	import { createFacetFilter, createFacetGroup } from '$lib/stores/facet-filter.svelte';
+	import type { SortState } from '$lib/stores/sort.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
+	import type { PageData } from './$types';
+	import type { BenchmarksData } from './+page';
 
-	let allBenchmarks = $state<Benchmark[]>([]);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
-	let query = $state(getParam('q') ?? '');
+	let { data }: { data: PageData } = $props();
+
+	// Stale-guard via `data.benchmarks === p` on rapid nav.
+	let resolved = $state<BenchmarksData | null>(null);
+	let loadError = $state<string | null>(null);
+	$effect(() => {
+		const p = data.benchmarks;
+		loadError = null;
+		p.then((r) => {
+			if (data.benchmarks === p) resolved = r;
+		}).catch((e) => {
+			if (data.benchmarks === p) loadError = e instanceof Error ? e.message : String(e);
+		});
+	});
+
+	let allBenchmarks = $derived<Benchmark[]>(resolved?.all ?? []);
+	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
+	let query = $state('');
 
 	const SORTS = [
 		{ id: 'name', label: 'Name' },
@@ -31,16 +55,11 @@
 		models: 'desc'
 	};
 	const SORT_IDS = SORTS.map((s) => s.id) as readonly SortId[];
-	const initialSort = getParam('sort');
-	const initialDir = getParam('dir');
-	const seedSort: SortId =
-		initialSort && (SORT_IDS as readonly string[]).includes(initialSort)
-			? (initialSort as SortId)
-			: 'name';
-	let sort = $state<SortId>(seedSort);
-	let sortDir = $state<SortDir>(
-		initialDir === 'asc' || initialDir === 'desc' ? initialDir : NATURAL_DIR[seedSort]
-	);
+	// "Model count" desc surfaces popular benchmarks first.
+	const DEFAULT_SORT: SortId = 'models';
+	let sort = $state<SortId>(DEFAULT_SORT);
+	let sortDir = $state<SortDir>(NATURAL_DIR[DEFAULT_SORT]);
+	let urlHydrated = $state(false);
 	function onSortKeyChange(next: SortId) {
 		sort = next;
 		sortDir = NATURAL_DIR[next];
@@ -48,32 +67,90 @@
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc';
 	}
+
+	let view = $state<ViewMode>('cards');
+	const sortAdapter: SortState<SortId> = {
+		get key() {
+			return sort;
+		},
+		get dir() {
+			return sortDir;
+		},
+		click(k: SortId) {
+			if (sort !== k) onSortKeyChange(k);
+			else toggleSortDir();
+		},
+		icon(k: SortId) {
+			return sortIcon(k, sort, sortDir, '↕');
+		},
+		aria(k: SortId) {
+			return ariaSort(k, sort, sortDir);
+		}
+	};
+
 	$effect(() => {
+		// `facetGroup.seeded` gate prevents clobbering deep-link facet params
+		// before seed.
+		if (!urlHydrated || !facetGroup.seeded) return;
 		updateUrl({
 			q: query.trim() || null,
-			sort: sort === 'name' ? null : sort,
-			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir
+			sort: sort === DEFAULT_SORT ? null : sort,
+			dir: sortDir === NATURAL_DIR[sort] ? null : sortDir,
+			view: view === 'cards' ? null : view,
+			...facetGroup.urlPatch()
 		});
 	});
 
-	// Filter sets are seeded with every value so the default state is
-	// "everything on"; `filteredAll` treats `size === ALL.length` as filter-off
-	// so rows with empty modality / type / domain lists stay visible.
-	let MODALITIES = $state<string[]>([]);
-	let SIMPLIFIED_TYPES_PRESENT = $state<string[]>([]);
-	let DOMAINS = $state<string[]>([]);
-	let LANGUAGES = $state<string[]>([]);
-	const modalityFilter = new SvelteSet<string>();
-	const simplifiedTypeFilter = new SvelteSet<string>();
-	const domainFilter = new SvelteSet<string>();
-	const languageFilter = new SvelteSet<string>();
-	let sidebarCollapsed = $state(
-		typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
-	);
+	onMount(() => {
+		const uq = getParam('q');
+		const us = getParam('sort');
+		const ud = getParam('dir');
+		const uv = getParam('view');
+		if (uq) query = uq;
+		if (us && (SORT_IDS as readonly string[]).includes(us)) {
+			sort = us as SortId;
+			sortDir = ud === 'asc' || ud === 'desc' ? ud : NATURAL_DIR[us as SortId];
+		} else if (ud === 'asc' || ud === 'desc') {
+			sortDir = ud;
+		}
+		if (uv === 'table') view = 'table';
+		urlHydrated = true;
+	});
+
+	// Universes — facets read these lazily via arrow-function accessors.
+	let MODALITIES = $derived<string[]>(resolved?.modalities ?? []);
+	let SIMPLIFIED_TYPES_PRESENT = $derived<string[]>(resolved?.simplifiedTypesPresent ?? []);
+	let DOMAINS = $derived<string[]>(resolved?.domains ?? []);
+	let LANGUAGES = $derived<string[]>(resolved?.languages ?? []);
+
+	const typeFacet = createFacetFilter({
+		urlParam: 'types',
+		chipLabel: 'Type',
+		universe: () => SIMPLIFIED_TYPES_PRESENT
+	});
+	const modalityFacet = createFacetFilter({
+		urlParam: 'mods',
+		chipLabel: 'Modality',
+		universe: () => MODALITIES
+	});
+	const domainFacet = createFacetFilter({
+		urlParam: 'doms',
+		chipLabel: 'Domain',
+		universe: () => DOMAINS
+	});
+	const languageFacet = createFacetFilter({
+		urlParam: 'langs',
+		chipLabel: 'Lang',
+		universe: () => LANGUAGES
+	});
+	const facetGroup = createFacetGroup([typeFacet, modalityFacet, domainFacet, languageFacet]);
+
+	$effect(() => {
+		if (resolved) facetGroup.seed();
+	});
+
 	let domainQuery = $state('');
 	let languageQuery = $state('');
-	let languagesExpanded = $state(false);
-	const LANGUAGE_CAP = 40;
 	let visibleDomains = $derived.by(() => {
 		const q = domainQuery.trim().toLowerCase();
 		return q ? DOMAINS.filter((d) => d.toLowerCase().includes(q)) : DOMAINS;
@@ -82,114 +159,41 @@
 		const q = languageQuery.trim().toLowerCase();
 		return q ? LANGUAGES.filter((l) => l.toLowerCase().includes(q)) : LANGUAGES;
 	});
-	let visibleLanguages = $derived(
-		languagesExpanded || filteredLanguages.length <= LANGUAGE_CAP
-			? filteredLanguages
-			: filteredLanguages.slice(0, LANGUAGE_CAP)
-	);
 
-	function toggleModality(m: string) {
-		if (modalityFilter.has(m)) modalityFilter.delete(m);
-		else modalityFilter.add(m);
-	}
-	function toggleDomain(d: string) {
-		if (domainFilter.has(d)) domainFilter.delete(d);
-		else domainFilter.add(d);
-	}
-	function toggleAllModalities() {
-		if (modalityFilter.size === MODALITIES.length) modalityFilter.clear();
-		else for (const v of MODALITIES) modalityFilter.add(v);
-	}
-	function toggleAllDomains() {
-		if (domainFilter.size === DOMAINS.length) domainFilter.clear();
-		else for (const v of DOMAINS) domainFilter.add(v);
-	}
-	function toggleSimplifiedType(t: string) {
-		if (simplifiedTypeFilter.has(t)) simplifiedTypeFilter.delete(t);
-		else simplifiedTypeFilter.add(t);
-	}
-	function toggleAllSimplifiedTypes() {
-		if (simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length) simplifiedTypeFilter.clear();
-		else for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
-	}
-	function toggleLanguage(l: string) {
-		if (languageFilter.has(l)) languageFilter.delete(l);
-		else languageFilter.add(l);
-	}
-	function toggleAllLanguages() {
-		if (languageFilter.size === LANGUAGES.length) languageFilter.clear();
-		else for (const v of LANGUAGES) languageFilter.add(v);
-	}
-	let allModalities = $derived(modalityFilter.size === MODALITIES.length);
-	let allSimplifiedTypes = $derived(simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length);
-	let allDomains = $derived(domainFilter.size === DOMAINS.length);
-	let allLanguages = $derived(languageFilter.size === LANGUAGES.length);
-
-	$effect(() => {
-		loadBenchmarks(true)
-			.then((list) => {
-				allBenchmarks = list.sort((a, b) => a.displayName.localeCompare(b.displayName));
-				// Single pass over the catalog to fill all 3 facet sets, instead of
-				// three separate flatMap+Set traversals. Plain Set is correct
-				// here — used as a local accumulator, never read reactively.
-				/* eslint-disable svelte/prefer-svelte-reactivity */
-				const mods = new Set<string>();
-				const simpTypes = new Set<string>();
-				const doms = new Set<string>();
-				const langs = new Set<string>();
-				/* eslint-enable svelte/prefer-svelte-reactivity */
-				for (const b of list) {
-					if (b.modalities) for (const m of b.modalities) mods.add(m);
-					if (b.simplifiedTaskTypes) for (const t of b.simplifiedTaskTypes) simpTypes.add(t);
-					if (b.domains) for (const d of b.domains) doms.add(d);
-					if (b.languages) for (const l of b.languages) langs.add(l);
-				}
-				MODALITIES = [...mods].sort();
-				// Order the simplified buckets the same way /tasks does (curated
-				// canonical first, then any extras) so users see the familiar
-				// "retrieval / classification / …" sequence.
-				const CURATED = [
-					'retrieval',
-					'classification',
-					'pair-classification',
-					'clustering',
-					'semantic-similarity'
-				];
-				SIMPLIFIED_TYPES_PRESENT = [
-					...CURATED.filter((t) => simpTypes.has(t)),
-					...[...simpTypes].filter((t) => !CURATED.includes(t)).sort()
-				];
-				DOMAINS = [...doms].sort();
-				LANGUAGES = [...langs].sort();
-				for (const v of MODALITIES) modalityFilter.add(v);
-				for (const v of SIMPLIFIED_TYPES_PRESENT) simplifiedTypeFilter.add(v);
-				for (const v of DOMAINS) domainFilter.add(v);
-				for (const v of LANGUAGES) languageFilter.add(v);
-				loading = false;
-			})
-			.catch((e) => {
-				error = e instanceof Error ? e.message : String(e);
-				loading = false;
+	let chips = $derived.by<Chip[]>(() => {
+		const list: Chip[] = facetGroup.seeded ? facetGroup.chips() : [];
+		if (query.trim()) {
+			list.push({
+				key: 'q',
+				label: `Name: "${query.trim()}"`,
+				clear: () => (query = '')
 			});
+		}
+		return list;
 	});
+	function resetAll() {
+		facetGroup.resetAll();
+		query = '';
+	}
 
-	// Featured (on the curated menu) come first, then off-menu benchmarks.
 	let filteredAll = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		// "All on" = filter off; partial = intersection check; empty =
-		// the user deliberately cleared the category, so nothing matches.
-		const modalityOff = modalityFilter.size === MODALITIES.length;
-		const simplifiedOff = simplifiedTypeFilter.size === SIMPLIFIED_TYPES_PRESENT.length;
-		const domainOff = domainFilter.size === DOMAINS.length;
-		const languageOff = languageFilter.size === LANGUAGES.length;
+		// All on = filter off; empty pick set = nothing matches.
+		const modalityOff = modalityFacet.allSelected;
+		const simplifiedOff = typeFacet.allSelected;
+		const domainOff = domainFacet.allSelected;
+		const languageOff = languageFacet.allSelected;
+		const modalities = modalityFacet.picked;
+		const types = typeFacet.picked;
+		const domains = domainFacet.picked;
+		const languages = languageFacet.picked;
 		const matches = (b: Benchmark) => {
 			if (q && !b.name.toLowerCase().includes(q) && !b.displayName.toLowerCase().includes(q))
 				return false;
-			if (!modalityOff && !(b.modalities ?? []).some((m) => modalityFilter.has(m))) return false;
-			if (!simplifiedOff && !(b.simplifiedTaskTypes ?? []).some((t) => simplifiedTypeFilter.has(t)))
-				return false;
-			if (!domainOff && !(b.domains ?? []).some((d) => domainFilter.has(d))) return false;
-			if (!languageOff && !(b.languages ?? []).some((l) => languageFilter.has(l))) return false;
+			if (!modalityOff && !(b.modalities ?? []).some((m) => modalities.has(m))) return false;
+			if (!simplifiedOff && !(b.simplifiedTaskTypes ?? []).some((t) => types.has(t))) return false;
+			if (!domainOff && !(b.domains ?? []).some((d) => domains.has(d))) return false;
+			if (!languageOff && !(b.languages ?? []).some((l) => languages.has(l))) return false;
 			return true;
 		};
 		const dir = sortDir === 'asc' ? 1 : -1;
@@ -202,21 +206,10 @@
 			if (c === 0) c = a.displayName.localeCompare(b.displayName);
 			return dir * c;
 		};
-		// Single pass: partition into featured / other while filtering.
-		// "Featured" = `displayOnLeaderboard !== false` (the curated menu
-		// set the backend returns when `include_hidden=true` flips the
-		// flag for off-menu entries) — saves a second `/menu` round-trip
-		// since this info is already on every Benchmark.
-		const featured: Benchmark[] = [];
-		const other: Benchmark[] = [];
-		for (const b of allBenchmarks) {
-			if (!matches(b)) continue;
-			if (b.displayOnLeaderboard !== false) featured.push(b);
-			else other.push(b);
-		}
-		featured.sort(cmp);
-		other.sort(cmp);
-		return [...featured, ...other];
+		const matched: Benchmark[] = [];
+		for (const b of allBenchmarks) if (matches(b)) matched.push(b);
+		matched.sort(cmp);
+		return matched;
 	});
 </script>
 
@@ -225,8 +218,8 @@
 	description={`Every benchmark registered in MTEB — ${allBenchmarks.length || '100+'} suites spanning multilingual, multimodal, retrieval, classification, clustering, semantic similarity, and domain-specific evaluations.`}
 />
 
-<div class="app">
-	<main class="main">
+<div class="layout-sidebar">
+	<main id="main-content" tabindex="-1" class="layout-main main">
 		<header class="hero">
 			<h1>All benchmarks</h1>
 			<p class="lead">
@@ -272,24 +265,27 @@
 					<SortDirIcon dir={sortDir} />
 				</button>
 			</div>
+			<ViewModeToggle value={view} onChange={(v) => (view = v)} />
 			<span class="count">
 				{filteredAll.length} / {allBenchmarks.length}
 			</span>
 		</div>
 
-		{#if loading}
-			<p class="muted">Loading benchmarks…</p>
-		{:else if error}
-			<p class="muted">Failed to load: {error}</p>
+		{#if !resolved && !loadError}
+			<SkeletonGrid />
+		{:else if loadError}
+			<p class="muted">Failed to load: {loadError}</p>
 		{:else if filteredAll.length === 0}
 			<p class="muted">No benchmark matches that search.</p>
+		{:else if view === 'table'}
+			<BenchmarksTable rows={filteredAll} sort={sortAdapter} />
 		{:else}
 			<section class="block">
 				<header class="block-head">
 					<h2>Benchmarks</h2>
 					<span class="count">{filteredAll.length}</span>
 				</header>
-				<div class="grid">
+				<div class="grid card-grid">
 					{#each filteredAll as b (b.name)}
 						<BenchmarkCard {b} />
 					{/each}
@@ -298,175 +294,73 @@
 		{/if}
 	</main>
 
-	<aside class="sidebar" class:collapsed={sidebarCollapsed} aria-label="Filters">
-		<button
-			type="button"
-			class="sidebar-toggle"
-			onclick={() => (sidebarCollapsed = !sidebarCollapsed)}
-			aria-expanded={!sidebarCollapsed}
-			title={sidebarCollapsed ? 'Expand filters' : 'Collapse filters'}
+	<FilterSidebar>
+		<ActiveFilterStrip {chips} onResetAll={resetAll} />
+		<!-- `type-fill` paints checked chips in the shared primary tint
+		     across every facet on this page, instead of the per-stype
+		     colour /tasks uses for its Task group. -->
+		<FilterFacet
+			label="Task group"
+			items={SIMPLIFIED_TYPES_PRESENT}
+			picked={typeFacet.picked}
+			onToggle={(t) => typeFacet.toggle(t)}
+			onToggleAll={() => typeFacet.toggleAll()}
+			allSelected={typeFacet.allSelected}
+			pillClass="type-fill"
+		/>
+		<FilterFacet
+			label="Modality"
+			items={MODALITIES}
+			picked={modalityFacet.picked}
+			onToggle={(m) => modalityFacet.toggle(m)}
+			onToggleAll={() => modalityFacet.toggleAll()}
+			allSelected={modalityFacet.allSelected}
+			pillClass="modality-fill"
+			pillAttrs={(m) => ({ 'data-modality': m })}
 		>
-			<span class="chev" class:open={!sidebarCollapsed}>‹</span>
-			{#if !sidebarCollapsed}
-				<span class="toggle-label">Filters</span>
-			{/if}
-		</button>
-
-		{#if !sidebarCollapsed}
-			<div class="filters">
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Task group</span>
-						<button type="button" class="link-btn" onclick={toggleAllSimplifiedTypes}>
-							{allSimplifiedTypes ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<!-- `type-fill` paints checked chips in the shared primary
-					     tint (instead of the per-stype colour the /tasks page
-					     uses). On /benchmarks the Task group sits next to the
-					     other primary-tinted facets (Modality / Task type /
-					     Domain), so matching their treatment keeps the sidebar
-					     visually consistent. -->
-					<div class="pills">
-						{#each SIMPLIFIED_TYPES_PRESENT as t (t)}
-							<label class="pill type-fill">
-								<input
-									type="checkbox"
-									checked={simplifiedTypeFilter.has(t)}
-									onchange={() => toggleSimplifiedType(t)}
-								/>
-								<span>{t}</span>
-							</label>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Modality</span>
-						<button type="button" class="link-btn" onclick={toggleAllModalities}>
-							{allModalities ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<div class="pills">
-						{#each MODALITIES as m (m)}
-							<label class="pill modality-fill">
-								<input
-									type="checkbox"
-									checked={modalityFilter.has(m)}
-									onchange={() => toggleModality(m)}
-								/>
-								<ModalityIcon modality={m} size={12} />
-								<span>{m}</span>
-							</label>
-						{/each}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Domain</span>
-						<button type="button" class="link-btn" onclick={toggleAllDomains}>
-							{allDomains ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="type-search"
-						placeholder="Search domains…"
-						bind:value={domainQuery}
-					/>
-					<div class="pills scroll scroll-thin">
-						{#each visibleDomains as d (d)}
-							<label class="pill type-fill">
-								<input
-									type="checkbox"
-									checked={domainFilter.has(d)}
-									onchange={() => toggleDomain(d)}
-								/>
-								<span>{d}</span>
-							</label>
-						{/each}
-						{#if visibleDomains.length === 0}
-							<p class="muted no-match">No domains match.</p>
-						{/if}
-					</div>
-				</div>
-
-				<div class="group">
-					<div class="group-head">
-						<span class="group-label">Language</span>
-						<button type="button" class="link-btn" onclick={toggleAllLanguages}>
-							{allLanguages ? 'Clear' : 'All'}
-						</button>
-					</div>
-					<input
-						type="search"
-						class="type-search"
-						placeholder="Search languages…"
-						bind:value={languageQuery}
-					/>
-					<!-- Cap collapsed; on expand we drop the .scroll wrapper so
-					     the full language list flows in the sidebar and the
-					     page scroll handles overflow. Same pattern as /tasks. -->
-					<div
-						class="pills"
-						class:scroll={!languagesExpanded}
-						class:scroll-thin={!languagesExpanded}
-					>
-						{#each visibleLanguages as l (l)}
-							<label class="pill type-fill">
-								<input
-									type="checkbox"
-									checked={languageFilter.has(l)}
-									onchange={() => toggleLanguage(l)}
-								/>
-								<span>{l}</span>
-							</label>
-						{/each}
-						{#if visibleLanguages.length === 0}
-							<p class="muted no-match">No languages match.</p>
-						{/if}
-					</div>
-					{#if filteredLanguages.length > LANGUAGE_CAP}
-						<button
-							type="button"
-							class="link-btn show-more-btn"
-							onclick={() => (languagesExpanded = !languagesExpanded)}
-						>
-							{languagesExpanded ? 'Show fewer' : `Show all ${filteredLanguages.length}`}
-						</button>
-					{/if}
-				</div>
-			</div>
-		{/if}
-	</aside>
+			{#snippet pillIcon(m)}<ModalityIcon modality={m} size={12} />{/snippet}
+		</FilterFacet>
+		<FilterFacet
+			label="Domain"
+			items={visibleDomains}
+			picked={domainFacet.picked}
+			onToggle={(d) => domainFacet.toggle(d)}
+			onToggleAll={() => domainFacet.toggleAll()}
+			allSelected={domainFacet.allSelected}
+			pillClass="type-fill"
+			searchPlaceholder="Search domains…"
+			bind:searchValue={domainQuery}
+			scrollable
+			emptyMessage="No domains match."
+		/>
+		<FilterFacet
+			label="Language"
+			items={filteredLanguages}
+			picked={languageFacet.picked}
+			onToggle={(l) => languageFacet.toggle(l)}
+			onToggleAll={() => languageFacet.toggleAll()}
+			allSelected={languageFacet.allSelected}
+			pillClass="type-fill"
+			searchPlaceholder="Search languages…"
+			bind:searchValue={languageQuery}
+			scrollable
+			grow
+			emptyMessage="No languages match."
+		/>
+	</FilterSidebar>
 </div>
 
 <ScrollToTopButton />
 <ShareUrlButton />
 
 <style>
-	/* Two-column layout — mirrors /tasks and /models. `.app` is the
-	   page-level flex container so the sidebar can span the full viewport
-	   height; `.main` carries the 1280 px max-width + the page padding
-	   that used to live on `.page`. */
-	.app {
-		display: flex;
-		min-height: 100vh;
-	}
+	/* Tighter top padding than the shared `.layout-main` default so the
+	   catalogue hero sits closer to the top bar. */
 	.main {
-		flex: 1;
-		min-width: 0;
-		max-width: 1280px;
-		margin: 0 auto;
 		padding: 18px 28px 64px;
 	}
-	/* `.breadcrumb`, `.breadcrumb a`, `.breadcrumb .sep`,
-	   `.breadcrumb .current` live in src/app.css. */
 	.hero {
 		padding: 28px 0 18px;
-		position: relative;
 	}
 	h1 {
 		font-size: 32px;
@@ -476,23 +370,11 @@
 		margin: 0 0 10px;
 		color: var(--ink-strong);
 	}
-	.hero::before {
-		content: '';
-		position: absolute;
-		top: 18px;
-		left: 0;
-		width: 32px;
-		height: 3px;
-		background: var(--primary);
-		border-radius: 2px;
-	}
-	/* Base `.lead` (color + margin) lives in src/app.css. */
 	.lead {
 		font-size: 15px;
 		line-height: 1.55;
 	}
 
-	/* `.toolbar` (sticky shell + mobile rules) is shared in src/app.css. */
 	.count {
 		font-size: 12px;
 		color: var(--text-subtle);
@@ -515,12 +397,11 @@
 		font-weight: 700;
 		margin: 0;
 	}
+	/* Slightly wider gap than `.card-grid`'s 12 px so the per-section
+	   blocks breathe. */
 	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 14px;
 	}
-	/* Base `.muted` (color + margin: 0) lives in src/app.css. */
 	.muted {
 		padding: 20px 0;
 	}
