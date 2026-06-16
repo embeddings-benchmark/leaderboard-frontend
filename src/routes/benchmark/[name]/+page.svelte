@@ -314,6 +314,7 @@
 									width="32"
 									height="32"
 									fetchpriority="high"
+									crossorigin="anonymous"
 								/>
 							{:else}
 								<span class="hero-icon icon-tile icon-tile-text" aria-hidden="true"

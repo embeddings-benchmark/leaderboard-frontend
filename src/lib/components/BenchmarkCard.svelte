@@ -36,6 +36,7 @@
 					loading="lazy"
 					decoding="async"
 					fetchpriority="low"
+					crossorigin="anonymous"
 				/>
 			{:else}
 				<span class="card-icon icon-tile icon-tile-text" aria-hidden="true">{b.icon}</span>

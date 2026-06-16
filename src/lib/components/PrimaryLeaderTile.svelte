@@ -54,6 +54,7 @@
 						loading="lazy"
 						decoding="async"
 						fetchpriority="low"
+						crossorigin="anonymous"
 					/>
 				{:else}
 					<span class="prim-icon icon-tile icon-tile-text" aria-hidden="true">{benchmark.icon}</span
