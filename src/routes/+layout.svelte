@@ -11,6 +11,7 @@
 	import BookText from 'lucide-svelte/icons/book-text';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
+	import Sponsors from '$lib/components/Sponsors.svelte';
 	import { filters } from '$lib/stores/filters.svelte';
 
 	// Preconnect to the backend so the first fetch lands ~150ms faster on cold
@@ -157,6 +158,8 @@
 	     /compare route. Mounted once globally so every page benefits
 	     without per-page wiring. -->
 	<ComparePinnedButton />
+
+	<Sponsors />
 
 	<footer class="page-footer" aria-label="Site footer">
 		<a
@@ -430,9 +433,9 @@
 	}
 
 	.page-footer {
-		/* Push to the bottom of the flex column so short pages still pin
-		   the footer at the viewport floor instead of floating mid-screen. */
-		margin-top: auto;
+		/* `<Sponsors>` now carries `margin-top: auto` and renders directly
+		   above, pinning the sponsors + footer block to the viewport floor
+		   on short pages — so the footer just stacks beneath it. */
 		display: flex;
 		justify-content: center;
 		gap: 16px;
