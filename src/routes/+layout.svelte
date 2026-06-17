@@ -159,9 +159,8 @@
 	     without per-page wiring. -->
 	<ComparePinnedButton />
 
-	<Sponsors />
-
 	<footer class="page-footer" aria-label="Site footer">
+		<Sponsors />
 		<a
 			class="footer-link"
 			href="https://github.com/embeddings-benchmark/leaderboardv2"
@@ -433,13 +432,15 @@
 	}
 
 	.page-footer {
-		/* `<Sponsors>` now carries `margin-top: auto` and renders directly
-		   above, pinning the sponsors + footer block to the viewport floor
-		   on short pages — so the footer just stacks beneath it. */
+		/* Pin to the bottom of the flex column so short pages still anchor
+		   the footer at the viewport floor instead of floating mid-screen.
+		   Stacks the compact `<Sponsors>` strip above the source link. */
+		margin-top: auto;
 		display: flex;
-		justify-content: center;
-		gap: 16px;
-		padding: 18px 28px;
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+		padding: 16px 28px 18px;
 		border-top: 1px solid var(--border);
 		background: var(--bar-bg);
 		font-size: 12.5px;

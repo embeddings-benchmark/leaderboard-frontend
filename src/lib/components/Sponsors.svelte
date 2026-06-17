@@ -1,10 +1,10 @@
 <script lang="ts">
-	// Sponsor acknowledgement band, mounted once in the root layout just
-	// above the footer so it sits at the bottom of every page.
+	// Compact sponsor acknowledgement strip. Rendered inside the global
+	// footer so it reads as one slim line rather than a tall band.
 	//
 	// Logo rendering has two modes:
 	//  - Full-colour brand logos (`mono: false`) render as <img>. Their
-	//    palettes read on both the light and dark page backgrounds.
+	//    palettes read on both the light and dark footer backgrounds.
 	//  - Single-colour marks/wordmarks (`mono: true`) render as a masked
 	//    <span> tinted with `currentColor`, so they track the theme's text
 	//    colour instead of vanishing on one background. (An <img> can't
@@ -44,145 +44,114 @@
 </script>
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -- every href below is an external sponsor URL -->
-<section class="sponsors" aria-label="Sponsors">
-	<div class="tier tier-active">
-		<h2 class="tier-label">Active Sponsors</h2>
-		<ul class="row">
-			{#each active as s (s.name)}
-				<li>
-					<a
-						class="logo"
-						href={s.url}
-						target="_blank"
-						rel="noreferrer"
-						aria-label={s.name}
-						title={s.name}
-					>
-						{#if s.mono}
-							<span
-								class="mark mono-mark"
-								style="aspect-ratio: {s.w} / {s.h}; -webkit-mask-image: url('{src(
-									s.file
-								)}'); mask-image: url('{src(s.file)}');"
-								aria-hidden="true"
-							></span>
-						{:else}
-							<img
-								class="mark"
-								src={src(s.file)}
-								alt=""
-								style="aspect-ratio: {s.w} / {s.h};"
-								loading="lazy"
-								decoding="async"
-							/>
-						{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
-	</div>
+{#snippet logo(s: Sponsor)}
+	<a class="logo" href={s.url} target="_blank" rel="noreferrer" aria-label={s.name} title={s.name}>
+		{#if s.mono}
+			<span
+				class="mark mono-mark"
+				style="aspect-ratio: {s.w} / {s.h}; -webkit-mask-image: url('{src(
+					s.file
+				)}'); mask-image: url('{src(s.file)}');"
+				aria-hidden="true"
+			></span>
+		{:else}
+			<img
+				class="mark"
+				src={src(s.file)}
+				alt=""
+				style="aspect-ratio: {s.w} / {s.h};"
+				loading="lazy"
+				decoding="async"
+			/>
+		{/if}
+	</a>
+{/snippet}
 
-	<div class="tier tier-past">
-		<h2 class="tier-label">Past Sponsors</h2>
-		<ul class="row">
-			{#each past as s (s.name)}
-				<li>
-					<a
-						class="logo"
-						href={s.url}
-						target="_blank"
-						rel="noreferrer"
-						aria-label={s.name}
-						title={s.name}
-					>
-						{#if s.mono}
-							<span
-								class="mark mono-mark"
-								style="aspect-ratio: {s.w} / {s.h}; -webkit-mask-image: url('{src(
-									s.file
-								)}'); mask-image: url('{src(s.file)}');"
-								aria-hidden="true"
-							></span>
-						{:else}
-							<img
-								class="mark"
-								src={src(s.file)}
-								alt=""
-								style="aspect-ratio: {s.w} / {s.h};"
-								loading="lazy"
-								decoding="async"
-							/>
-						{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
-	</div>
-</section>
+<div class="sponsors">
+	<span class="sp-label">Sponsors</span>
+	<ul class="sp-row">
+		{#each active as s (s.name)}
+			<li>{@render logo(s)}</li>
+		{/each}
+	</ul>
+	<span class="sp-dot" aria-hidden="true"></span>
+	<span class="sp-label sp-label-past">Past</span>
+	<ul class="sp-row sp-row-past">
+		{#each past as s (s.name)}
+			<li>{@render logo(s)}</li>
+		{/each}
+	</ul>
+</div>
 
 <!-- eslint-enable svelte/no-navigation-without-resolve -->
 
 <style>
-	/* `margin-top: auto` (relocated here from `.page-footer`) pins the
-	   sponsors + footer block to the viewport floor on short pages. */
 	.sponsors {
-		margin-top: auto;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 22px;
-		padding: 28px 28px 24px;
-		border-top: 1px solid var(--border);
-		background: var(--bar-bg);
-	}
-	.tier {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 14px;
-	}
-	.tier-label {
-		margin: 0;
-		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-	}
-	.row {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: 16px 40px;
+		gap: 8px 14px;
+	}
+	.sp-label {
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+	}
+	.sp-label-past {
+		opacity: 0.85;
+	}
+	.sp-row {
+		--logo-h: 22px;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 16px;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
-	.row li {
+	.sp-row-past {
+		--logo-h: 15px;
+	}
+	.sp-row li {
 		display: inline-flex;
+	}
+	/* Subtle dot separating the active and past groups. */
+	.sp-dot {
+		width: 3px;
+		height: 3px;
+		border-radius: 50%;
+		background: var(--border-strong);
 	}
 	.logo {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		color: var(--text-muted);
-		opacity: 0.92;
+		opacity: 0.9;
 		transition:
 			opacity 0.16s ease,
-			color 0.16s ease,
-			transform 0.16s ease;
+			color 0.16s ease;
 	}
 	.logo:hover {
 		opacity: 1;
 		color: var(--ink-strong);
-		transform: translateY(-1px);
 		text-decoration: none;
 	}
 	.logo:focus-visible {
 		outline: 2px solid var(--primary);
-		outline-offset: 4px;
-		border-radius: 6px;
+		outline-offset: 3px;
+		border-radius: 5px;
+	}
+	/* Past sponsors read dimmer; hover restores presence. */
+	.sp-row-past .logo {
+		opacity: 0.6;
+	}
+	.sp-row-past .logo:hover {
+		opacity: 0.95;
 	}
 	/* Shared logo sizing — height is the constant, width derives from the
 	   inline `aspect-ratio`. */
@@ -202,49 +171,16 @@
 		mask-size: contain;
 	}
 
-	.tier-active {
-		--logo-h: 30px;
-	}
-	/* Past sponsors read smaller and dimmer; hover restores presence. */
-	.tier-past {
-		--logo-h: 19px;
-		gap: 12px;
-	}
-	.tier-past .tier-label {
-		font-size: 10px;
-		color: var(--text-subtle);
-		opacity: 0.85;
-	}
-	.tier-past .logo {
-		opacity: 0.6;
-	}
-	.tier-past .logo:hover {
-		opacity: 0.95;
-	}
-
 	@media (max-width: 640px) {
 		.sponsors {
-			padding: 22px 16px 20px;
-			gap: 18px;
+			gap: 6px 10px;
 		}
-		.row {
-			gap: 14px 26px;
+		.sp-row {
+			--logo-h: 20px;
+			gap: 6px 12px;
 		}
-		.tier-active {
-			--logo-h: 26px;
-		}
-		.tier-past {
-			--logo-h: 17px;
-		}
-	}
-
-	/* Honour reduced-motion: drop the hover lift. */
-	@media (prefers-reduced-motion: reduce) {
-		.logo {
-			transition: opacity 0.16s ease;
-		}
-		.logo:hover {
-			transform: none;
+		.sp-row-past {
+			--logo-h: 14px;
 		}
 	}
 </style>
