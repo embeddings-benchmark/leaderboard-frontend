@@ -212,15 +212,16 @@
 	let taskPickerQuery = $state('');
 	let taskPickerRoot: HTMLDivElement | undefined = $state();
 
-	// Mirror current picks back to the URL so any share link reproduces the
-	// exact comparison view. Comma-separated keeps the URL short even with
-	// the max of 4 models × 6 benchmarks. Empty arrays drop the param.
+	// `.slice()` so the $state proxies are read at index level — the bare
+	// variable doesn't subscribe to reassignments. `queueMicrotask` defers
+	// `replaceState` outside the effect's reactive scope so SvelteKit's
+	// navigation reactivity doesn't break dependency capture; mirrors
+	// `filters.svelte.ts:doSync`.
 	$effect(() => {
-		updateUrl({
-			model: picked.length > 0 ? picked.join(',') : null,
-			benchmark: pickedBenchmarks.length > 0 ? pickedBenchmarks.join(',') : null,
-			task: pickedTasks.length > 0 ? pickedTasks.join(',') : null
-		});
+		const m = picked.slice();
+		const b = pickedBenchmarks.slice();
+		const t = pickedTasks.slice();
+		queueMicrotask(() => updateUrl({ model: m, benchmark: b, task: t }));
 	});
 
 	// FUTURE: migrate to native `popover="auto"` once anchor positioning
@@ -302,6 +303,9 @@
 
 	// Drop tasks from the pick list once the benchmark supplying them is removed.
 	$effect(() => {
+		// Skip until a summary has loaded — otherwise a URL-hydrated `?task=`
+		// gets cleared during the load gap before `availableTasks` populates.
+		if (benchSummaries.length === 0) return;
 		const valid = new Set(availableTasks.map((t) => t.name));
 		const next = pickedTasks.filter((n) => valid.has(n));
 		if (next.length !== pickedTasks.length) pickedTasks = next;

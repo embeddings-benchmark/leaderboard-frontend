@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeSet, encodeSet } from './url-state';
+import { applyParamUpdates, decodeSet, encodeSet } from './url-state';
 
 describe('encodeSet / decodeSet', () => {
 	it('round-trips a plain set of names', () => {
@@ -40,5 +40,58 @@ describe('encodeSet / decodeSet', () => {
 	it('accepts any iterable input (Set, generator, etc.)', () => {
 		const set = new Set(['x', 'y', 'x']); // dup is collapsed by Set itself
 		expect(encodeSet(set)).toBe('x,y');
+	});
+});
+
+describe('applyParamUpdates', () => {
+	it('writes an array as repeated-key pairs (no comma separator)', () => {
+		const url = new URL('http://x/compare');
+		const changed = applyParamUpdates(url, { model: ['a', 'b'] });
+		expect(changed).toBe(true);
+		expect(url.search).toBe('?model=a&model=b');
+		expect(url.searchParams.getAll('model')).toEqual(['a', 'b']);
+	});
+
+	it('preserves `/` and `,` in repeated array values across a write/read round-trip', () => {
+		// The OLD comma-join + `searchParams.set` path double-encoded `%2F`
+		// → `%252F` and turned the literal separator into `%2C`.
+		const url = new URL('http://x/compare');
+		const models = ['intfloat/e5-small', 'BAAI/bge-base'];
+		const benchmarks = ['MTEB(Multilingual, v2)', 'BEIR'];
+		applyParamUpdates(url, { model: models, benchmark: benchmarks });
+
+		expect(url.search).toBe(
+			'?model=intfloat%2Fe5-small&model=BAAI%2Fbge-base' +
+				'&benchmark=MTEB%28Multilingual%2C+v2%29&benchmark=BEIR'
+		);
+		expect(url.searchParams.getAll('model')).toEqual(models);
+		expect(url.searchParams.getAll('benchmark')).toEqual(benchmarks);
+	});
+
+	it('empty array deletes the param; null also deletes', () => {
+		const url = new URL('http://x/compare?model=a&model=b&keep=1');
+		applyParamUpdates(url, { model: [], other: null });
+		expect(url.searchParams.has('model')).toBe(false);
+		expect(url.search).toBe('?keep=1');
+	});
+
+	it('empty string is preserved as `?k=` (distinct from delete)', () => {
+		const url = new URL('http://x/');
+		applyParamUpdates(url, { mtypes: '' });
+		expect(url.search).toBe('?mtypes=');
+	});
+
+	it('no-op when array contents match; reorder is a change', () => {
+		const url = new URL('http://x/?model=a&model=b');
+		expect(applyParamUpdates(url, { model: ['a', 'b'] })).toBe(false);
+		expect(applyParamUpdates(url, { model: ['b', 'a'] })).toBe(true);
+		expect(url.searchParams.getAll('model')).toEqual(['b', 'a']);
+	});
+
+	it('mixes string and array values in one call', () => {
+		const url = new URL('http://x/');
+		applyParamUpdates(url, { tab: 'summary', model: ['a', 'b'] });
+		expect(url.searchParams.get('tab')).toBe('summary');
+		expect(url.searchParams.getAll('model')).toEqual(['a', 'b']);
 	});
 });
