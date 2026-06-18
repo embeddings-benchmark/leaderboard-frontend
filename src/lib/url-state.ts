@@ -13,10 +13,42 @@ export function getParam(name: string): string | null {
 }
 
 // Patch URL params. `null`/`undefined` deletes; `''` preserved as `?k=`
-// (a deliberate deselect-all gesture, distinct from "no param").
+// (a deliberate deselect-all gesture, distinct from "no param"). Arrays
+// write repeated-key form (`?k=a&k=b`) — comma-joining set params would
+// re-encode `%` and the separator `,` through `URLSearchParams.set`,
+// breaking any raw-search splitter on the read side.
+/** Mutate `url.searchParams` per `updates`; return `true` if anything changed. */
+export function applyParamUpdates(
+	url: URL,
+	updates: Record<string, string | readonly string[] | null | undefined>
+): boolean {
+	let changed = false;
+	for (const [k, v] of Object.entries(updates)) {
+		if (v == null || (Array.isArray(v) && v.length === 0)) {
+			if (url.searchParams.has(k)) {
+				url.searchParams.delete(k);
+				changed = true;
+			}
+		} else if (Array.isArray(v)) {
+			const existing = url.searchParams.getAll(k);
+			if (existing.length !== v.length || existing.some((e, i) => e !== v[i])) {
+				url.searchParams.delete(k);
+				for (const item of v) url.searchParams.append(k, item);
+				changed = true;
+			}
+		} else if (url.searchParams.get(k) !== v) {
+			url.searchParams.set(k, v as string);
+			changed = true;
+		}
+	}
+	return changed;
+}
+
 let _url: URL | null = null;
 let _lastPath = '';
-export function updateUrl(updates: Record<string, string | null | undefined>): void {
+export function updateUrl(
+	updates: Record<string, string | readonly string[] | null | undefined>
+): void {
 	if (typeof window === 'undefined') return;
 	const path = window.location.pathname + window.location.search + window.location.hash;
 	if (!_url || _lastPath !== path) {
@@ -24,20 +56,7 @@ export function updateUrl(updates: Record<string, string | null | undefined>): v
 		_lastPath = path;
 	}
 	const url = _url;
-	let changed = false;
-	for (const [k, v] of Object.entries(updates)) {
-		const existing = url.searchParams.get(k);
-		if (v == null) {
-			if (existing !== null) {
-				url.searchParams.delete(k);
-				changed = true;
-			}
-		} else if (existing !== v) {
-			url.searchParams.set(k, v);
-			changed = true;
-		}
-	}
-	if (changed) {
+	if (applyParamUpdates(url, updates)) {
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		replaceState(url, {});
 		_lastPath = url.pathname + url.search + url.hash;
@@ -53,12 +72,6 @@ export function encodeSet(values: Iterable<string>): string {
 		out += encodeURIComponent(v);
 	}
 	return out;
-}
-
-/** URL patch value for comma-separated set params; `null` removes the param. */
-export function encodeUrlSetParam(values: Iterable<string>): string | null {
-	const encoded = encodeSet(values);
-	return encoded ? encoded : null;
 }
 
 /** Inverse of ``encodeSet`` — returns ``[]`` for missing / empty values. */
