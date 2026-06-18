@@ -10,7 +10,7 @@
 	import type { Benchmark, BenchmarkSummary, SummaryRow } from '$lib/types';
 	import { flattenMenu } from '$lib/types';
 	import { humanizeType, modelPath } from '$lib/format';
-	import { updateUrl } from '$lib/url-state';
+	import { encodeUrlSetParam, updateUrl } from '$lib/url-state';
 	import { untrack } from 'svelte';
 
 	// Read `model=` and `benchmark=` from the URL. Accepts both the legacy
@@ -217,9 +217,9 @@
 	// the max of 4 models × 6 benchmarks. Empty arrays drop the param.
 	$effect(() => {
 		updateUrl({
-			model: picked.length > 0 ? picked.join(',') : null,
-			benchmark: pickedBenchmarks.length > 0 ? pickedBenchmarks.join(',') : null,
-			task: pickedTasks.length > 0 ? pickedTasks.join(',') : null
+			model: encodeUrlSetParam(picked),
+			benchmark: encodeUrlSetParam(pickedBenchmarks),
+			task: encodeUrlSetParam(pickedTasks)
 		});
 	});
 

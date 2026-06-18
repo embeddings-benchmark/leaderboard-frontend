@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeSet, encodeSet } from './url-state';
+import { decodeSet, encodeSet, encodeUrlSetParam } from './url-state';
 
 describe('encodeSet / decodeSet', () => {
 	it('round-trips a plain set of names', () => {
@@ -40,5 +40,19 @@ describe('encodeSet / decodeSet', () => {
 	it('accepts any iterable input (Set, generator, etc.)', () => {
 		const set = new Set(['x', 'y', 'x']); // dup is collapsed by Set itself
 		expect(encodeSet(set)).toBe('x,y');
+	});
+
+	it('formats URL patch values with literal commas between encoded items', () => {
+		expect(encodeUrlSetParam(['model-a', 'model-b'])).toBe('model-a,model-b');
+	});
+
+	it('preserves commas inside values while keeping separator commas literal', () => {
+		const encoded = encodeUrlSetParam(['MTEB(Multilingual, v2)', 'RTEB(beta)']);
+		expect(encoded).toBe('MTEB(Multilingual%2C%20v2),RTEB(beta)');
+		expect(decodeSet(encoded)).toEqual(['MTEB(Multilingual, v2)', 'RTEB(beta)']);
+	});
+
+	it('returns null for empty URL patch values', () => {
+		expect(encodeUrlSetParam([])).toBeNull();
 	});
 });

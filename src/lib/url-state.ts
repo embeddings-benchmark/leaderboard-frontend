@@ -55,6 +55,12 @@ export function encodeSet(values: Iterable<string>): string {
 	return out;
 }
 
+/** URL patch value for comma-separated set params; `null` removes the param. */
+export function encodeUrlSetParam(values: Iterable<string>): string | null {
+	const encoded = encodeSet(values);
+	return encoded ? encoded : null;
+}
+
 /** Inverse of ``encodeSet`` — returns ``[]`` for missing / empty values. */
 export function decodeSet(raw: string | null): string[] {
 	if (!raw) return [];
