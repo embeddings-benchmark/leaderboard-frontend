@@ -206,6 +206,12 @@
 			? applyFilters(leaderboard.summary)
 			: null
 	);
+	// Count of fully-evaluated models: `meanTask` is `null` whenever a row is
+	// missing any task cell, so non-null means every task in the benchmark
+	// scored. Used by the Models KPI so partial-coverage rows aren't tallied.
+	let fullyEvaluatedCount = $derived(
+		filteredSummary?.rows.filter((r) => r.meanTask !== null).length ?? 0
+	);
 
 	// CSV builders for the three downloadable tabs. Wrapped as lazy closures
 	// so DownloadButton only pays the serialisation cost on click.
@@ -354,7 +360,7 @@
 					</div>
 					<div class="kpi">
 						<span class="kpi-label">Models</span>
-						<span class="kpi-value">{filteredSummary?.rows.length ?? 0}</span>
+						<span class="kpi-value">{fullyEvaluatedCount}</span>
 					</div>
 				</div>
 			</section>
