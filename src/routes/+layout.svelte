@@ -11,7 +11,6 @@
 	import BookText from 'lucide-svelte/icons/book-text';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
-	import Sponsors from '$lib/components/Sponsors.svelte';
 	import { filters } from '$lib/stores/filters.svelte';
 
 	// Preconnect to the backend so the first fetch lands ~150ms faster on cold
@@ -160,7 +159,6 @@
 	<ComparePinnedButton />
 
 	<footer class="page-footer" aria-label="Site footer">
-		<Sponsors />
 		<a
 			class="footer-link"
 			href="https://github.com/embeddings-benchmark/leaderboardv2"
@@ -432,15 +430,13 @@
 	}
 
 	.page-footer {
-		/* Pin to the bottom of the flex column so short pages still anchor
-		   the footer at the viewport floor instead of floating mid-screen.
-		   Stacks the compact `<Sponsors>` strip above the source link. */
+		/* Push to the bottom of the flex column so short pages still pin
+		   the footer at the viewport floor instead of floating mid-screen. */
 		margin-top: auto;
 		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 12px;
-		padding: 16px 28px 18px;
+		justify-content: center;
+		gap: 16px;
+		padding: 18px 28px;
 		border-top: 1px solid var(--border);
 		background: var(--bar-bg);
 		font-size: 12.5px;

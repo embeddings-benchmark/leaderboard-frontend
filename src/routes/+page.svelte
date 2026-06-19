@@ -3,6 +3,7 @@
 	import MenuSection from '$lib/components/MenuSection.svelte';
 	import PrimaryLeaderTile from '$lib/components/PrimaryLeaderTile.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
+	import Sponsors from '$lib/components/Sponsors.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -76,6 +77,8 @@
 			</p>
 		{/await}
 	</div>
+
+	<Sponsors />
 </main>
 
 <style>

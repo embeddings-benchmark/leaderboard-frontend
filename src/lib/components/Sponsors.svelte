@@ -1,10 +1,10 @@
 <script lang="ts">
-	// Compact sponsor acknowledgement strip. Rendered inside the global
-	// footer so it reads as one slim line rather than a tall band.
+	// "Sponsors" section rendered at the bottom of the Home page — a single
+	// flat row of logos under one heading (no categories).
 	//
 	// Logo rendering has two modes:
 	//  - Full-colour brand logos (`mono: false`) render as <img>. Their
-	//    palettes read on both the light and dark footer backgrounds.
+	//    palettes read on both the light and dark page backgrounds.
 	//  - Single-colour marks/wordmarks (`mono: true`) render as a masked
 	//    <span> tinted with `currentColor`, so they track the theme's text
 	//    colour instead of vanishing on one background. (An <img> can't
@@ -43,9 +43,10 @@
 </script>
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -- every href below is an external sponsor URL -->
-<div class="sponsors">
-	<span class="sp-label">Sponsors</span>
-	<ul class="sp-row">
+<section class="sponsors" aria-labelledby="sponsors-heading">
+	<h2 id="sponsors-heading">Sponsors</h2>
+	<p class="lead">MTEB is supported by the following organizations.</p>
+	<ul class="logo-row">
 		{#each sponsors as s (s.name)}
 			<li>
 				<a
@@ -78,37 +79,34 @@
 			</li>
 		{/each}
 	</ul>
-</div>
+</section>
 
 <!-- eslint-enable svelte/no-navigation-without-resolve -->
 
 <style>
 	.sponsors {
+		margin-top: 36px;
+		padding-top: 28px;
+		border-top: 1px solid var(--border);
+	}
+	.sponsors h2 {
+		margin: 0 0 6px;
+		font-size: 22px;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		color: var(--ink-strong);
+	}
+	.logo-row {
+		--logo-h: 30px;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		justify-content: center;
-		gap: 8px 16px;
-	}
-	.sp-label {
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		color: var(--text-subtle);
-	}
-	.sp-row {
-		--logo-h: 22px;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: center;
-		gap: 8px 18px;
-		margin: 0;
+		gap: 18px 34px;
+		margin: 20px 0 0;
 		padding: 0;
 		list-style: none;
 	}
-	.sp-row li {
+	.logo-row li {
 		display: inline-flex;
 	}
 	.logo {
@@ -150,12 +148,9 @@
 	}
 
 	@media (max-width: 640px) {
-		.sponsors {
-			gap: 6px 12px;
-		}
-		.sp-row {
-			--logo-h: 20px;
-			gap: 8px 14px;
+		.logo-row {
+			--logo-h: 26px;
+			gap: 16px 26px;
 		}
 	}
 </style>
