@@ -32,11 +32,11 @@
 			name: 'Contextual AI',
 			url: 'https://contextual.ai',
 			file: 'contextual.svg',
-			w: 175,
-			h: 27,
+			w: 36,
+			h: 33,
 			mono: true
 		},
-		{ name: 'Google', url: 'https://about.google', file: 'google.svg', w: 272, h: 92 }
+		{ name: 'Google', url: 'https://about.google', file: 'google.svg', w: 24, h: 24 }
 	];
 
 	const src = (file: string) => `${base}/sponsors/${file}`;
