@@ -27,6 +27,7 @@
 		{ name: 'Laude Institute', url: 'https://www.laude.org', file: 'laude.svg', w: 296, h: 296 },
 		{ name: 'Hugging Face', url: 'https://huggingface.co', file: 'huggingface.svg', w: 95, h: 88 },
 		{ name: 'Cursor', url: 'https://cursor.com', file: 'cursor.svg', w: 24, h: 24, mono: true },
+		{ name: 'NVIDIA', url: 'https://www.nvidia.com', file: 'nvidia.svg', w: 24, h: 24, mono: true },
 		{
 			name: 'Contextual AI',
 			url: 'https://contextual.ai',
