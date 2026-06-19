@@ -1,6 +1,7 @@
 <script lang="ts">
-	// "Sponsors" section rendered at the bottom of the Home page — a single
-	// flat row of logos under one heading (no categories).
+	// "Sponsors" section rendered at the bottom of the Home page: a flat row
+	// of sponsor logos plus a small "API Access" sub-section for orgs that
+	// provide model API access.
 	//
 	// Logo rendering has two modes:
 	//  - Full-colour brand logos (`mono: false`) render as <img>. Their
@@ -35,50 +36,66 @@
 			w: 36,
 			h: 33,
 			mono: true
+		}
+	];
+
+	const apiAccess: Sponsor[] = [
+		{
+			name: 'Voyage AI',
+			url: 'https://www.voyageai.com',
+			file: 'voyage.svg',
+			w: 1051,
+			h: 338,
+			mono: true
 		},
-		{ name: 'Google', url: 'https://about.google', file: 'google.svg', w: 24, h: 24 }
+		{ name: 'Google', url: 'https://about.google', file: 'google.svg', w: 24, h: 24 },
+		{ name: 'OpenAI', url: 'https://openai.com', file: 'openai.svg', w: 24, h: 24, mono: true }
 	];
 
 	const src = (file: string) => `${base}/sponsors/${file}`;
 </script>
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -- every href below is an external sponsor URL -->
+{#snippet logo(s: Sponsor)}
+	<a class="logo" href={s.url} target="_blank" rel="noreferrer" aria-label={s.name} title={s.name}>
+		{#if s.mono}
+			<span
+				class="mark mono-mark"
+				style="aspect-ratio: {s.w} / {s.h}; -webkit-mask-image: url('{src(
+					s.file
+				)}'); mask-image: url('{src(s.file)}');"
+				aria-hidden="true"
+			></span>
+		{:else}
+			<img
+				class="mark"
+				src={src(s.file)}
+				alt=""
+				style="aspect-ratio: {s.w} / {s.h};"
+				loading="lazy"
+				decoding="async"
+			/>
+		{/if}
+	</a>
+{/snippet}
+
 <section class="sponsors" aria-labelledby="sponsors-heading">
 	<h2 id="sponsors-heading">Sponsors</h2>
 	<p class="lead">MTEB is supported by the following organizations.</p>
 	<ul class="logo-row">
 		{#each sponsors as s (s.name)}
-			<li>
-				<a
-					class="logo"
-					href={s.url}
-					target="_blank"
-					rel="noreferrer"
-					aria-label={s.name}
-					title={s.name}
-				>
-					{#if s.mono}
-						<span
-							class="mark mono-mark"
-							style="aspect-ratio: {s.w} / {s.h}; -webkit-mask-image: url('{src(
-								s.file
-							)}'); mask-image: url('{src(s.file)}');"
-							aria-hidden="true"
-						></span>
-					{:else}
-						<img
-							class="mark"
-							src={src(s.file)}
-							alt=""
-							style="aspect-ratio: {s.w} / {s.h};"
-							loading="lazy"
-							decoding="async"
-						/>
-					{/if}
-				</a>
-			</li>
+			<li>{@render logo(s)}</li>
 		{/each}
 	</ul>
+
+	<div class="api-access">
+		<h3 class="sub-label">API Access</h3>
+		<ul class="logo-row api-row">
+			{#each apiAccess as s (s.name)}
+				<li>{@render logo(s)}</li>
+			{/each}
+		</ul>
+	</div>
 </section>
 
 <!-- eslint-enable svelte/no-navigation-without-resolve -->
@@ -108,6 +125,23 @@
 	}
 	.logo-row li {
 		display: inline-flex;
+	}
+	.api-access {
+		margin-top: 24px;
+	}
+	.sub-label {
+		margin: 0;
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-subtle);
+	}
+	/* The API-access row is the "small" secondary group. */
+	.api-row {
+		--logo-h: 21px;
+		gap: 14px 26px;
+		margin-top: 12px;
 	}
 	.logo {
 		display: inline-flex;
@@ -151,6 +185,10 @@
 		.logo-row {
 			--logo-h: 26px;
 			gap: 16px 26px;
+		}
+		.api-row {
+			--logo-h: 19px;
+			gap: 12px 22px;
 		}
 	}
 </style>
