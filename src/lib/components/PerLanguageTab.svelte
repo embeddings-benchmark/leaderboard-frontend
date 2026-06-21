@@ -5,7 +5,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { type CsvCell } from '$lib/csv';
-	import { floatPinnedToTop, heat } from '$lib/format';
+	import { floatPinnedToTop, heat, rowId } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { loadPerLanguage } from '$lib/data/service';
 	import ModelCellName from './ModelCellName.svelte';
@@ -153,7 +153,7 @@
 			});
 		}
 		if (!active) return rows;
-		return floatPinnedToTop(rows, (r) => pinnedModels.has(r.model.name), pinnedModels.size);
+		return floatPinnedToTop(rows, (r) => pinnedModels.has(rowId(r)), pinnedModels.size);
 	});
 
 	function fmt(n: number | null): string {
@@ -204,11 +204,12 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each sortedRows as row (row.model.name)}
+				{#each sortedRows as row (rowId(row))}
+					{@const rid = rowId(row)}
 					{@const mean = rowMean(row)}
-					<tr class:pinned={pinnedModels.has(row.model.name)}>
+					<tr class:pinned={pinnedModels.has(rid)}>
 						<td class="tbl-pin-col tbl-sticky-pin">
-							<PinButton name={row.model.name} />
+							<PinButton name={rid} />
 						</td>
 						<th
 							scope="row"
@@ -219,7 +220,7 @@
 							onfocusin={(e) => onCellEnter(e, row)}
 							onfocusout={onCellLeave}
 						>
-							<ModelCellName model={row.model} />
+							<ModelCellName model={row.model} experiments={row.experiments} />
 						</th>
 						<td
 							class="tbl-num {heat(mean, worstMean, bestMean)}"
