@@ -8,6 +8,7 @@ const ids = { visitorId: 'visitor-1', sessionId: 'session-1' };
 describe('analytics client', () => {
 	beforeEach(() => {
 		resetAnalyticsForTest();
+		vi.unstubAllEnvs();
 		vi.useFakeTimers();
 		vi.stubGlobal('document', {
 			referrer: 'https://referrer.example/',

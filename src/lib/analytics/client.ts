@@ -1,3 +1,4 @@
+import { PUBLIC_ANALYTICS_ENABLED, PUBLIC_ANALYTICS_URL } from '$env/static/public';
 import { getAnalyticsIds, type AnalyticsIds } from './ids';
 import type { AnalyticsEvent, AnalyticsEventName, AnalyticsPayloads, PageContext } from './events';
 
@@ -34,11 +35,11 @@ function envEnabled(): boolean {
 }
 
 function analyticsEndpoint(): string {
-	return String(import.meta.env.PUBLIC_ANALYTICS_URL ?? '');
+	return PUBLIC_ANALYTICS_URL;
 }
 
 function analyticsEnabledFlag(): string {
-	return String(import.meta.env.PUBLIC_ANALYTICS_ENABLED ?? '');
+	return PUBLIC_ANALYTICS_ENABLED;
 }
 
 function config(): AnalyticsConfig {
