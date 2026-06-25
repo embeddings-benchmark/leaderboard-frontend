@@ -42,7 +42,9 @@ test('the URL ?tab= param rehydrates the active tab on load', async ({ page }) =
 	);
 });
 
-test('benchmark alias route fetches summary with the canonical benchmark name', async ({ page }) => {
+test('benchmark alias route fetches summary with the canonical benchmark name', async ({
+	page
+}) => {
 	const scorePaths: string[] = [];
 	page.on('request', (request) => {
 		const path = decodeURIComponent(new URL(request.url()).pathname);
