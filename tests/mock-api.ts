@@ -13,6 +13,9 @@ import { buildMockSummary } from './fixtures/mockSummary';
 import type { TaskMeta, ModelMeta } from '../src/lib/types';
 
 const PORT = parseInt(process.env.MOCK_API_PORT || '8787', 10);
+const BENCHMARK_ALIASES: Record<string, string> = {
+	'MTEB(eng)': 'MTEB(eng, v2)'
+};
 
 // Cache summaries so repeated /scores calls don't redo the deterministic
 // row generation. Build prerender alone hits each one many times.
@@ -111,12 +114,13 @@ createServer((req, res) => {
 		const encName = slash === -1 ? rest : rest.slice(0, slash);
 		const sub = slash === -1 ? '' : rest.slice(slash + 1);
 		const name = decodeURIComponent(encName);
-		const bench = BENCHMARK_INDEX[name];
+		const canonicalName = BENCHMARK_ALIASES[name] ?? name;
+		const bench = BENCHMARK_INDEX[canonicalName];
 		if (!bench) return json(res, { error: 'not found', name }, 404);
 		if (!sub) return json(res, bench);
-		if (sub === 'scores') return json(res, getSummary(name));
-		if (sub === 'leaders') return json(res, { benchmarkName: name, buckets: [] });
-		if (sub === 'per-language') return json(res, { benchmarkName: name, rows: [] });
+		if (sub === 'scores') return json(res, getSummary(canonicalName));
+		if (sub === 'leaders') return json(res, { benchmarkName: canonicalName, buckets: [] });
+		if (sub === 'per-language') return json(res, { benchmarkName: canonicalName, rows: [] });
 	}
 
 	if (path.startsWith('/v1/tasks/')) {
