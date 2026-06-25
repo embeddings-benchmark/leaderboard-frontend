@@ -40,7 +40,7 @@
 	import PerLanguageTab from '$lib/components/PerLanguageTab.svelte';
 	import TaskInfoTab from '$lib/components/TaskInfoTab.svelte';
 
-	let benchmarkName = $derived(decodeURIComponent(page.params.name ?? ''));
+	let benchmarkName = $derived(data.benchmark.name);
 	// Loader guarantees `data.benchmark` for the current slug (a miss throws
 	// error(404)). Prefer the store's copy once it lands so summary-derived
 	// fields stay in sync; otherwise fall back to the loader's copy.
