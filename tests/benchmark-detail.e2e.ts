@@ -6,6 +6,8 @@ import { test, expect } from '@playwright/test';
 
 const BENCH = 'MTEB(eng, v2)';
 const SLUG = encodeURIComponent(BENCH);
+const ALIAS = 'MTEB(eng)';
+const ALIAS_SLUG = encodeURIComponent(ALIAS);
 // MTEB(eng, v2) has no language_view, so its perf_language tab is
 // hidden — use the multilingual mock for that deep-link test.
 const MULTI_SLUG = encodeURIComponent('MTEB(Multilingual, v2)');
@@ -38,4 +40,19 @@ test('the URL ?tab= param rehydrates the active tab on load', async ({ page }) =
 		'aria-selected',
 		'true'
 	);
+});
+
+test('benchmark alias route fetches summary with the canonical benchmark name', async ({ page }) => {
+	const scorePaths: string[] = [];
+	page.on('request', (request) => {
+		const path = decodeURIComponent(new URL(request.url()).pathname);
+		if (path.includes('/scores')) scorePaths.push(path);
+	});
+
+	await page.goto(`/benchmark/${ALIAS_SLUG}/`);
+
+	await expect(page.getByRole('heading', { name: BENCH }).first()).toBeVisible();
+	await expect(page.locator('table thead').first()).toBeVisible();
+	expect(scorePaths).toContain(`/v1/benchmarks/${BENCH}/scores`);
+	expect(scorePaths).not.toContain(`/v1/benchmarks/${ALIAS}/scores`);
 });
