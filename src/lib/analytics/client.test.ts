@@ -60,6 +60,18 @@ describe('analytics client', () => {
 		});
 	});
 
+	it('posts regular flushes as JSON for the collector schema', async () => {
+		const fetcher = vi.fn().mockResolvedValue({ ok: true });
+		configureAnalyticsForTest({ enabled: true, endpoint: 'https://events.example', fetcher, ids });
+
+		track('csv_downloaded', { filename: 'models.csv', rowCount: 5 });
+		await flushAnalytics();
+
+		const options = fetcher.mock.calls[0][1];
+		expect(options.headers).toEqual({ 'content-type': 'application/json' });
+		expect(JSON.parse(options.body).events[0].eventName).toBe('csv_downloaded');
+	});
+
 	it('keeps events queued when the collector rejects the batch', async () => {
 		const fetcher = vi.fn().mockResolvedValue({ ok: false });
 		configureAnalyticsForTest({ enabled: true, endpoint: 'https://events.example', fetcher, ids });
@@ -75,7 +87,7 @@ describe('analytics client', () => {
 		expect(retryBody.events[0].eventName).toBe('share_link_copied');
 	});
 
-	it('uses sendBeacon for unload flushes', () => {
+	it('uses sendBeacon for unload flushes', async () => {
 		const sendBeacon = vi.fn().mockReturnValue(true);
 		vi.stubGlobal('navigator', { sendBeacon });
 		configureAnalyticsForTest({ enabled: true, endpoint: 'https://events.example', ids });
@@ -84,9 +96,11 @@ describe('analytics client', () => {
 		flushAnalytics({ beacon: true });
 
 		expect(sendBeacon).toHaveBeenCalledOnce();
-		const [url, blob] = sendBeacon.mock.calls[0];
+		const [url, body] = sendBeacon.mock.calls[0];
 		expect(url).toBe('https://events.example/v1/events/batch');
-		expect(blob).toBeInstanceOf(Blob);
+		expect(body).toBeInstanceOf(Blob);
+		expect(body.type).toBe('application/json');
+		expect(JSON.parse(await body.text()).events[0].eventName).toBe('model_pinned');
 	});
 
 	it('stores only query keys for page view style events', async () => {
