@@ -104,6 +104,30 @@ describe('analytics client', () => {
 		expect(JSON.stringify(event)).not.toContain('abc');
 	});
 
+	it('records the model on compare model changes', async () => {
+		const fetcher = vi.fn().mockResolvedValue({ ok: true });
+		configureAnalyticsForTest({ enabled: true, endpoint: 'https://events.example', fetcher, ids });
+
+		track('compare_model_changed', {
+			action: 'added',
+			benchmark: 'MTEB(eng, v2)',
+			model: 'org/model',
+			modelCount: 3
+		});
+		await flushAnalytics();
+
+		const body = JSON.parse(fetcher.mock.calls[0][1].body);
+		expect(body.events[0]).toMatchObject({
+			eventName: 'compare_model_changed',
+			payload: {
+				action: 'added',
+				benchmark: 'MTEB(eng, v2)',
+				model: 'org/model',
+				modelCount: 3
+			}
+		});
+	});
+
 	it('tracks page views without serializing query values', async () => {
 		const fetcher = vi.fn().mockResolvedValue({ ok: true });
 		configureAnalyticsForTest({ enabled: true, endpoint: 'https://events.example', fetcher, ids });

@@ -59,6 +59,8 @@ export interface AnalyticsPayloads {
 	};
 	compare_model_changed: {
 		action: 'added' | 'removed' | 'cleared';
+		benchmark: string | null;
+		model: string | null;
 		modelCount: number;
 	};
 	csv_downloaded: {

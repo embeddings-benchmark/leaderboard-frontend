@@ -236,6 +236,8 @@ Recorded when the user adds, removes, or clears models in the compare page.
 	"eventName": "compare_model_changed",
 	"payload": {
 		"action": "added",
+		"benchmark": "MTEB(eng, v2)",
+		"model": "sentence-transformers/all-MiniLM-L6-v2",
 		"modelCount": 2
 	}
 }
@@ -244,6 +246,8 @@ Recorded when the user adds, removes, or clears models in the compare page.
 Fields:
 
 - `action`: `added`, `removed`, or `cleared`.
+- `benchmark`: current primary compare benchmark name when available.
+- `model`: canonical model name for `added` / `removed`; `null` for `cleared`.
 - `modelCount`: selected model count after the change.
 
 ### `csv_downloaded`

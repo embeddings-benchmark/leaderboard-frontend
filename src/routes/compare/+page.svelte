@@ -252,20 +252,39 @@
 		if (taskPickerOpen) taskPickerOpen = false;
 	}
 
+	function currentBenchmark(): string | null {
+		return pickedBenchmarks[0] ?? null;
+	}
+
 	function togglePick(name: string) {
 		if (picked.includes(name)) {
 			picked = picked.filter((n) => n !== name);
-			track('compare_model_changed', { action: 'removed', modelCount: picked.length });
+			track('compare_model_changed', {
+				action: 'removed',
+				benchmark: currentBenchmark(),
+				model: name,
+				modelCount: picked.length
+			});
 		} else if (picked.length < MAX_PICKED) {
 			picked = [...picked, name];
-			track('compare_model_changed', { action: 'added', modelCount: picked.length });
+			track('compare_model_changed', {
+				action: 'added',
+				benchmark: currentBenchmark(),
+				model: name,
+				modelCount: picked.length
+			});
 		}
 	}
 
 	function clearPicked() {
 		if (picked.length === 0) return;
 		picked = [];
-		track('compare_model_changed', { action: 'cleared', modelCount: 0 });
+		track('compare_model_changed', {
+			action: 'cleared',
+			benchmark: currentBenchmark(),
+			model: null,
+			modelCount: 0
+		});
 	}
 
 	function toggleBenchmark(name: string) {
