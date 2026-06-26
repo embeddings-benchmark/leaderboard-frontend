@@ -3,10 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 describe('analytics client environment configuration', () => {
 	beforeEach(() => {
 		vi.resetModules();
-		vi.doMock('$env/static/public', () => ({
-			PUBLIC_ANALYTICS_URL: 'https://events.example/',
-			PUBLIC_ANALYTICS_ENABLED: 'true'
-		}));
+		vi.stubEnv('PUBLIC_ANALYTICS_URL', 'https://events.example/');
+		vi.stubEnv('PUBLIC_ANALYTICS_ENABLED', 'true');
 		vi.stubGlobal('document', {
 			referrer: '',
 			visibilityState: 'visible',
@@ -21,7 +19,7 @@ describe('analytics client environment configuration', () => {
 		});
 	});
 
-	it('posts batches to the endpoint from SvelteKit public env', async () => {
+	it('posts batches to the endpoint from Vite public env', async () => {
 		const fetcher = vi.fn().mockResolvedValue({ ok: true });
 		vi.stubGlobal('fetch', fetcher);
 
