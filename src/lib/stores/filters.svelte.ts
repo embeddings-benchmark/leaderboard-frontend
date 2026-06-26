@@ -2,6 +2,7 @@ import { untrack } from 'svelte';
 import type { SvelteSet } from 'svelte/reactivity';
 
 import type { BenchmarkSummary, ModelType, SummaryRow, TaskMeta } from '$lib/types';
+import { track } from '$lib/analytics/client';
 import { modelSearchKey } from '$lib/format';
 import { readParams, updateUrl } from '$lib/url-state';
 import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
@@ -287,16 +288,23 @@ function createFilters() {
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
 		for (const f of modelFacets) f.reset();
+		track('filter_changed', { page: currentPath(), filter: 'model_filters_reset' });
 		sync();
 	}
 
 	function resetCustomize() {
 		for (const f of scopeFacets) f.reset();
+		track('filter_changed', { page: currentPath(), filter: 'scope_filters_reset' });
 		sync();
 	}
 
 	function toggleInSet(key: SetKey, name: string) {
 		facetByKey[key].toggle(name);
+		track('filter_changed', {
+			page: currentPath(),
+			filter: key,
+			selectedCount: facetByKey[key].picked.size
+		});
 		sync();
 	}
 
@@ -304,6 +312,17 @@ function createFilters() {
 		const f = facetByKey[key];
 		f.picked.clear();
 		if (checked) for (const v of values) f.picked.add(v);
+		track('filter_changed', {
+			page: currentPath(),
+			filter: key,
+			selectedCount: f.picked.size,
+			totalCount: values.length
+		});
+		sync();
+	}
+
+	function restoreNameQuery(v: string) {
+		state.nameQuery = v;
 		sync();
 	}
 
@@ -313,6 +332,7 @@ function createFilters() {
 		},
 		set nameQuery(v: string) {
 			state.nameQuery = v;
+			track('search_changed', { page: currentPath(), queryLength: v.trim().length });
 			sync();
 		},
 		get minModelSizeM() {
@@ -321,6 +341,7 @@ function createFilters() {
 		set minModelSizeM(v: number) {
 			state.minModelSizeM = v;
 			state.sizeActive = true;
+			track('filter_changed', { page: currentPath(), filter: 'minModelSizeM' });
 			sync();
 		},
 		get maxModelSizeM() {
@@ -329,6 +350,7 @@ function createFilters() {
 		set maxModelSizeM(v: number) {
 			state.maxModelSizeM = v;
 			state.sizeActive = true;
+			track('filter_changed', { page: currentPath(), filter: 'maxModelSizeM' });
 			sync();
 		},
 		get sizeActive() {
@@ -339,6 +361,7 @@ function createFilters() {
 		},
 		set zeroShot(v: ZeroShotMode) {
 			state.zeroShot = v;
+			track('filter_changed', { page: currentPath(), filter: 'zeroShot' });
 			sync();
 		},
 		get availability() {
@@ -346,6 +369,7 @@ function createFilters() {
 		},
 		set availability(v: Availability) {
 			state.availability = v;
+			track('filter_changed', { page: currentPath(), filter: 'availability' });
 			sync();
 		},
 		get instructions() {
@@ -353,6 +377,7 @@ function createFilters() {
 		},
 		set instructions(v: InstructionMode) {
 			state.instructions = v;
+			track('filter_changed', { page: currentPath(), filter: 'instructions' });
 			sync();
 		},
 		get sentenceTransformersOnly() {
@@ -360,6 +385,7 @@ function createFilters() {
 		},
 		set sentenceTransformersOnly(v: boolean) {
 			state.sentenceTransformersOnly = v;
+			track('filter_changed', { page: currentPath(), filter: 'sentenceTransformersOnly' });
 			sync();
 		},
 		// Each get returns the underlying SvelteSet — same identity-preserving
@@ -420,6 +446,7 @@ function createFilters() {
 		// Public for pages without a benchmark summary (e.g. /models); /benchmark
 		// calls it implicitly inside initFor.
 		hydrateFromUrl,
+		restoreNameQuery,
 		resetModelFilters,
 		resetCustomize,
 		toggleInSet,
@@ -428,6 +455,10 @@ function createFilters() {
 }
 
 export const filters = createFilters();
+
+function currentPath(): string {
+	return typeof window === 'undefined' ? '' : window.location.pathname;
+}
 
 function isFullSet(selected: Set<string>, available: string[]): boolean {
 	// "Full" = no narrowing. Empty universe = always full; empty pick set on a
