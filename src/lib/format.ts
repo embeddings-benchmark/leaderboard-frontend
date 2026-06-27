@@ -109,6 +109,37 @@ export function fmtCompact(n: number | null | undefined): string {
  */
 export const COLLATOR = new Intl.Collator(undefined, { sensitivity: 'base' });
 
+export interface ModelLanguageSummary {
+	label: string;
+	title: string;
+	ariaLabel: string;
+}
+
+/** Compact language scope for model cards, with the full list in a tooltip. */
+export function summarizeModelLanguages(
+	languages: readonly string[] | null | undefined
+): ModelLanguageSummary | null {
+	const unique = [
+		...new Set((languages ?? []).map((language) => language.trim()).filter(Boolean))
+	].sort(COLLATOR.compare);
+	if (unique.length === 0) return null;
+
+	const title = unique.join(', ');
+	if (unique.length === 1) {
+		return {
+			label: `Monolingual · ${unique[0]}`,
+			title,
+			ariaLabel: `Supported language: ${title}`
+		};
+	}
+
+	return {
+		label: `Multilingual · ${unique.length}`,
+		title,
+		ariaLabel: `Supported languages: ${title}`
+	};
+}
+
 /**
  * Lowercased "name\ndisplayName\norg" key for a model — substring search in
  * the name-query filter hits this single string instead of three separate
