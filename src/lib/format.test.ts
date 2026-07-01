@@ -26,17 +26,17 @@ describe('summarizeModelLanguages', () => {
 		expect(summarizeModelLanguages([])).toBeNull();
 	});
 
-	it('shows the language name for a monolingual model', () => {
+	it('shows a compact label and full tooltip for a monolingual model', () => {
 		expect(summarizeModelLanguages(['German'])).toEqual({
-			label: 'Monolingual · German',
+			label: 'Monolingual',
 			title: 'German',
 			ariaLabel: 'Supported language: German'
 		});
 	});
 
-	it('shows a count and full tooltip for a multilingual model', () => {
+	it('shows a compact label and full tooltip for a multilingual model', () => {
 		expect(summarizeModelLanguages(['German', 'English', 'German', ''])).toEqual({
-			label: 'Multilingual · 2',
+			label: 'Multilingual',
 			title: 'English, German',
 			ariaLabel: 'Supported languages: English, German'
 		});

@@ -127,14 +127,14 @@ export function summarizeModelLanguages(
 	const title = unique.join(', ');
 	if (unique.length === 1) {
 		return {
-			label: `Monolingual · ${unique[0]}`,
+			label: 'Monolingual',
 			title,
 			ariaLabel: `Supported language: ${title}`
 		};
 	}
 
 	return {
-		label: `Multilingual · ${unique.length}`,
+		label: 'Multilingual',
 		title,
 		ariaLabel: `Supported languages: ${title}`
 	};
