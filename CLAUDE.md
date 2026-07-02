@@ -102,7 +102,7 @@ Default shape: typed `+page.ts` loader that **streams** data via unresolved prom
 
 - `src/app.css` declares per-token light/dark pairs and exposes live tokens via `light-dark(...)`. `ThemeToggle` pins `<html data-theme="light"|"dark">`; an inline `app.html` script reads `localStorage` pre-paint to avoid FOUC.
 - **`--tint-*` palette** (blue / purple / green / orange / amber / pink / azure / teal, each with `-fg`) is the canonical category color set. Always use `--tint-X` instead of hardcoded hex; dark variants are pre-tuned. Per-category mappings:
-  - **Model type** — dense=blue, cross-encoder=orange, late-interaction=green, sparse=amber, router=purple
+  - **Model type** — dense=blue, cross-encoder=orange, late-interaction=teal, sparse=amber, router=purple
   - **Task type** — Classification=blue, Clustering=orange, Pair/Multilabel=green, Reranking=amber/orange, Retrieval=purple, STS=pink, BitextMining=azure, Summarization=teal
   - **Modality** — text=teal, image=blue, audio=amber, video=purple
 - **Heat-shading** on score cells uses the shared `heat(score, min, max)` in `src/lib/format.ts` (returns `color-mix(in srgb, var(--heat) <pct>%, transparent)`). Bounds via `minOf` / `maxOf`. Don't duplicate.
