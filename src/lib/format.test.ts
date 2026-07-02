@@ -16,8 +16,32 @@ import {
 	nextSort,
 	slug,
 	sortIcon,
+	summarizeModelLanguages,
 	worstPerColumn
 } from './format';
+
+describe('summarizeModelLanguages', () => {
+	it('returns null when language metadata is missing', () => {
+		expect(summarizeModelLanguages(undefined)).toBeNull();
+		expect(summarizeModelLanguages([])).toBeNull();
+	});
+
+	it('shows a compact label and full tooltip for a monolingual model', () => {
+		expect(summarizeModelLanguages(['German'])).toEqual({
+			label: 'Monolingual',
+			title: 'German',
+			ariaLabel: 'Supported language: German'
+		});
+	});
+
+	it('shows a compact label and full tooltip for a multilingual model', () => {
+		expect(summarizeModelLanguages(['German', 'English', 'German', ''])).toEqual({
+			label: 'Multilingual',
+			title: 'English, German',
+			ariaLabel: 'Supported languages: English, German'
+		});
+	});
+});
 
 describe('humanizeType', () => {
 	it('splits CamelCase task identifiers on capital boundaries', () => {

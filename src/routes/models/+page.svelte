@@ -23,7 +23,8 @@
 		modelPath,
 		modelSearchKey,
 		sortIcon,
-		sortModalities
+		sortModalities,
+		summarizeModelLanguages
 	} from '$lib/format';
 	import { createFacetFilter } from '$lib/stores/facet-filter.svelte';
 	import { getParam, updateUrl } from '$lib/url-state';
@@ -347,6 +348,7 @@
 		{:else}
 			<div class="grid card-grid">
 				{#each visibleModels as m (m.name)}
+					{@const languageSummary = summarizeModelLanguages(m.languages)}
 					<a
 						class="card card-link card-link-vis accent-rail"
 						href={resolve('/models/[...name=modelName]', { name: modelPath(m.name) })}
@@ -390,6 +392,15 @@
 							{/if}
 							{#if m.sentenceTransformersCompatible}
 								<span class="badge soft">ST compatible</span>
+							{/if}
+							{#if languageSummary}
+								<span
+									class="badge soft language-badge"
+									title={languageSummary.title}
+									aria-label={languageSummary.ariaLabel}
+								>
+									<span>{languageSummary.label}</span>
+								</span>
 							{/if}
 						</div>
 						{#if m.modalities && m.modalities.length > 0}
@@ -507,6 +518,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 5px;
+	}
+	.language-badge {
+		max-width: 100%;
+	}
+	.language-badge span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	/* Outline-only on the card (overrides the global filled defaults). */
 	.badge.open,
