@@ -183,9 +183,9 @@
 				</div>
 				{#if model.languages && model.languages.length > 0}
 					{@const PREVIEW = 12}
-					{@const langs = [
-						...new Set(model.languages.map((l) => l.trim()).filter(Boolean))
-					].sort(COLLATOR.compare)}
+					{@const langs = [...new Set(model.languages.map((l) => l.trim()).filter(Boolean))].sort(
+						COLLATOR.compare
+					)}
 					{@const previewed = langs.slice(0, PREVIEW)}
 					{@const hidden = langs.length - previewed.length}
 					<div class="row">
