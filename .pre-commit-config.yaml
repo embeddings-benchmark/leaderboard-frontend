@@ -18,7 +18,7 @@ repos:
         entry: npm run lint
         language: system
         pass_filenames: false
-        types_or: [javascript, ts, svelte, css, html]
+        types_or: [javascript, ts, svelte, css, html, json]
 
       - id: check
         name: npm run check
