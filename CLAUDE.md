@@ -9,7 +9,7 @@ SvelteKit + TypeScript + Svelte 5 (runes mode) port of the MTEB Gradio leaderboa
 ```sh
 make dev              # vite dev on http://localhost:5173
 make build            # vite build
-make deploy-build     # BASE_PATH=/leaderboardv2 vite build (matches CI)
+make deploy-build     # vite build with no base path (matches CI; custom domain serves from root)
 make preview          # serve build/ on http://localhost:4173
 make check            # svelte-kit sync && svelte-check
 make lint             # prettier --check . && eslint .
@@ -26,7 +26,7 @@ Read via `$env/static/public` (build-time inlined):
 
 - `PUBLIC_API_URL` — **required**, base URL of FastAPI. Loaders throw if unset.
 - `PUBLIC_SITE_URL` — canonical origin for `prerender.origin` and OG / canonical URLs.
-- `BASE_PATH` — build-time path prefix (empty for Space, `/leaderboardv2` for Pages).
+- `BASE_PATH` — build-time path prefix. Empty for both the Space and GitHub Pages (Pages serves from the `leaderboard.mteb.org` custom domain at root, via `static/CNAME`).
 - `BUILD_NO_PRERENDER=1` — skips prerender locally (read by `+layout.ts` + detail `+page.ts`). Inlined via Vite `define` in `vite.config.ts`.
 
 ## Routes

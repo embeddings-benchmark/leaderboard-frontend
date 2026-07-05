@@ -33,8 +33,8 @@ dev-mock: ## Start vite dev + the mock API (no live backend needed)
 build: ## Build for production (no base path — local serving)
 	npm run build
 
-deploy-build: ## Build for GitHub Pages with BASE_PATH=/leaderboardv2
-	BASE_PATH=/leaderboardv2 npm run build
+deploy-build: ## Build for GitHub Pages (custom domain, no base path — matches CI)
+	BASE_PATH= npm run build
 
 preview: ## Preview the most recent production build (http://localhost:4173)
 	npm run preview
