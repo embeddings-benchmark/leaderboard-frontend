@@ -12,7 +12,7 @@
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
-	import { fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
+	import { COLLATOR, fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -181,6 +181,46 @@
 						{/if}
 					</dd>
 				</div>
+				{#if model.languages && model.languages.length > 0}
+					{@const PREVIEW = 12}
+					{@const langs = [
+						...new Set(model.languages.map((l) => l.trim()).filter(Boolean))
+					].sort(COLLATOR.compare)}
+					{@const previewed = langs.slice(0, PREVIEW)}
+					{@const hidden = langs.length - previewed.length}
+					<div class="row">
+						<dt>Languages</dt>
+						<dd>
+							{#if hidden <= 0}
+								<span class="chips">
+									{#each langs as l (l)}
+										<span class="chip">{l}</span>
+									{/each}
+								</span>
+							{:else}
+								<!-- Same fold-out shape as "Trained on": closed state shows the
+								     first N languages plus a "+M more" pill; opening reveals the
+								     full set and flips the pill to "Show fewer". -->
+								<details class="chip-foldout details-flat">
+									<summary>
+										<span class="chips">
+											{#each previewed as l (l)}
+												<span class="chip">{l}</span>
+											{/each}
+											<span class="chip more-toggle more-collapsed">+{hidden} more</span>
+											<span class="chip more-toggle more-expanded">Show fewer</span>
+										</span>
+									</summary>
+									<span class="chips chips-rest">
+										{#each langs.slice(PREVIEW) as l (l)}
+											<span class="chip">{l}</span>
+										{/each}
+									</span>
+								</details>
+							{/if}
+						</dd>
+					</div>
+				{/if}
 				{#if model.license}
 					<div class="row">
 						<dt>License</dt>
@@ -282,7 +322,7 @@
 									     first N chips with a "+M more" pill so the reader still
 									     sees a representative sample; opening flips that pill to
 									     "Show fewer" and renders the full set. -->
-								<details class="trained-on details-flat">
+								<details class="chip-foldout details-flat">
 									<summary>
 										<span class="chips">
 											{#each previewed as ds (ds)}
@@ -449,18 +489,18 @@
 	.spec-list .chip-link:hover {
 		background: color-mix(in srgb, var(--link) 10%, var(--surface));
 	}
-	/* Trained-on fold-out: <summary> carries the preview chips + a
-	   pill-styled "+N more" toggle; the matching "Show fewer" pill
-	   becomes visible only while the <details> is open. */
-	.trained-on summary {
+	/* Chip fold-out (shared by "Trained on" + "Languages"): <summary>
+	   carries the preview chips + a pill-styled "+N more" toggle; the
+	   matching "Show fewer" pill becomes visible only while open. */
+	.chip-foldout summary {
 		cursor: pointer;
 	}
-	.trained-on summary:focus-visible {
+	.chip-foldout summary:focus-visible {
 		outline: 2px solid var(--primary);
 		outline-offset: 2px;
 		border-radius: 4px;
 	}
-	.trained-on .more-toggle {
+	.chip-foldout .more-toggle {
 		font-family: var(--font-sans);
 		color: var(--link);
 		border-color: color-mix(in srgb, var(--link) 40%, var(--border));
@@ -468,16 +508,16 @@
 		cursor: pointer;
 		user-select: none;
 	}
-	.trained-on .more-expanded {
+	.chip-foldout .more-expanded {
 		display: none;
 	}
-	.trained-on[open] .more-collapsed {
+	.chip-foldout[open] .more-collapsed {
 		display: none;
 	}
-	.trained-on[open] .more-expanded {
+	.chip-foldout[open] .more-expanded {
 		display: inline-block;
 	}
-	.trained-on .chips-rest {
+	.chip-foldout .chips-rest {
 		margin-top: 4px;
 	}
 	.spec-list .model-link {
