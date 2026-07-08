@@ -7,6 +7,7 @@
 
 	import Check from 'lucide-svelte/icons/check';
 	import Link2 from 'lucide-svelte/icons/link-2';
+	import { track } from '$lib/analytics/client';
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
@@ -14,6 +15,7 @@
 	async function copy() {
 		try {
 			await navigator.clipboard.writeText(window.location.href);
+			track('share_link_copied', { path: window.location.pathname });
 			copied = true;
 			if (timer) clearTimeout(timer);
 			timer = setTimeout(() => {

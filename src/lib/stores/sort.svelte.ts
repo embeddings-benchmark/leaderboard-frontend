@@ -4,6 +4,7 @@ import {
 	nextSort,
 	sortIcon as sortIconFor
 } from '$lib/format';
+import { track } from '$lib/analytics/client';
 import { getParam, updateUrl } from '$lib/url-state';
 
 /**
@@ -73,6 +74,11 @@ export function createSortState<K extends string>(opts: {
 			const next = nextSort(k, state.key, state.dir, defaultDir);
 			state.key = next.key as K | null;
 			state.dir = next.dir;
+			track('sort_changed', {
+				table: keyParam.replace(/^s\./, ''),
+				field: state.key,
+				dir: state.dir
+			});
 		},
 		icon(k: K) {
 			return sortIconFor(k, state.key, state.dir, opts.defaultIcon ?? '');

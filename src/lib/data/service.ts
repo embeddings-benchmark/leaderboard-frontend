@@ -17,7 +17,7 @@ import type {
 
 // Must use `$env/static/public` — `$env/dynamic/public` requires a runtime
 // the adapter-static build doesn't have.
-const API = PUBLIC_API_URL?.trim() ?? '';
+const API = PUBLIC_API_URL?.trim().replace(/\/+$/, '') ?? '';
 
 function noApiError(scope: string): Error {
 	return new Error(`${scope}: PUBLIC_API_URL is not set. Configure a backend URL.`);

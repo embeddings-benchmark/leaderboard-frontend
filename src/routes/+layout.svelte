@@ -11,6 +11,7 @@
 	import BookText from 'lucide-svelte/icons/book-text';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import ComparePinnedButton from '$lib/components/ComparePinnedButton.svelte';
+	import { installAnalyticsLifecycle, track, trackPageView } from '$lib/analytics/client';
 	import { filters } from '$lib/stores/filters.svelte';
 
 	// Preconnect to the backend so the first fetch lands ~150ms faster on cold
@@ -29,9 +30,10 @@
 	// Name search is per-page — clear on cross-page nav. Pages restore via `?q=`.
 	afterNavigate(({ from, to }) => {
 		if (!to) return;
+		trackPageView();
 		if (from?.url?.pathname === to.url.pathname) return;
 		const urlQ = to.url.searchParams.get('q') ?? '';
-		if (filters.nameQuery !== urlQ) filters.nameQuery = urlQ;
+		if (filters.nameQuery !== urlQ) filters.restoreNameQuery(urlQ);
 	});
 
 	// Hard reload on next nav when a new deploy is detected.
@@ -43,6 +45,7 @@
 
 	// Fallback: reload on visibilitychange when an update is pending.
 	onMount(() => {
+		installAnalyticsLifecycle();
 		function onVisibility() {
 			if (document.visibilityState === 'hidden' && updated.current) {
 				location.reload();
@@ -51,6 +54,23 @@
 		document.addEventListener('visibilitychange', onVisibility);
 		return () => document.removeEventListener('visibilitychange', onVisibility);
 	});
+
+	function trackExternalClick(e: MouseEvent) {
+		const link = (e.target as Element | null)?.closest?.('a[href]');
+		if (!(link instanceof HTMLAnchorElement)) return;
+		let url: URL;
+		try {
+			url = new URL(link.href);
+		} catch {
+			return;
+		}
+		if (url.origin === window.location.origin) return;
+		track('external_link_clicked', {
+			href: url.href,
+			label: link.textContent?.trim().slice(0, 80) || link.title || undefined,
+			location: link.closest('header') ? 'header' : link.closest('footer') ? 'footer' : 'content'
+		});
+	}
 
 	// `page.url.pathname` includes the base; strip it for nav matching.
 	let path = $derived.by(() => {
@@ -92,6 +112,8 @@
      default + a page-level override resulted in Slack always showing
      og-default.png even on routes with a proper hero. Pushing all
      ShareMeta into the page level eliminates the duplicate. -->
+
+<svelte:window onclick={trackExternalClick} />
 
 <div class="shell">
 	<!-- Skip link — targets each route's `#main-content` (WCAG 2.4.1). -->

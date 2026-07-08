@@ -8,6 +8,7 @@
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { track } from '$lib/analytics/client';
 
 	let count = $derived(pinnedModels.size);
 	// Trim trailing slash so `/compare/` and `/compare` both match.
@@ -33,6 +34,14 @@
 		const qs = parts.length > 0 ? `?${parts.join('&')}` : '';
 		return `${resolve('/compare')}${qs}`;
 	});
+
+	function onClick() {
+		track('compare_opened', {
+			source: 'pinned_chip',
+			modelCount: Math.min(count, 4),
+			benchmark: leaderboard.selected
+		});
+	}
 </script>
 
 {#if visible}
@@ -44,6 +53,7 @@
 		{href}
 		title={`Open the compare view with ${count} pinned model${count === 1 ? '' : 's'}`}
 		aria-label="Compare pinned models"
+		onclick={onClick}
 	>
 		<ArrowLeftRight size={16} aria-hidden="true" />
 		<span>Compare {count > 4 ? '4 of ' + count : count} pinned</span>

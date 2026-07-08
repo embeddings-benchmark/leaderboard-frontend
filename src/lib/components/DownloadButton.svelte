@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Download from 'lucide-svelte/icons/download';
+	import { track } from '$lib/analytics/client';
 	import { downloadCsv, type CsvCell } from '$lib/csv';
 
 	interface Props {
@@ -19,6 +20,7 @@
 	function onClick() {
 		const { headers, rows } = build();
 		downloadCsv(filename, headers, rows);
+		track('csv_downloaded', { filename, rowCount: rows.length });
 	}
 </script>
 

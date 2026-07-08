@@ -1,4 +1,6 @@
 <script lang="ts" generics="T extends string">
+	import { track } from '$lib/analytics/client';
+
 	interface Props {
 		tabs: { id: T; label: string; visible?: boolean }[];
 		active: T;
@@ -9,6 +11,16 @@
 	let visibleTabs = $derived(tabs.filter((t) => t.visible !== false));
 	// Roving tabindex per WAI-ARIA tablist pattern.
 	let buttons: HTMLButtonElement[] = $state([]);
+
+	function select(tab: T) {
+		if (tab !== active) {
+			track('tab_selected', {
+				page: typeof window === 'undefined' ? '' : window.location.pathname,
+				tab
+			});
+		}
+		onSelect(tab);
+	}
 
 	function onKeyDown(e: KeyboardEvent) {
 		const i = visibleTabs.findIndex((t) => t.id === active);
@@ -21,7 +33,7 @@
 		else if (e.key === 'End') next = n - 1;
 		else return;
 		e.preventDefault();
-		onSelect(visibleTabs[next].id);
+		select(visibleTabs[next].id);
 		// Defer focus until after the re-render swaps the active tab.
 		queueMicrotask(() => buttons[next]?.focus());
 	}
@@ -38,7 +50,7 @@
 			tabindex={active === tab.id ? 0 : -1}
 			class="tab"
 			class:active={active === tab.id}
-			onclick={() => onSelect(tab.id)}
+			onclick={() => select(tab.id)}
 		>
 			{tab.label}
 		</button>

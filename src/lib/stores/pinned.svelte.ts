@@ -1,6 +1,7 @@
 import { untrack } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 
+import { track } from '$lib/analytics/client';
 import { decodeSet, encodeSet, readParams, updateUrl } from '$lib/url-state';
 
 // Shared "pinned models" set. Pinning in any table floats that model to the
@@ -23,18 +24,25 @@ function createPinned() {
 			return value.has(name);
 		},
 		toggle(name: string) {
-			if (value.has(name)) value.delete(name);
-			else value.add(name);
+			if (value.has(name)) {
+				value.delete(name);
+				track('model_unpinned', { model: name });
+			} else {
+				value.add(name);
+				track('model_pinned', { model: name });
+			}
 			sync();
 		},
 		add(name: string) {
 			if (value.has(name)) return;
 			value.add(name);
+			track('model_pinned', { model: name });
 			sync();
 		},
 		remove(name: string) {
 			if (!value.has(name)) return;
 			value.delete(name);
+			track('model_unpinned', { model: name });
 			sync();
 		},
 		clear() {
