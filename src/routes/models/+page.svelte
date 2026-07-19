@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { safeIdle } from '$lib/idle';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
+	import { opennessMeets } from '$lib/openness';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ModelsTable from '$lib/components/ModelsTable.svelte';
@@ -165,6 +166,8 @@
 		const availability = filters.availability;
 		const instructions = filters.instructions;
 		const stOnly = filters.sentenceTransformersOnly;
+		const opennessReqs = filters.opennessReqs;
+		const opennessActive = opennessReqs.size > 0;
 		const modelTypes = filters.modelTypes;
 		const modelTypesSize = modelTypes.size;
 		const sizeMin = filters.minModelSizeM;
@@ -183,6 +186,7 @@
 			if (instructions === 'only_instruction' && !m.instructionTuned) return false;
 			if (instructions === 'only_non_instruction' && m.instructionTuned) return false;
 			if (stOnly && !m.sentenceTransformersCompatible) return false;
+			if (opennessActive && !opennessMeets(m, opennessReqs)) return false;
 			// Empty pick set = "deselect everything" → nothing matches.
 			if (modelTypesSize === 0 || !modelTypes.has(m.modelType)) return false;
 			if (modalitiesActive) {

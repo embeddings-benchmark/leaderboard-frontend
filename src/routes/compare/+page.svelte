@@ -4,12 +4,22 @@
 	import { loadBenchmarkMenu, loadModelScores, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
+	import Segmented from '$lib/components/Segmented.svelte';
+	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { Data, Layout } from 'plotly.js';
-	import type { Benchmark, BenchmarkSummary, SummaryRow } from '$lib/types';
+	import type { Benchmark, BenchmarkSummary, ModelMeta, SummaryRow } from '$lib/types';
 	import { flattenMenu } from '$lib/types';
-	import { humanizeType, modelPath } from '$lib/format';
+	import { humanizeType, modelPath, fmtParamsValue, fmtParamsUnit } from '$lib/format';
+	import {
+		opennessScore,
+		opennessDimensions,
+		OPENNESS_DIMENSIONS,
+		OPENNESS_MAX
+	} from '$lib/openness';
+	import Check from 'lucide-svelte/icons/check';
+	import X from 'lucide-svelte/icons/x';
 	import { updateUrl } from '$lib/url-state';
 	import { untrack } from 'svelte';
 
@@ -400,30 +410,21 @@
 		valueOf: (r: SummaryRow) => number | null;
 		format: (r: SummaryRow) => string;
 	};
-	// Model attributes — values that don't depend on the benchmark.
+	// Model attributes — architectural facts that don't depend on the benchmark.
+	// (Zero-shot is benchmark-specific, so it lives in the per-benchmark section;
+	// openness has its own section below.) No winner highlighting here — "best"
+	// is not meaningful for attributes like embedding dim.
 	const metrics: Metric[] = [
 		{
-			key: 'zero',
-			label: 'Zero-shot %',
-			dir: 'max',
-			valueOf: (r) => (r.zeroShotPct === -1 ? null : r.zeroShotPct),
-			format: (r) => (r.zeroShotPct === -1 ? '—' : `${r.zeroShotPct}%`)
-		},
-		{
 			key: 'params',
-			label: 'Total params (B)',
+			label: 'Parameters',
 			dir: 'min',
 			valueOf: (r) => r.totalParamsB || null,
-			format: (r) =>
-				!r.totalParamsB
-					? '—'
-					: r.totalParamsB >= 1
-						? r.totalParamsB.toFixed(1)
-						: r.totalParamsB.toFixed(3)
+			format: (r) => fmtParamsValue(r.totalParamsB) + fmtParamsUnit(r.totalParamsB)
 		},
 		{
 			key: 'embed',
-			label: 'Embedding dim',
+			label: 'Embedding dimension',
 			dir: 'max',
 			valueOf: (r) => r.embeddingDim || null,
 			format: (r) => (r.embeddingDim ? r.embeddingDim.toLocaleString() : '—')
@@ -445,26 +446,12 @@
 	}
 
 	// Radar plot uses the primary (first picked) benchmark's task types.
-	let radarSpec = $derived.by<{ data: Data[]; layout: Partial<Layout> } | null>(() => {
-		const summary = primarySummary;
-		if (!summary || pickedRows.length < 1 || summary.taskTypes.length < 2) return null;
-		const labels = summary.taskTypes.map(humanizeType);
-		const theta = [...labels, labels[0]];
-		const traces: Data[] = pickedRows.map((row, i) => {
-			const r = summary.taskTypes.map((tt) => (row.scoresByTaskType[tt] ?? 0) * 100);
-			const color = RADAR_COLORS[i % RADAR_COLORS.length];
-			return {
-				type: 'scatterpolar',
-				mode: 'lines',
-				name: row.model.displayName,
-				r: [...r, r[0]],
-				theta,
-				line: { color, width: 2 },
-				fill: 'toself',
-				fillcolor: 'rgba(0,0,0,0)'
-			};
-		});
-		const layout: Partial<Layout> = {
+	function modelColor(index: number): string {
+		return RADAR_COLORS[index % RADAR_COLORS.length];
+	}
+
+	function radarLayout(): Partial<Layout> {
+		return {
 			polar: {
 				radialaxis: {
 					visible: true,
@@ -473,25 +460,121 @@
 					gridcolor: '#cdd0d6',
 					linecolor: 'rgba(0,0,0,0)'
 				},
-				angularaxis: {
-					gridcolor: '#cdd0d6',
-					linecolor: 'rgba(0,0,0,0)'
-				}
+				angularaxis: { gridcolor: '#cdd0d6', linecolor: 'rgba(0,0,0,0)' }
 			},
 			showlegend: true,
 			legend: { orientation: 'h', y: -0.15, yanchor: 'top', x: 0.5, xanchor: 'center' },
 			margin: { l: 30, r: 30, t: 20, b: 20 }
 		};
-		return { data: traces, layout };
+	}
+	function barLayout(): Partial<Layout> {
+		return {
+			barmode: 'group',
+			showlegend: true,
+			// Legend sits below the x-axis labels; `automargin` grows the plot's
+			// bottom margin to fit the tick text so the two don't collide.
+			legend: { orientation: 'h', y: -0.28, yanchor: 'top', x: 0.5, xanchor: 'center' },
+			margin: { l: 44, r: 20, t: 16, b: 70 },
+			yaxis: { rangemode: 'tozero', ticksuffix: '', zeroline: false },
+			xaxis: { automargin: true, tickangle: 0 }
+		};
+	}
+
+	// Task-type figure, built from the (benchmark-averaged) `typeScores` so one
+	// spec works for a single benchmark or several. Radar needs ≥3 axes to read
+	// as a shape; below that we fall back to a grouped bar. `typeScores` is
+	// index-aligned with `unionTaskTypes`, and each `.scores[mi]` is model `mi`.
+	type TaskView = 'radar' | 'bar' | 'table';
+	let radarAvailable = $derived(unionTaskTypes.length >= 3);
+	let taskTypeView = $state<TaskView>('radar');
+	let effectiveTaskView = $derived<TaskView>(
+		taskTypeView === 'radar' && !radarAvailable ? 'bar' : taskTypeView
+	);
+	let taskViewOpts = $derived<{ label: string; value: TaskView }[]>(
+		radarAvailable
+			? [
+					{ label: 'Radar', value: 'radar' },
+					{ label: 'Bar', value: 'bar' },
+					{ label: 'Table', value: 'table' }
+				]
+			: [
+					{ label: 'Bar', value: 'bar' },
+					{ label: 'Table', value: 'table' }
+				]
+	);
+
+	let ttRadarSpec = $derived.by<{ data: Data[]; layout: Partial<Layout> } | null>(() => {
+		if (pickedRows.length < 1 || unionTaskTypes.length < 3) return null;
+		const labels = typeScores.map((ts) => humanizeType(ts.type));
+		const theta = [...labels, labels[0]];
+		const traces: Data[] = pickedRows.map((row, mi) => {
+			const r = typeScores.map((ts) => (ts.scores[mi] ?? 0) * 100);
+			return {
+				type: 'scatterpolar',
+				mode: 'lines',
+				name: row.model.displayName,
+				r: [...r, r[0]],
+				theta,
+				line: { color: modelColor(mi), width: 2 },
+				fill: 'toself',
+				fillcolor: 'rgba(0,0,0,0)'
+			};
+		});
+		return { data: traces, layout: radarLayout() };
 	});
 
-	function modelColor(index: number): string {
-		return RADAR_COLORS[index % RADAR_COLORS.length];
+	let ttBarSpec = $derived.by<{ data: Data[]; layout: Partial<Layout> } | null>(() => {
+		if (pickedRows.length < 1 || unionTaskTypes.length === 0) return null;
+		const x = typeScores.map((ts) => humanizeType(ts.type));
+		const data: Data[] = pickedRows.map((row, mi) => ({
+			type: 'bar',
+			name: row.model.displayName,
+			x,
+			y: typeScores.map((ts) => {
+				const v = ts.scores[mi];
+				return v === undefined ? null : v * 100;
+			}),
+			marker: { color: modelColor(mi) }
+		}));
+		return { data, layout: barLayout() };
+	});
+
+	// Zero-shot comparability: within a benchmark, flag when the picked models
+	// were trained on different subsets of that benchmark's tasks — their scores
+	// then aren't directly comparable. `trainedOnTasks` is already benchmark-scoped.
+	type ZsWarning = { benchmark: string; entries: { model: string; tasks: string[] }[] };
+	let zsWarnings = $derived.by<ZsWarning[]>(() => {
+		const out: ZsWarning[] = [];
+		for (const bv of benchViews) {
+			const entries = pickedRows.map((p) => {
+				const row = bv.byModel.get(p.model.name);
+				return { model: p.model.displayName, tasks: row?.trainedOnTasks ?? [] };
+			});
+			const anyTrained = entries.some((e) => e.tasks.length > 0);
+			const key = (t: string[]) => [...t].sort().join('|');
+			const first = entries[0] ? key(entries[0].tasks) : '';
+			const allSame = entries.every((e) => key(e.tasks) === first);
+			if (anyTrained && !allSame) {
+				out.push({
+					benchmark: benchIndex.get(bv.name)?.displayName ?? bv.name,
+					entries: entries.filter((e) => e.tasks.length > 0)
+				});
+			}
+		}
+		return out;
+	});
+
+	// Fixed modality order for the attributes comparison; unsupported ones grey out.
+	const ALL_MODALITIES = ['text', 'image', 'audio', 'video'] as const;
+	function supportsModality(m: ModelMeta, mod: string): boolean {
+		return (m.modalities ?? ['text']).includes(mod);
 	}
 
-	function fmtType(t: string) {
-		return t;
-	}
+	// Grid template for every `.cmp-compare` block: a label column + one
+	// equal-width column per compared model.
+	let cmpCols = $derived(`minmax(140px, 1.3fr) repeat(${pickedRows.length}, minmax(92px, 1fr))`);
+	// Hide the Openness section entirely when no model carries openness data.
+	let showOpennessCompare = $derived(pickedRows.some((r) => opennessScore(r.model) !== null));
 </script>
 
 <ShareMeta
@@ -502,7 +585,22 @@
 <svelte:window onclick={onDocClick} onkeydown={onKey} />
 
 <div class="app">
-	<div class="bar">
+	{#snippet compareHead(label: string)}
+		<div class="ch corner">{label}</div>
+		{#each pickedRows as r, i (r.model.name)}
+			<div class="ch" style:--c={modelColor(i)}>
+				<span class="ch-dot"></span>
+				<a
+					class="ch-name"
+					href={resolve('/models/[...name=modelName]', { name: modelPath(r.model.name) })}
+					title={r.model.name}>{r.model.displayName}</a
+				>
+				<span class="ch-type" data-type={r.model.modelType}>{r.model.modelType}</span>
+			</div>
+		{/each}
+	{/snippet}
+
+	{#snippet benchmarkPicker()}
 		<div class="bench-picker" bind:this={benchPickerRoot}>
 			<div class="picks bench-picks">
 				{#each pickedBenchmarks as bn (bn)}
@@ -562,10 +660,9 @@
 				</div>
 			{/if}
 		</div>
-		<span class="bench-meta">{pickedBenchmarks.length} / {MAX_BENCHMARKS} benchmarks</span>
-	</div>
+	{/snippet}
 
-	<div class="bar">
+	{#snippet taskPicker()}
 		<div class="bench-picker" bind:this={taskPickerRoot}>
 			<div class="picks bench-picks">
 				{#each pickedTasks as tn (tn)}
@@ -622,14 +719,13 @@
 				</div>
 			{/if}
 		</div>
-		<span class="bench-meta">{pickedTasks.length} / {MAX_TASKS} tasks</span>
-	</div>
+	{/snippet}
 
 	<main id="main-content" tabindex="-1" class="page">
 		{#if !primarySummary}
 			<p class="loading" role="status">Loading…</p>
 		{:else}
-			<section class="picker-bar panel">
+			<section class="picker-bar">
 				<div class="picks">
 					{#each pickedRows as r, i (r.model.name)}
 						<span class="pick-chip" style:--c={modelColor(i)}>
@@ -701,176 +797,234 @@
 			</section>
 
 			{#if pickedRows.length === 0}
-				<section class="empty">
+				<section class="cmp-section empty">
 					<h2>Pick at least one model to compare.</h2>
-					<p>Use the "+ Add model" button above. You can compare up to four at a time.</p>
+					<p>Use “+ Add model” above. You can compare up to four at a time.</p>
 				</section>
 			{:else}
-				<section
-					class="grid"
-					style:grid-template-columns="200px repeat({pickedRows.length}, minmax(220px, 1fr))"
-				>
-					<!-- Header row: model identity strip -->
-					<div class="cell head sticky"></div>
-					{#each pickedRows as r, i (r.model.name)}
-						<div class="cell head model-head" style:--c={modelColor(i)}>
-							<!-- Link points at the internal /models/[...name] detail page,
-							     not the upstream HuggingFace reference — the detail page
-							     surfaces the same external link plus per-benchmark scores
-							     and metadata, so it's the better landing surface.
-							     `modelPath` keeps `org/displayName` segments unencoded so
-							     the URL reads /models/microsoft/harrier-… instead of
-							     /models/microsoft%2Fharrier-…. -->
-							<a
-								class="model-name"
-								href={resolve('/models/[...name=modelName]', { name: modelPath(r.model.name) })}
-							>
-								{r.model.displayName}
-							</a>
-							<div class="model-meta">
-								<span class="chip type" data-type={r.model.modelType}
-									>{fmtType(r.model.modelType)}</span
-								>
-								{#if r.model.openWeights}
-									<span class="chip open">Open</span>
-								{:else}
-									<span class="chip closed">Proprietary</span>
-								{/if}
-								{#if r.model.instructionTuned}
-									<span class="chip soft">Instruct</span>
-								{/if}
-							</div>
-						</div>
-					{/each}
-
-					<div class="cell metric-head section-head sticky">Model attributes</div>
-					{#each pickedRows as _r, i (_r.model.name)}
-						<div class="cell section-head" style:--c={modelColor(i)}></div>
-					{/each}
-
-					{#each metrics as m (m.key)}
-						{@const values = pickedRows.map((r) => m.valueOf(r))}
-						{@const winners = winnersForRow(values, m.dir)}
-						<div class="cell metric-head sticky">{m.label}</div>
-						{#each pickedRows as r, i (r.model.name)}
-							<div class="cell metric-val" class:winner={winners[i]} style:--c={modelColor(i)}>
-								{m.format(r)}
-								{#if winners[i] && values.filter((v) => v !== null).length > 1}
-									<span class="trophy" title="Best of selection">★</span>
-								{/if}
-							</div>
-						{/each}
-					{/each}
-
-					<div class="cell metric-head section-head sticky">Score per benchmark</div>
-					{#each pickedRows as _r, i (_r.model.name)}
-						<div class="cell section-head" style:--c={modelColor(i)}></div>
-					{/each}
-
-					{#each benchViews as bv (bv.name)}
-						{@const rows = pickedRows.map((p) => bv.byModel.get(p.model.name))}
-						{@const meanValues = rows.map((r) => (r ? r.meanTask : null))}
-						{@const meanWinners = winnersForRow(meanValues, 'max')}
-						{@const rankValues = rows.map((r) => (r ? r.rank : null))}
-						{@const rankWinners = winnersForRow(rankValues, 'min')}
-						<div class="cell metric-head sticky bench-row-head">
-							<span class="bench-label">{benchIndex.get(bv.name)?.displayName ?? bv.name}</span>
-							<span class="eyebrow bench-sub">Mean(Task) · Rank</span>
-						</div>
-						{#each pickedRows as p, i (p.model.name)}
-							{@const r = rows[i]}
-							<div
-								class="cell metric-val bench-cell"
-								class:winner={meanWinners[i]}
-								style:--c={modelColor(i)}
-							>
-								{#if r}
-									<span class="score"
-										>{r.meanTask != null ? (r.meanTask * 100).toFixed(2) : '—'}</span
-									>
-									<span class="rank-pill" class:best={rankWinners[i]}>#{r.rank}</span>
-									{#if meanWinners[i] && meanValues.filter((v) => v !== null).length > 1}
-										<span class="trophy" title="Best on this benchmark">★</span>
+				<!-- Model attributes — Apple-style spec comparison -->
+				<section class="cmp-section">
+					<h2>Model attributes</h2>
+					<div class="cmp-compare center" style:grid-template-columns={cmpCols}>
+						{@render compareHead('')}
+						{#each metrics as m (m.key)}
+							<div class="rl">{m.label}</div>
+							{#each pickedRows as r (r.model.name)}
+								<div class="rv">
+									{#if m.key === 'params'}
+										{fmtParamsValue(r.totalParamsB)}{#if fmtParamsUnit(r.totalParamsB)}<span
+												class="unit">{fmtParamsUnit(r.totalParamsB)}</span
+											>{/if}
+									{:else}
+										{m.format(r)}
 									{/if}
+								</div>
+							{/each}
+						{/each}
+						<div class="rl">Modalities</div>
+						{#each pickedRows as r (r.model.name)}
+							<div class="rv modalities-cell">
+								{#each ALL_MODALITIES as mod (mod)}
+									{@const on = supportsModality(r.model, mod)}
+									<span
+										class="mod-chip"
+										class:off={!on}
+										title={on ? mod : `${mod} — not supported`}
+									>
+										<ModalityIcon modality={mod} size={17} />
+									</span>
+								{/each}
+							</div>
+						{/each}
+						<div class="rl">Languages</div>
+						{#each pickedRows as r (r.model.name)}
+							{@const langs = r.model.languages ?? []}
+							<div class="rv lang-cell">
+								{#if langs.length > 1}
+									<span class="lang-tag">Multilingual</span>
+									<span class="lang-sub">supports {langs.length} languages</span>
+								{:else if langs.length === 1}
+									<span class="lang-tag">Monolingual</span>
+									<span class="lang-sub">supports {langs[0]}</span>
 								{:else}
-									—
+									<span class="muted">—</span>
 								{/if}
 							</div>
 						{/each}
-					{/each}
+					</div>
+				</section>
 
-					{#if typeScores.length > 0}
-						<div class="cell metric-head section-head sticky">
-							Per task type
-							{#if pickedBenchmarks.length > 1}<span class="sub-hint"
-									>· averaged across picked benchmarks</span
-								>{/if}
+				<!-- Openness -->
+				{#if showOpennessCompare}
+					<section class="cmp-section">
+						<h2>Openness</h2>
+						<div class="cmp-compare center openness-matrix" style:grid-template-columns={cmpCols}>
+							{@render compareHead('')}
+							<div class="rl">Score</div>
+							{#each pickedRows as r (r.model.name)}
+								{@const s = opennessScore(r.model)}
+								<div class="rv score-cell">{s === null ? '—' : `${s}/${OPENNESS_MAX}`}</div>
+							{/each}
+							{#each OPENNESS_DIMENSIONS as dim, di (dim.id)}
+								<div class="rl">
+									<span class="rl-name">{dim.label}</span><span class="rl-sub">{dim.desc}</span>
+								</div>
+								{#each pickedRows as r (r.model.name)}
+									{@const dims = opennessDimensions(r.model)}
+									<div class="rv mark" class:on={opennessScore(r.model) !== null && dims[di].open}>
+										{#if opennessScore(r.model) === null}
+											<span class="muted">—</span>
+										{:else if dims[di].open}
+											<Check size={15} aria-label="yes" />
+										{:else}
+											<X size={15} aria-label="no" />
+										{/if}
+									</div>
+								{/each}
+							{/each}
 						</div>
-						{#each pickedRows as _r, i (_r.model.name)}
-							<div class="cell section-head" style:--c={modelColor(i)}></div>
-						{/each}
-						{#each typeScores as ts (ts.type)}
-							{@const winners = winnersForRow(
-								ts.scores.map((v) => (v === undefined ? null : v)),
-								'max'
-							)}
-							<div class="cell metric-head sticky">{humanizeType(ts.type)}</div>
-							{#each ts.scores as v, i (pickedRows[i].model.name)}
-								<div
-									class="cell metric-val"
-									class:winner={winners[i] && pickedRows.length > 1}
-									style:--c={modelColor(i)}
-								>
-									{v !== undefined ? (v * 100).toFixed(2) : '—'}
-									{#if winners[i] && pickedRows.length > 1 && v !== undefined}<span class="trophy"
-											>★</span
-										>{/if}
-								</div>
-							{/each}
-						{/each}
-					{/if}
+					</section>
+				{/if}
 
-					{#if taskScores.length > 0}
-						<div class="cell metric-head section-head sticky">Per task</div>
-						{#each pickedRows as _r, i (_r.model.name)}
-							<div class="cell section-head" style:--c={modelColor(i)}></div>
-						{/each}
-						{#each taskScores as ts (ts.name)}
-							{@const winners = winnersForRow(
-								ts.scores.map((v) => (v === undefined ? null : v)),
-								'max'
+				<!-- Score per benchmark — table + zero-shot comparability -->
+				<section class="cmp-section">
+					<div class="section-head-row">
+						<h2>Score per benchmark</h2>
+						<div class="section-controls">
+							{@render benchmarkPicker()}
+							<span class="cmp-count">{pickedBenchmarks.length} / {MAX_BENCHMARKS}</span>
+						</div>
+					</div>
+					<p class="cmp-sub">Each cell: mean score · rank · zero-shot coverage.</p>
+					<div class="cmp-compare" style:grid-template-columns={cmpCols}>
+						{@render compareHead('Benchmark')}
+						{#each benchViews as bv (bv.name)}
+							{@const rows = pickedRows.map((p) => bv.byModel.get(p.model.name))}
+							{@const meanValues = rows.map((r) => (r ? r.meanTask : null))}
+							{@const meanWinners = winnersForRow(meanValues, 'max')}
+							{@const rankWinners = winnersForRow(
+								rows.map((r) => (r ? r.rank : null)),
+								'min'
 							)}
-							<div class="cell metric-head sticky bench-row-head">
-								<span class="bench-label">{ts.name}</span>
-								<span class="eyebrow bench-sub">{ts.type}</span>
-							</div>
-							{#each ts.scores as v, i (pickedRows[i].model.name)}
-								<div
-									class="cell metric-val"
-									class:winner={winners[i] && pickedRows.length > 1}
-									style:--c={modelColor(i)}
-								>
-									{v !== undefined ? (v * 100).toFixed(2) : '—'}
-									{#if winners[i] && pickedRows.length > 1 && v !== undefined}<span class="trophy"
-											>★</span
-										>{/if}
+							<div class="rl">{benchIndex.get(bv.name)?.displayName ?? bv.name}</div>
+							{#each pickedRows as p, i (p.model.name)}
+								{@const r = rows[i]}
+								<div class="rv bench-rv" class:winner={meanWinners[i]}>
+									{#if r}
+										<span class="score"
+											>{r.meanTask != null ? (r.meanTask * 100).toFixed(2) : '—'}</span
+										>
+										<span class="rank-pill" class:best={rankWinners[i]}>#{r.rank}</span>
+										<span
+											class="zs-sub"
+											class:warn={r.zeroShotPct !== 100 && r.zeroShotPct !== -1}
+											title="Zero-shot coverage"
+											>{r.zeroShotPct === -1 ? 'NA' : `${r.zeroShotPct}% ZS`}</span
+										>
+									{:else}
+										—
+									{/if}
 								</div>
 							{/each}
 						{/each}
+					</div>
+					{#if zsWarnings.length > 0}
+						<p class="zs-note" role="note">
+							<span class="zs-note-icon" aria-hidden="true">⚠</span>
+							<span
+								>Some of these models were trained on the training sets of downstream tasks, making
+								scores harder to compare.</span
+							>
+						</p>
 					{/if}
 				</section>
 
-				{#if pickedBenchmarks.length === 1 && radarSpec && pickedRows.length >= 1 && primarySummary && primarySummary.taskTypes.length >= 2}
-					<section class="radar-card panel">
-						<h3>Strengths at a glance</h3>
-						<PlotlyChart
-							data={radarSpec.data}
-							layout={radarSpec.layout}
-							height={400}
-							traces={['scatterpolar']}
-						/>
+				<!-- Performance by task type — radar / bar / table toggle -->
+				{#if unionTaskTypes.length > 0}
+					<section class="cmp-section">
+						<div class="section-head-row">
+							<h2>Performance by task type</h2>
+							<Segmented
+								ariaLabel="Task-type view"
+								options={taskViewOpts}
+								value={effectiveTaskView}
+								onChange={(v) => (taskTypeView = v)}
+							/>
+						</div>
+						{#if pickedBenchmarks.length > 1}
+							<p class="cmp-sub">Averaged across the selected benchmarks.</p>
+						{/if}
+						{#if effectiveTaskView === 'table'}
+							<div class="cmp-compare center" style:grid-template-columns={cmpCols}>
+								{@render compareHead('Task type')}
+								{#each typeScores as ts (ts.type)}
+									{@const winners = winnersForRow(
+										ts.scores.map((v) => (v === undefined ? null : v)),
+										'max'
+									)}
+									<div class="rl">{humanizeType(ts.type)}</div>
+									{#each ts.scores as v, i (pickedRows[i].model.name)}
+										<div class="rv" class:winner={winners[i] && pickedRows.length > 1}>
+											{v !== undefined ? (v * 100).toFixed(2) : '—'}
+										</div>
+									{/each}
+								{/each}
+							</div>
+						{:else if effectiveTaskView === 'radar' && ttRadarSpec}
+							<div class="figure-card">
+								<PlotlyChart
+									data={ttRadarSpec.data}
+									layout={ttRadarSpec.layout}
+									height={400}
+									traces={['scatterpolar']}
+								/>
+							</div>
+						{:else if ttBarSpec}
+							<div class="figure-card">
+								<PlotlyChart
+									data={ttBarSpec.data}
+									layout={ttBarSpec.layout}
+									height={360}
+									traces={['bar']}
+								/>
+							</div>
+						{/if}
 					</section>
 				{/if}
+
+				<!-- Individual tasks -->
+				<section class="cmp-section">
+					<div class="section-head-row">
+						<h2>Tasks</h2>
+						<div class="section-controls">
+							{@render taskPicker()}
+							<span class="cmp-count">{pickedTasks.length} / {MAX_TASKS}</span>
+						</div>
+					</div>
+					{#if taskScores.length > 0}
+						<div class="cmp-compare center" style:grid-template-columns={cmpCols}>
+							{@render compareHead('Task')}
+							{#each taskScores as ts (ts.name)}
+								{@const winners = winnersForRow(
+									ts.scores.map((v) => (v === undefined ? null : v)),
+									'max'
+								)}
+								<div class="rl">
+									<span class="rl-name">{ts.name}</span><span class="rl-sub">{ts.type}</span>
+								</div>
+								{#each ts.scores as v, i (pickedRows[i].model.name)}
+									<div class="rv" class:winner={winners[i] && pickedRows.length > 1}>
+										{v !== undefined ? (v * 100).toFixed(2) : '—'}
+									</div>
+								{/each}
+							{/each}
+						</div>
+					{:else}
+						<p class="cmp-hint">
+							Add tasks above to compare individual task scores across the selected models.
+						</p>
+					{/if}
+				</section>
 			{/if}
 		{/if}
 	</main>
@@ -882,14 +1036,6 @@
 <style>
 	.app {
 		min-height: 100dvh;
-	}
-	.bar {
-		display: flex;
-		align-items: center;
-		gap: 14px;
-		padding: 16px 28px 0;
-		max-width: 1280px;
-		margin: 0 auto;
 	}
 
 	/* Base `.page` (1280 px centred, 18/28/56 padding) is in app.css —
@@ -923,13 +1069,6 @@
 		border-color: var(--border-strong);
 		background: var(--surface-muted);
 	}
-	.sub-hint {
-		text-transform: none;
-		letter-spacing: 0;
-		font-weight: 500;
-		color: var(--text-subtle);
-		margin-left: 4px;
-	}
 	.picker-panel.bench-panel {
 		left: 0;
 		width: min(420px, calc(100dvw - 24px));
@@ -937,20 +1076,13 @@
 	.picker-row.bench-row {
 		grid-template-columns: 1fr auto 16px;
 	}
-	.bench-meta {
-		font-size: 12px;
-		color: var(--text-subtle);
-		font-variant-numeric: tabular-nums;
-	}
 
 	/* Picker bar ------------------------------------------------------------- */
 	.picker-bar {
-		--panel-radius: 12px;
 		display: flex;
 		align-items: center;
 		gap: 14px;
-		padding: 12px 14px;
-		margin-bottom: 20px;
+		padding: 4px 0 16px;
 	}
 	.picks {
 		display: flex;
@@ -1120,80 +1252,94 @@
 		text-decoration: underline;
 	}
 
-	/* Empty state ------------------------------------------------------------ */
-	.empty {
-		background: var(--surface);
-		border: 1px dashed var(--border-strong);
-		border-radius: 14px;
-		padding: 48px 24px;
-		text-align: center;
-		color: var(--text-muted);
+	/* Blogpost-style stacked sections ---------------------------------------- */
+	/* Blogpost-style stacked sections — no cards; a hairline divides them. --- */
+	.cmp-section {
+		padding: 22px 0;
+		border-top: 1px solid var(--border);
 	}
-	.empty h2 {
+	.cmp-section:first-of-type {
+		border-top: none;
+		padding-top: 4px;
+	}
+	.cmp-section > h2 {
 		font-size: 18px;
-		color: var(--text);
-		margin: 0 0 6px;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		margin: 0 0 12px;
+	}
+	.cmp-sub {
+		font-size: 12.5px;
+		color: var(--text-muted);
+		margin: -4px 0 12px;
+	}
+	.cmp-hint {
+		font-size: 13px;
+		color: var(--text-muted);
+		margin: 0;
+	}
+	.section-head-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14px;
+		flex-wrap: wrap;
+		margin-bottom: 12px;
+	}
+	.section-head-row > h2 {
+		font-size: 18px;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		margin: 0;
+		white-space: nowrap;
+	}
+	.section-controls {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex: 1;
+		min-width: 0;
+		justify-content: flex-end;
+	}
+	.cmp-count {
+		font-size: 12px;
+		color: var(--text-subtle);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 	}
 
-	/* Compare grid ----------------------------------------------------------- */
-	.grid {
+	/* Comparison grid: label column + one column per model. Kept light — just
+	   hairline row rules, no card. Scrolls horizontally if very narrow. ------- */
+	.cmp-compare {
 		display: grid;
-		gap: 0;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		/* Horizontal scroll instead of page overflow when 4 model
-		   columns × 220 px don't fit the viewport (everything below
-		   ~1080 px on a max compare). `position: sticky` on the
-		   left-most label column anchors against this scrollport. */
+		align-items: stretch;
+		border-top: 1px solid var(--border);
 		overflow-x: auto;
-		overflow-y: hidden;
-		overscroll-behavior-x: contain;
-		box-shadow: var(--shadow-sm);
 	}
-	.cell {
-		padding: 12px 16px;
+	.ch,
+	.rl,
+	.rv {
+		padding: 7px 12px;
 		border-bottom: 1px solid var(--border);
 		min-width: 0;
 	}
-	.cell.sticky {
-		position: sticky;
-		left: 0;
-		background: var(--surface-muted);
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		font-weight: 700;
-		z-index: 1;
-		border-right: 1px solid var(--border);
-	}
-	/* Mobile: a 200 px sticky label column would eat more than half
-	   of a 375 px viewport, leaving the model columns unreachable
-	   even with the new horizontal scroll. Drop the stickyness so
-	   the labels scroll along with the values. */
-	@media (max-width: 640px) {
-		.cell.sticky {
-			position: static;
-			left: auto;
-		}
-	}
-	.head {
-		border-bottom: 2px solid var(--border);
-	}
-	.head.sticky {
-		background: var(--surface-muted);
-	}
-	.model-head {
+	/* Column header cells (model identity) */
+	.ch {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: 16px 18px;
-		border-top: 3px solid var(--c);
-		background: color-mix(in srgb, var(--c) 6%, var(--surface));
+		gap: 2px;
+		padding-top: 10px;
+		border-bottom: 2px solid var(--border);
+		border-top: 3px solid var(--c, transparent);
 	}
-	.model-name {
-		font-size: 15px;
+	.ch.corner {
+		border-top-color: transparent;
+	}
+	.ch-dot {
+		display: none;
+	}
+	.ch-name {
+		font-size: 13.5px;
 		font-weight: 800;
 		color: var(--text);
 		text-decoration: none;
@@ -1202,103 +1348,112 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	a.model-name:hover {
+	a.ch-name:hover {
 		color: var(--c);
 	}
-	.model-meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-	.chip {
-		display: inline-block;
-		padding: 2px 7px;
+	.ch-type {
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.03em;
 		text-transform: uppercase;
-		border-radius: 4px;
-		background: var(--surface-muted);
-		color: var(--text-muted);
+		color: var(--c);
 	}
-	.chip.type {
-		background: color-mix(in srgb, var(--category-tint-fg, var(--text-muted)) 18%, var(--surface));
-		color: var(--category-tint-fg, var(--text-muted));
-	}
-	.chip.open {
-		background: var(--tint-green);
-		color: var(--tint-green-fg);
-	}
-	.chip.closed {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
-	.chip.soft {
-		background: var(--surface-muted);
-		color: var(--text-muted);
-	}
-
-	.metric-head {
-		font-size: 11px;
+	/* Row label cells */
+	.rl {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		gap: 1px;
+		font-size: 12px;
 		font-weight: 600;
+		color: var(--text-muted);
 	}
-	.metric-val {
-		font-size: 14px;
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
+	.rl-name {
 		color: var(--text);
+		font-weight: 700;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.rl-sub {
+		font-size: 10.5px;
+		color: var(--text-subtle);
+		font-weight: 500;
+	}
+	/* Value cells */
+	.rv {
 		display: flex;
 		align-items: center;
 		gap: 6px;
+		font-size: 13.5px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--text);
 	}
-	/* Bold-only winner styling — was using the per-model `--c` colour
-	   which defaulted to a pink/red hue on the first column and read
-	   as "bad". The bold weight alone reads as "best" without colour
-	   carrying any value judgement. */
-	.metric-val.winner {
+	/* Apple-style: centre values beneath each model column. */
+	.center .rv {
+		justify-content: center;
+		text-align: center;
+	}
+	/* Param unit (B/M) — subtle, matches the summary table's `.unit`. */
+	.unit {
+		margin-left: 2px;
+		font-size: 0.78em;
+		font-weight: 500;
+		color: var(--text-subtle);
+		letter-spacing: 0.02em;
+	}
+	.rv.winner {
 		font-weight: 800;
 	}
-	.trophy {
-		font-size: 11px;
+	.score-cell {
+		font-weight: 800;
+	}
+	.muted {
 		color: var(--text-subtle);
 	}
-	.section-head {
-		background: var(--surface-muted);
-		font-size: 11px;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
+	/* Openness ✓/✗ marks */
+	.rv.mark :global(svg) {
 		color: var(--text-subtle);
-		font-weight: 700;
-		padding: 8px 16px;
-		border-top: 1px solid var(--border);
+	}
+	.rv.mark.on :global(svg) {
+		color: var(--tint-green-fg);
 	}
 
-	.bench-row-head {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding-top: 10px;
-		padding-bottom: 10px;
+	/* Modalities strip — unsupported ones grey out */
+	.modalities-cell {
+		gap: 8px;
 	}
-	.bench-label {
-		font-size: 12px;
+	.mod-chip {
+		display: inline-flex;
 		color: var(--text);
+	}
+	.mod-chip.off {
+		opacity: 0.28;
+		filter: grayscale(1);
+	}
+
+	/* Languages cell */
+	.lang-cell {
+		flex-direction: column;
+		gap: 1px;
+		line-height: 1.25;
+	}
+	.lang-tag {
 		font-weight: 700;
-		text-transform: none;
-		letter-spacing: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		color: var(--text);
 	}
-	/* 10 px (vs the canonical eyebrow 11 px) so the secondary row
-	   reads as smaller than the bench label above it. */
-	.bench-sub {
-		font-size: 10px;
+	.lang-sub {
+		font-size: 11px;
+		font-weight: 500;
+		color: var(--text-subtle);
 	}
-	.bench-cell .score {
-		font-size: 14px;
+
+	/* Per-benchmark cell: mean score + rank pill + zero-shot */
+	.bench-rv .score {
+		font-size: 13.5px;
 	}
-	.bench-cell .rank-pill {
+	.bench-rv .rank-pill {
 		display: inline-flex;
 		align-items: center;
 		padding: 1px 6px;
@@ -1308,22 +1463,49 @@
 		font-size: 11px;
 		font-weight: 700;
 	}
-	/* Best-rank pill: neutral surface + bold ink — same rationale as
-	   `.metric-val.winner` above. */
-	.bench-cell .rank-pill.best {
+	.bench-rv .rank-pill.best {
 		background: var(--surface);
 		color: var(--ink-strong);
 		font-weight: 800;
 	}
-
-	.radar-card {
-		--panel-shadow: var(--shadow-sm);
-		margin-top: 20px;
-		padding: 18px 20px;
+	.zs-sub {
+		font-size: 11px;
+		color: var(--text-subtle);
+		font-weight: 600;
 	}
-	.radar-card h3 {
-		font-size: 14px;
+	/* Flag non-zero-shot coverage so uneven comparisons stand out. */
+	.zs-sub.warn {
+		color: var(--tint-amber-fg);
+	}
+
+	/* Zero-shot comparability note — subtle, single line. */
+	.zs-note {
+		display: flex;
+		gap: 7px;
+		margin: 10px 0 0;
+		font-size: 11.5px;
+		line-height: 1.45;
+		color: var(--text-muted);
+	}
+	.zs-note-icon {
+		flex: none;
+		color: var(--tint-amber-fg);
+	}
+
+	/* Figure ----------------------------------------------------------------- */
+	.figure-card {
+		margin: 2px 0 4px;
+	}
+
+	/* Empty state ------------------------------------------------------------ */
+	.empty {
+		text-align: center;
+		color: var(--text-muted);
+		padding: 40px 0;
+	}
+	.empty h2 {
+		font-size: 18px;
+		color: var(--text);
 		margin: 0 0 6px;
-		letter-spacing: -0.005em;
 	}
 </style>

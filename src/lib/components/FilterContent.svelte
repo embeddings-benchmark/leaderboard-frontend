@@ -20,6 +20,7 @@
 	import Switch from './Switch.svelte';
 	import { clampTooltipX } from '$lib/cell-hover';
 	import { humanizeType } from '$lib/format';
+	import { OPENNESS_FILTERABLE } from '$lib/openness';
 
 	// Size slider works in log10(M-of-params). Bounds are derived per benchmark
 	// from filters.availableMin/MaxModelSizeM and clamp into the global
@@ -163,6 +164,10 @@
 		{ label: 'Instruction-tuned', value: 'only_instruction' },
 		{ label: 'Non-instruction', value: 'only_non_instruction' }
 	];
+	// Openness requirements — each dimension the user checks must be satisfied
+	// (AND). Ids/labels come from the shared OPENNESS_FILTERABLE list.
+	const OPENNESS_REQ_IDS: string[] = OPENNESS_FILTERABLE.map((d) => d.id);
+	const OPENNESS_LABEL = new Map<string, string>(OPENNESS_FILTERABLE.map((d) => [d.id, d.label]));
 
 	// Active-filter chip strip: each non-default filter becomes a removable chip.
 	interface Chip {
@@ -209,6 +214,15 @@
 				key: 'st',
 				label: 'ST compatible',
 				clear: () => (filters.sentenceTransformersOnly = false)
+			});
+		}
+		if (filters.opennessReqs.size > 0) {
+			list.push({
+				key: 'openreq',
+				label: `Openness: ${OPENNESS_REQ_IDS.filter((id) => filters.opennessReqs.has(id))
+					.map((id) => OPENNESS_LABEL.get(id))
+					.join(', ')}`,
+				clear: () => filters.setAllOpennessReqs(false)
 			});
 		}
 		// An active size filter also drops unsized (proprietary) models —
@@ -339,6 +353,20 @@
 				onChange={(v) => (filters.availability = v)}
 			/>
 		</div>
+
+		<FilterFacet
+			label="Openness"
+			count={filters.opennessReqs.size > 0
+				? `${filters.opennessReqs.size}/${OPENNESS_REQ_IDS.length}`
+				: undefined}
+			items={OPENNESS_REQ_IDS}
+			picked={filters.opennessReqs}
+			onToggle={(id) => filters.toggleOpennessReq(id)}
+			onToggleAll={() =>
+				filters.setAllOpennessReqs(filters.opennessReqs.size !== OPENNESS_REQ_IDS.length)}
+			allSelected={filters.opennessReqs.size === OPENNESS_REQ_IDS.length}
+			pillLabel={(id) => OPENNESS_LABEL.get(id) ?? id}
+		/>
 
 		{#if !hideZeroShot}
 			<div class="group">

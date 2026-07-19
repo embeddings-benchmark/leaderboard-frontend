@@ -6,6 +6,8 @@
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import OpennessMeter from '$lib/components/OpennessMeter.svelte';
+	import { opennessScore } from '$lib/openness';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import { sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
@@ -285,18 +287,6 @@
 						</dd>
 					</div>
 				{/if}
-				{#if model.extraRequirementsGroups && model.extraRequirementsGroups.length > 0}
-					<div class="row">
-						<dt>Extras</dt>
-						<dd>
-							<span class="chips">
-								{#each model.extraRequirementsGroups as group (group)}
-									<code class="chip">{group}</code>
-								{/each}
-							</span>
-						</dd>
-					</div>
-				{/if}
 				{#if model.trainingDatasets && model.trainingDatasets.length > 0}
 					{@const PREVIEW = 8}
 					{@const datasets = model.trainingDatasets}
@@ -362,39 +352,47 @@
 			</dl>
 			<CiteBlock kind="model" citation={model.citation} />
 		</div>
-		<div class="kpis">
-			<div class="kpi">
-				<span class="kpi-label">Total params</span>
-				<span class="kpi-value"
-					>{fmtParamsValue(model.totalParamsB)}{#if fmtParamsUnit(model.totalParamsB)}<span
-							class="unit">{fmtParamsUnit(model.totalParamsB)}</span
-						>{/if}</span
-				>
+		<div class="hero-right">
+			<div class="kpis">
+				<div class="kpi">
+					<span class="kpi-label">Total params</span>
+					<span class="kpi-value"
+						>{fmtParamsValue(model.totalParamsB)}{#if fmtParamsUnit(model.totalParamsB)}<span
+								class="unit">{fmtParamsUnit(model.totalParamsB)}</span
+							>{/if}</span
+					>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Active params</span>
+					<span class="kpi-value"
+						>{fmtParamsValue(model.activeParamsB)}{#if fmtParamsUnit(model.activeParamsB)}<span
+								class="unit">{fmtParamsUnit(model.activeParamsB)}</span
+							>{/if}</span
+					>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Embedding dim</span>
+					<span class="kpi-value">{fmtInt(model.embeddingDim)}</span>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Max tokens</span>
+					<span class="kpi-value">{fmtInt(model.maxTokens)}</span>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Memory</span>
+					<span class="kpi-value">{fmtMemoryMb(model.memoryUsageMb)}</span>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Released</span>
+					<span class="kpi-value date">{model.releaseDate ?? '—'}</span>
+				</div>
 			</div>
-			<div class="kpi">
-				<span class="kpi-label">Active params</span>
-				<span class="kpi-value"
-					>{fmtParamsValue(model.activeParamsB)}{#if fmtParamsUnit(model.activeParamsB)}<span
-							class="unit">{fmtParamsUnit(model.activeParamsB)}</span
-						>{/if}</span
-				>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Embedding dim</span>
-				<span class="kpi-value">{fmtInt(model.embeddingDim)}</span>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Max tokens</span>
-				<span class="kpi-value">{fmtInt(model.maxTokens)}</span>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Memory</span>
-				<span class="kpi-value">{fmtMemoryMb(model.memoryUsageMb)}</span>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Released</span>
-				<span class="kpi-value date">{model.releaseDate ?? '—'}</span>
-			</div>
+			{#if opennessScore(model) !== null}
+				<section class="openness-block" aria-label="Openness">
+					<h2 class="openness-title">Openness</h2>
+					<OpennessMeter {model} breakdown />
+				</section>
+			{/if}
 		</div>
 	</section>
 
@@ -427,6 +425,23 @@
 <style>
 	.hero-left :global(.cite) {
 		margin-top: 10px;
+	}
+	.hero-right {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		min-width: 0;
+	}
+	.openness-block {
+		padding-top: 16px;
+		border-top: 1px solid var(--border);
+	}
+	.openness-title {
+		font-size: 15px;
+		font-weight: 700;
+		color: var(--text);
+		letter-spacing: 0.01em;
+		margin: 0 0 10px;
 	}
 	.hero::before {
 		content: '';
