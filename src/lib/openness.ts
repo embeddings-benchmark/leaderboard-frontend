@@ -57,14 +57,20 @@ export function opennessDimensions(m: ModelMeta): { label: string; open: boolean
 	return OPENNESS_DIMENSIONS.map((d) => ({ label: d.label, open: o[d.key] === true }));
 }
 
-// The 0–6 score. Prefers the API's `opennessScore`; falls back to summing the
-// dict. Returns `null` when the model carries no openness data at all, which
-// callers use to hide the widget entirely (rather than render a bogus 0/6).
+// The 0–6 score. Prefers the API's `opennessScore`; falls back to counting the
+// canonical dimensions. Returns `null` when the model carries no openness data
+// at all, which callers use to hide the widget entirely (rather than render a
+// bogus 0/6).
+//
+// The fallback deliberately counts only `OPENNESS_DIMENSIONS` keys rather than
+// every key in the dict — `openness` is a `Record<string, boolean>`, so an
+// extra/legacy key from the API would otherwise push the score out of step with
+// the 6-row breakdown `opennessDimensions` renders (e.g. "7/6").
 export function opennessScore(m: ModelMeta): number | null {
 	if (typeof m.opennessScore === 'number') return m.opennessScore;
 	const o = m.openness;
 	if (o && Object.keys(o).length > 0) {
-		return Object.values(o).reduce((n, v) => n + (v ? 1 : 0), 0);
+		return OPENNESS_DIMENSIONS.reduce((n, d) => n + (o[d.key] === true ? 1 : 0), 0);
 	}
 	return null;
 }

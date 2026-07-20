@@ -354,17 +354,24 @@
 			/>
 		</div>
 
+		<!-- AND semantics, unlike every other facet here: each check *adds* a
+		     requirement, so all-selected is the strictest filter rather than
+		     "off". The head button is therefore Clear-only (disabled when
+		     nothing is picked) — reusing the "All"/"Clear" flip would invite
+		     users to select everything expecting to clear the filter. -->
 		<FilterFacet
 			label="Openness"
+			hint="Requires every checked dimension."
 			count={filters.opennessReqs.size > 0
 				? `${filters.opennessReqs.size}/${OPENNESS_REQ_IDS.length}`
 				: undefined}
 			items={OPENNESS_REQ_IDS}
 			picked={filters.opennessReqs}
 			onToggle={(id) => filters.toggleOpennessReq(id)}
-			onToggleAll={() =>
-				filters.setAllOpennessReqs(filters.opennessReqs.size !== OPENNESS_REQ_IDS.length)}
-			allSelected={filters.opennessReqs.size === OPENNESS_REQ_IDS.length}
+			onToggleAll={() => filters.setAllOpennessReqs(false)}
+			toggleAllLabel="Clear"
+			toggleAllDisabled={filters.opennessReqs.size === 0}
+			allSelected={filters.opennessReqs.size > 0}
 			pillLabel={(id) => OPENNESS_LABEL.get(id) ?? id}
 		/>
 

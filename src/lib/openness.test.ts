@@ -26,6 +26,14 @@ describe('opennessScore', () => {
 		expect(opennessScore(model({ openness }))).toBe(4);
 	});
 
+	// The dict is typed `Record<string, boolean>`, so an extra/legacy key from
+	// the API must not push the fallback score past the 6-row breakdown.
+	it('ignores non-canonical keys in the fallback', () => {
+		const openness = { ...FULL, 'open something else': true };
+		expect(opennessScore(model({ openness }))).toBe(OPENNESS_MAX);
+		expect(opennessDimensions(model({ openness }))).toHaveLength(OPENNESS_MAX);
+	});
+
 	it('returns null when the model carries no openness data', () => {
 		expect(opennessScore(model({}))).toBeNull();
 		expect(opennessScore(model({ openness: null }))).toBeNull();

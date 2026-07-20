@@ -784,9 +784,22 @@
 								class:has-openness={hasOpenness}
 								onpointerover={(e) => hasOpenness && showOpennessTip(e, row)}
 								onpointerout={hideOpennessTip}
+								onfocusin={(e) => hasOpenness && showOpennessTip(e, row)}
+								onfocusout={hideOpennessTip}
 							>
 								{#if hasOpenness}
-									<OpennessMeter model={row.model} compact />
+									<!-- A `<td>` isn't focusable, so the breakdown portal was pointer-only.
+									     A real button gives keyboard users a tab stop; the tip shows on
+									     focus (handled by the cell's `onfocusin`) and Escape dismisses it,
+									     per the ARIA tooltip pattern. The button's accessible name comes
+									     from the meter's own `role="img"` label. -->
+									<button
+										type="button"
+										class="openness-trigger"
+										onkeydown={(e) => e.key === 'Escape' && hideOpennessTip()}
+									>
+										<OpennessMeter model={row.model} compact />
+									</button>
 								{/if}
 							</td>
 						{/if}
@@ -935,6 +948,20 @@
 	/* Center the compact meter within the cell. */
 	.openness-cell :global(.openness) {
 		display: inline-flex;
+	}
+	/* Keyboard tab stop for the breakdown tip — visually just the meter. */
+	.openness-trigger {
+		display: inline-flex;
+		padding: 2px;
+		border: none;
+		border-radius: 4px;
+		background: none;
+		cursor: inherit;
+		color: inherit;
+	}
+	.openness-trigger:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 1px;
 	}
 	.sort-btn:hover {
 		color: var(--text);

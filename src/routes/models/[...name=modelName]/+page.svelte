@@ -355,7 +355,7 @@
 		<div class="hero-right">
 			<div class="kpis">
 				<div class="kpi">
-					<span class="kpi-label">Total params</span>
+					<span class="kpi-label">Parameters</span>
 					<span class="kpi-value"
 						>{fmtParamsValue(model.totalParamsB)}{#if fmtParamsUnit(model.totalParamsB)}<span
 								class="unit">{fmtParamsUnit(model.totalParamsB)}</span

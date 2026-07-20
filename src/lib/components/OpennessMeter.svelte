@@ -18,14 +18,25 @@
 
 	let score = $derived(opennessScore(model));
 	let dims = $derived(opennessDimensions(model));
+	// The API can in principle ship `opennessScore` without a per-dimension
+	// `openness` dict. Without this guard the score would read e.g. "4/6" while
+	// every pip rendered closed, and the breakdown would be six ✗ rows. When the
+	// dict is missing we fall back to filling the first `score` pips and drop the
+	// (unknowable) breakdown entirely.
+	let hasDims = $derived(Object.keys(model.openness ?? {}).length > 0);
+	let pips = $derived(
+		hasDims
+			? dims.map((d) => ({ label: d.label, on: d.open }))
+			: dims.map((d, i) => ({ label: d.label, on: i < (score ?? 0) }))
+	);
 </script>
 
 {#if score !== null}
 	<div class="openness" class:compact>
 		<div class="meter" role="img" aria-label="Openness score: {score} of {OPENNESS_MAX} dimensions">
 			<div class="pips" aria-hidden="true">
-				{#each dims as d, i (i)}
-					<span class="pip" class:on={d.open}></span>
+				{#each pips as p (p.label)}
+					<span class="pip" class:on={p.on}></span>
 				{/each}
 			</div>
 			{#if !compact}
@@ -33,7 +44,7 @@
 			{/if}
 		</div>
 
-		{#if breakdown}
+		{#if breakdown && hasDims}
 			<ul class="dims">
 				{#each dims as d (d.label)}
 					<li class="dim" class:open={d.open}>

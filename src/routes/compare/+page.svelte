@@ -11,7 +11,7 @@
 	import type { Data, Layout } from 'plotly.js';
 	import type { Benchmark, BenchmarkSummary, ModelMeta, SummaryRow } from '$lib/types';
 	import { flattenMenu } from '$lib/types';
-	import { humanizeType, modelPath, fmtParamsValue, fmtParamsUnit } from '$lib/format';
+	import { humanizeType, modelPath, slug, fmtParamsValue, fmtParamsUnit } from '$lib/format';
 	import {
 		opennessScore,
 		opennessDimensions,
@@ -84,7 +84,7 @@
 	// clobber `?model=` / `?benchmark=` before the read-side effect can use
 	// them. (The write effect always fires once at registration, regardless
 	// of when other effects run.)
-	function _initialPicks(name: 'model' | 'benchmark' | 'task'): string[] {
+	function _initialPicks(name: 'model' | 'benchmark' | 'task' | 'xtask'): string[] {
 		if (typeof window === 'undefined') return [];
 		return readMultiParam(new URL(window.location.href), name);
 	}
@@ -218,6 +218,14 @@
 			? readMultiParam(new URL(window.location.href), 'task').slice(0, MAX_TASKS)
 			: []
 	);
+	// Tasks knocked out of the current selection. Kept separate from
+	// `pickedTasks` so the "follow the benchmarks" default stays usable: with
+	// ~130 tasks in scope, dropping one can't be expressed as an explicit pick
+	// list (that would blow past `MAX_TASKS` and bloat the share link), so a
+	// subtractive set is the only workable shape. Applies in custom mode too.
+	let excludedTasks = $state<string[]>(
+		typeof window !== 'undefined' ? readMultiParam(new URL(window.location.href), 'xtask') : []
+	);
 	let taskPickerOpen = $state(false);
 	let taskPickerQuery = $state('');
 	let taskPickerRoot: HTMLDivElement | undefined = $state();
@@ -231,7 +239,8 @@
 		const m = picked.slice();
 		const b = pickedBenchmarks.slice();
 		const t = pickedTasks.slice();
-		queueMicrotask(() => updateUrl({ model: m, benchmark: b, task: t }));
+		const x = excludedTasks.slice();
+		queueMicrotask(() => updateUrl({ model: m, benchmark: b, task: t, xtask: x }));
 	});
 
 	// FUTURE: migrate to native `popover="auto"` once anchor positioning
@@ -271,11 +280,25 @@
 	}
 
 	function toggleTask(name: string) {
+		// Re-picking a task from the picker also un-excludes it, so the picker
+		// stays the single obvious way to get a task back.
+		if (excludedTasks.includes(name)) excludedTasks = excludedTasks.filter((n) => n !== name);
 		if (pickedTasks.includes(name)) {
 			pickedTasks = pickedTasks.filter((n) => n !== name);
 		} else if (pickedTasks.length < MAX_TASKS) {
 			pickedTasks = [...pickedTasks, name];
 		}
+	}
+
+	// Drop one task from the current selection. In custom mode that means
+	// un-picking it outright; in follow-the-benchmarks mode it goes on the
+	// exclusion list (see `excludedTasks`).
+	function dropTask(name: string) {
+		if (pickedTasks.includes(name)) {
+			pickedTasks = pickedTasks.filter((n) => n !== name);
+			return;
+		}
+		if (!excludedTasks.includes(name)) excludedTasks = [...excludedTasks, name];
 	}
 
 	// Union of tasks from picked benchmarks (deduped), each tagged with type +
@@ -321,60 +344,175 @@
 		if (next.length !== pickedTasks.length) pickedTasks = next;
 	});
 
-	// For each picked task: find a benchmark summary that scored it, then per-
-	// model score from that summary. Tasks are deduped, so we use the first hit.
+	// Task selection *follows* the benchmark selection by default: an empty
+	// `pickedTasks` means "every task in the picked benchmarks", not "no tasks".
+	// Picking specific tasks switches to custom mode. Keeping the default
+	// implicit keeps share links short — `?task=` only appears once the user has
+	// actually narrowed the set.
+	let customTasks = $derived(pickedTasks.length > 0);
+	let effectiveTasks = $derived.by<TaskCandidate[]>(() => {
+		// Local lookups in a pure derived — plain Map/Set are correct.
+		const dropped = new Set(excludedTasks);
+		const base = customTasks
+			? (() => {
+					const byName = new Map(availableTasks.map((t) => [t.name, t]));
+					return pickedTasks
+						.map((n) => byName.get(n))
+						.filter((t): t is TaskCandidate => t !== undefined);
+				})()
+			: availableTasks;
+		return dropped.size === 0 ? base : base.filter((t) => !dropped.has(t.name));
+	});
+
+	// Exclusions that actually bite right now — an `?xtask=` entry for a task
+	// outside the current benchmark scope shouldn't be advertised as active.
+	let activeExclusions = $derived.by<string[]>(() => {
+		const inScope = new Set(availableTasks.map((t) => t.name));
+		return excludedTasks.filter((n) => inScope.has(n));
+	});
+
+	// Per-task scores for the effective selection. Tasks are deduped across
+	// benchmarks, so the first benchmark that scored one supplies its values.
+	//
+	// `spread` (max − min across the picked models) orders the table: in
+	// follow-the-benchmarks mode there are hundreds of tasks, and the ones that
+	// actually separate the models are the interesting ones. `trainedOn` flags
+	// models trained on the task — those scores aren't zero-shot.
 	type TaskScoreView = {
 		name: string;
 		type: string;
 		benchmark: string;
 		scores: (number | undefined)[];
+		trainedOn: boolean[];
+		shared: boolean;
+		spread: number;
 	};
 	let taskScores = $derived.by<TaskScoreView[]>(() => {
 		// Per-summary indexes built once: task-name Set for membership +
-		// tasksMeta-by-name Map so we don't `.find` inside the picked loop.
+		// tasksMeta-by-name Map so we don't `.find` inside the task loop.
 		const indexes = benchViews.map((bv) => ({
 			tasksSet: new Set(bv.summary.tasks ?? []),
 			metaByName: new Map(bv.summary.tasksMeta.map((m) => [m.name, m]))
 		}));
-		return pickedTasks
-			.map((tn) => {
-				for (let i = 0; i < benchViews.length; i++) {
-					if (!indexes[i].tasksSet.has(tn)) continue;
-					const bv = benchViews[i];
-					const meta = indexes[i].metaByName.get(tn);
-					return {
-						name: tn,
-						type: meta?.type ?? '',
-						benchmark: bv.name,
-						scores: pickedRows.map((p) => bv.byModel.get(p.model.name)?.scoresByTask[tn])
-					};
-				}
-				return null;
-			})
-			.filter((x): x is TaskScoreView => x !== null);
+		const out: TaskScoreView[] = [];
+		for (const t of effectiveTasks) {
+			for (let i = 0; i < benchViews.length; i++) {
+				if (!indexes[i].tasksSet.has(t.name)) continue;
+				const bv = benchViews[i];
+				const meta = indexes[i].metaByName.get(t.name);
+				const rows = pickedRows.map((p) => bv.byModel.get(p.model.name));
+				const scores = rows.map((r) => r?.scoresByTask[t.name]);
+				const known = scores.filter((v): v is number => v !== undefined);
+				out.push({
+					name: t.name,
+					type: meta?.type ?? t.type,
+					benchmark: bv.name,
+					scores,
+					trainedOn: rows.map((r) => r?.trainedOnTasks?.includes(t.name) === true),
+					shared: known.length === pickedRows.length,
+					spread: known.length > 1 ? Math.max(...known) - Math.min(...known) : 0
+				});
+				break;
+			}
+		}
+		return out;
 	});
 
-	// For each task type in the union: average per-model score across the
-	// benchmarks that include that type. Returns undefined when no benchmark
-	// provides it for that model.
-	type TypeScoreView = { type: string; scores: (number | undefined)[] };
-	let typeScores = $derived.by<TypeScoreView[]>(() => {
-		// Reuse `benchViews.byModel`; type membership Set built once per summary.
-		const typesSets = benchViews.map((bv) => new Set(bv.summary.taskTypes));
-		return unionTaskTypes.map((tt) => {
-			const scores = pickedRows.map((p) => {
-				const vals: number[] = [];
-				for (let i = 0; i < benchViews.length; i++) {
-					if (!typesSets[i].has(tt)) continue;
-					const v = benchViews[i].byModel.get(p.model.name)?.scoresByTaskType[tt];
-					if (v !== undefined) vals.push(v);
-				}
-				if (vals.length === 0) return undefined;
-				return vals.reduce((a, b) => a + b, 0) / vals.length;
-			});
-			return { type: tt, scores };
+	// Table ordering. `gap` (the default) puts the biggest model-to-model
+	// difference first, so the tasks that actually differentiate the picks
+	// surface without scrolling hundreds of rows. `high`/`low` rank by the mean
+	// across the picked models; tasks no model scored sort last either way.
+	type TaskSort = 'gap' | 'name' | 'high' | 'low';
+	const TASK_SORTS: { value: TaskSort; label: string }[] = [
+		{ value: 'gap', label: 'Largest discrepancy' },
+		{ value: 'name', label: 'Alphabetic' },
+		{ value: 'high', label: 'Highest score' },
+		{ value: 'low', label: 'Lowest score' }
+	];
+	let taskSort = $state<TaskSort>('gap');
+
+	function meanScore(ts: TaskScoreView): number | null {
+		const known = ts.scores.filter((v): v is number => v !== undefined);
+		if (known.length === 0) return null;
+		return known.reduce((a, b) => a + b, 0) / known.length;
+	}
+
+	let rankedTaskScores = $derived.by<TaskScoreView[]>(() => {
+		const out = [...taskScores];
+		if (taskSort === 'name') return out.sort((a, b) => a.name.localeCompare(b.name));
+		if (taskSort === 'gap') return out.sort((a, b) => b.spread - a.spread);
+		// Unscored tasks have no meaningful rank — park them at the bottom
+		// rather than letting a null sort to the top of "lowest".
+		return out.sort((a, b) => {
+			const am = meanScore(a);
+			const bm = meanScore(b);
+			if (am === null) return bm === null ? 0 : 1;
+			if (bm === null) return -1;
+			return taskSort === 'high' ? bm - am : am - bm;
 		});
 	});
+	// Follow-the-benchmarks mode can mean hundreds of tasks; show the most
+	// differentiating ones and let the user expand to the full list.
+	const TASK_PREVIEW = 12;
+	let showAllTasks = $state(false);
+	let visibleTaskScores = $derived(
+		customTasks || showAllTasks ? rankedTaskScores : rankedTaskScores.slice(0, TASK_PREVIEW)
+	);
+
+	// Per task-type mean, computed over *tasks* — not over per-benchmark type
+	// averages, which weighted each benchmark equally regardless of how many
+	// tasks it contributed and produced axes resting on different benchmark
+	// counts.
+	//
+	// Only tasks that EVERY picked model was scored on enter the mean: comparing
+	// a model averaged over 14 retrieval tasks against one averaged over 16 is
+	// not a like-for-like number. A type with partial coverage shrinks to that
+	// intersection; when the intersection is empty the whole axis reads NA.
+	// `droppedCount` records what the intersection excluded, for disclosure.
+	type TypeScoreView = {
+		type: string;
+		scores: (number | undefined)[];
+		taskCount: number;
+		droppedCount: number;
+	};
+	let typeScores = $derived.by<TypeScoreView[]>(() => {
+		// Local grouping in a pure derived — plain Map is correct.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const byType = new Map<string, TaskScoreView[]>();
+		for (const ts of taskScores) {
+			if (!ts.type) continue;
+			const list = byType.get(ts.type);
+			if (list) list.push(ts);
+			else byType.set(ts.type, [ts]);
+		}
+		// `unionTaskTypes` fixes the display order; any type present in the tasks
+		// but absent from the summaries' `taskTypes` is appended rather than lost.
+		const order = [
+			...unionTaskTypes,
+			...[...byType.keys()].filter((t) => !unionTaskTypes.includes(t))
+		];
+		const out: TypeScoreView[] = [];
+		for (const tt of order) {
+			const all = byType.get(tt);
+			if (!all || all.length === 0) continue;
+			const shared = all.filter((ts) => ts.shared);
+			const scores = pickedRows.map((_, mi) =>
+				shared.length === 0
+					? undefined
+					: shared.reduce((n, ts) => n + (ts.scores[mi] as number), 0) / shared.length
+			);
+			out.push({
+				type: tt,
+				scores,
+				taskCount: shared.length,
+				droppedCount: all.length - shared.length
+			});
+		}
+		return out;
+	});
+
+	// Tasks the intersection rule excluded, aggregated for the caption.
+	let droppedTaskCount = $derived(typeScores.reduce((n, ts) => n + ts.droppedCount, 0));
 
 	let pickerCandidates = $derived.by(() => {
 		if (!primarySummary) return [];
@@ -471,12 +609,17 @@
 		return {
 			barmode: 'group',
 			showlegend: true,
-			// Legend sits below the x-axis labels; `automargin` grows the plot's
-			// bottom margin to fit the tick text so the two don't collide.
-			legend: { orientation: 'h', y: -0.28, yanchor: 'top', x: 0.5, xanchor: 'center' },
-			margin: { l: 44, r: 20, t: 16, b: 70 },
+			// Legend goes ABOVE the plot: the x labels are long and angled, and
+			// `automargin` reflows the bottom margin as they grow, which a legend
+			// pinned below (paper coords) doesn't track — the two collided.
+			legend: { orientation: 'h', y: 1.06, yanchor: 'bottom', x: 0.5, xanchor: 'center' },
+			margin: { l: 44, r: 20, t: 34, b: 24 },
 			yaxis: { rangemode: 'tozero', ticksuffix: '', zeroline: false },
-			xaxis: { automargin: true, tickangle: 0 }
+			// Task-type names are long ("Instruction Reranking (15)") and there can
+			// be a dozen of them — horizontal ticks collide. Angling them plus
+			// `automargin` (which grows the bottom margin to fit the rotated text)
+			// keeps every label readable.
+			xaxis: { automargin: true, tickangle: -35, tickfont: { size: 11 } }
 		};
 	}
 
@@ -485,7 +628,7 @@
 	// as a shape; below that we fall back to a grouped bar. `typeScores` is
 	// index-aligned with `unionTaskTypes`, and each `.scores[mi]` is model `mi`.
 	type TaskView = 'radar' | 'bar' | 'table';
-	let radarAvailable = $derived(unionTaskTypes.length >= 3);
+	let radarAvailable = $derived(typeScores.length >= 3);
 	let taskTypeView = $state<TaskView>('radar');
 	let effectiveTaskView = $derived<TaskView>(
 		taskTypeView === 'radar' && !radarAvailable ? 'bar' : taskTypeView
@@ -503,12 +646,25 @@
 				]
 	);
 
+	// Axis label carries the denominator — how many tasks of that type all the
+	// picked models share — so a 3-task axis isn't read as equivalent to a
+	// 40-task one.
+	function typeAxisLabel(ts: TypeScoreView): string {
+		const base = humanizeType(ts.type);
+		return ts.taskCount === 0 ? `${base} (NA)` : `${base} (${ts.taskCount})`;
+	}
+
 	let ttRadarSpec = $derived.by<{ data: Data[]; layout: Partial<Layout> } | null>(() => {
-		if (pickedRows.length < 1 || unionTaskTypes.length < 3) return null;
-		const labels = typeScores.map((ts) => humanizeType(ts.type));
+		if (pickedRows.length < 1 || typeScores.length < 3) return null;
+		const labels = typeScores.map((ts) => typeAxisLabel(ts));
 		const theta = [...labels, labels[0]];
 		const traces: Data[] = pickedRows.map((row, mi) => {
-			const r = typeScores.map((ts) => (ts.scores[mi] ?? 0) * 100);
+			// `null`, not 0 — an NA axis must read as a gap, not as a real score
+			// of zero (see the intersection rule in `typeScores`).
+			const r = typeScores.map((ts) => {
+				const v = ts.scores[mi];
+				return v === undefined ? null : v * 100;
+			});
 			return {
 				type: 'scatterpolar',
 				mode: 'lines',
@@ -524,8 +680,8 @@
 	});
 
 	let ttBarSpec = $derived.by<{ data: Data[]; layout: Partial<Layout> } | null>(() => {
-		if (pickedRows.length < 1 || unionTaskTypes.length === 0) return null;
-		const x = typeScores.map((ts) => humanizeType(ts.type));
+		if (pickedRows.length < 1 || typeScores.length === 0) return null;
+		const x = typeScores.map((ts) => typeAxisLabel(ts));
 		const data: Data[] = pickedRows.map((row, mi) => ({
 			type: 'bar',
 			name: row.model.displayName,
@@ -542,26 +698,18 @@
 	// Zero-shot comparability: within a benchmark, flag when the picked models
 	// were trained on different subsets of that benchmark's tasks — their scores
 	// then aren't directly comparable. `trainedOnTasks` is already benchmark-scoped.
-	type ZsWarning = { benchmark: string; entries: { model: string; tasks: string[] }[] };
-	let zsWarnings = $derived.by<ZsWarning[]>(() => {
-		const out: ZsWarning[] = [];
+	//
+	// Deliberately just a boolean: enumerating which model was trained on which
+	// tasks here produced a wall of names under the table. The per-task ⚠ flags
+	// in the Tasks section already carry that detail, row by row, where it's
+	// actually actionable.
+	let hasZsMismatch = $derived.by<boolean>(() => {
+		const key = (t: string[]) => [...t].sort().join('|');
 		for (const bv of benchViews) {
-			const entries = pickedRows.map((p) => {
-				const row = bv.byModel.get(p.model.name);
-				return { model: p.model.displayName, tasks: row?.trainedOnTasks ?? [] };
-			});
-			const anyTrained = entries.some((e) => e.tasks.length > 0);
-			const key = (t: string[]) => [...t].sort().join('|');
-			const first = entries[0] ? key(entries[0].tasks) : '';
-			const allSame = entries.every((e) => key(e.tasks) === first);
-			if (anyTrained && !allSame) {
-				out.push({
-					benchmark: benchIndex.get(bv.name)?.displayName ?? bv.name,
-					entries: entries.filter((e) => e.tasks.length > 0)
-				});
-			}
+			const keys = pickedRows.map((p) => key(bv.byModel.get(p.model.name)?.trainedOnTasks ?? []));
+			if (keys.some((k) => k !== '') && keys.some((k) => k !== keys[0])) return true;
 		}
-		return out;
+		return false;
 	});
 
 	// Fixed modality order for the attributes comparison; unsupported ones grey out.
@@ -871,8 +1019,9 @@
 								</div>
 								{#each pickedRows as r (r.model.name)}
 									{@const dims = opennessDimensions(r.model)}
-									<div class="rv mark" class:on={opennessScore(r.model) !== null && dims[di].open}>
-										{#if opennessScore(r.model) === null}
+									{@const known = opennessScore(r.model) !== null}
+									<div class="rv mark" class:on={known && dims[di].open}>
+										{#if !known}
 											<span class="muted">—</span>
 										{:else if dims[di].open}
 											<Check size={15} aria-label="yes" />
@@ -918,7 +1067,11 @@
 										<span
 											class="zs-sub"
 											class:warn={r.zeroShotPct !== 100 && r.zeroShotPct !== -1}
-											title="Zero-shot coverage"
+											title={r.zeroShotPct === -1
+												? 'Zero-shot coverage unknown — there is no training-data record for this model, so we cannot tell whether it saw these tasks during training.'
+												: r.zeroShotPct === 100
+													? 'Fully zero-shot: this model was not trained on any of this benchmark’s tasks, so every score here is out-of-distribution.'
+													: `Zero-shot on ${r.zeroShotPct}% of this benchmark’s tasks — the model was trained on the rest, which inflates its score relative to a fully zero-shot model.`}
 											>{r.zeroShotPct === -1 ? 'NA' : `${r.zeroShotPct}% ZS`}</span
 										>
 									{:else}
@@ -928,19 +1081,125 @@
 							{/each}
 						{/each}
 					</div>
-					{#if zsWarnings.length > 0}
-						<p class="zs-note" role="note">
+					{#if hasZsMismatch}
+						<p
+							class="zs-note"
+							role="note"
+							title="These models were trained on different subsets of this benchmark's tasks. A model that saw a task's training set during training has an advantage on it, so the mean scores above are not a like-for-like comparison."
+						>
 							<span class="zs-note-icon" aria-hidden="true">⚠</span>
 							<span
 								>Some of these models were trained on the training sets of downstream tasks, making
-								scores harder to compare.</span
+								scores harder to compare. Individual tasks are flagged in the table below.</span
 							>
 						</p>
 					{/if}
 				</section>
 
+				<!-- Individual tasks — drives the task-type aggregation below -->
+				<section class="cmp-section">
+					<div class="section-head-row">
+						<h2>Tasks</h2>
+						<div class="section-controls">
+							{@render taskPicker()}
+							<span class="cmp-count">
+								{#if customTasks}{pickedTasks.length} / {MAX_TASKS}{:else}all {taskScores.length}{/if}
+							</span>
+							<label class="sort">
+								<span class="sr-only">Sort tasks by</span>
+								<select bind:value={taskSort}>
+									{#each TASK_SORTS as s (s.value)}
+										<option value={s.value}>{s.label}</option>
+									{/each}
+								</select>
+							</label>
+						</div>
+					</div>
+					<p class="cmp-sub">
+						{#if customTasks}
+							Comparing your {pickedTasks.length} selected
+							{pickedTasks.length === 1 ? 'task' : 'tasks'}. Clear them to go back to every task in
+							the selected benchmarks.
+						{:else}
+							Every task in the selected benchmarks. Pick specific tasks above to narrow the
+							comparison, or remove individual ones with the × on each row.
+						{/if}
+						{#if activeExclusions.length > 0}
+							<button
+								type="button"
+								class="link-btn restore-btn"
+								onclick={() => (excludedTasks = [])}
+								title="Put the removed tasks back into the comparison"
+							>
+								Restore {activeExclusions.length} removed
+								{activeExclusions.length === 1 ? 'task' : 'tasks'}
+							</button>
+						{/if}
+					</p>
+					{#if taskScores.length > 0}
+						<div class="cmp-compare center" style:grid-template-columns={cmpCols}>
+							{@render compareHead('Task')}
+							{#each visibleTaskScores as ts (ts.name)}
+								{@const winners = winnersForRow(
+									ts.scores.map((v) => (v === undefined ? null : v)),
+									'max'
+								)}
+								<div class="rl task-rl">
+									<div class="task-rl-text">
+										<a
+											class="rl-name task-link"
+											href={resolve('/tasks/[name]', { name: slug(ts.name) })}>{ts.name}</a
+										>
+										<span class="rl-sub">
+											{ts.type}{#if !ts.shared}
+												· <span
+													class="excluded-tag"
+													title="At least one selected model has no score for this task, so it is left out of the task-type means below."
+													>not scored by every model</span
+												>
+											{/if}
+										</span>
+									</div>
+									<button
+										type="button"
+										class="task-drop"
+										onclick={() => dropTask(ts.name)}
+										title="Remove {ts.name} from the comparison"
+										aria-label="Remove {ts.name} from the comparison">×</button
+									>
+								</div>
+								{#each ts.scores as v, i (pickedRows[i].model.name)}
+									<div class="rv" class:winner={winners[i] && pickedRows.length > 1}>
+										{v !== undefined ? (v * 100).toFixed(2) : '—'}
+										{#if ts.trainedOn[i]}
+											<!-- Trained on this task: the score isn't zero-shot. -->
+											<span
+												class="trained-flag"
+												title="{pickedRows[i].model
+													.displayName} was trained on this task — not zero-shot"
+												aria-label="not zero-shot">⚠</span
+											>
+										{/if}
+									</div>
+								{/each}
+							{/each}
+						</div>
+						{#if !customTasks && taskScores.length > TASK_PREVIEW}
+							<button
+								type="button"
+								class="link-btn show-all"
+								onclick={() => (showAllTasks = !showAllTasks)}
+							>
+								{showAllTasks ? `Show top ${TASK_PREVIEW}` : `Show all ${taskScores.length} tasks`}
+							</button>
+						{/if}
+					{:else}
+						<p class="cmp-hint">No tasks available for the selected benchmarks.</p>
+					{/if}
+				</section>
+
 				<!-- Performance by task type — radar / bar / table toggle -->
-				{#if unionTaskTypes.length > 0}
+				{#if typeScores.length > 0}
 					<section class="cmp-section">
 						<div class="section-head-row">
 							<h2>Performance by task type</h2>
@@ -951,8 +1210,19 @@
 								onChange={(v) => (taskTypeView = v)}
 							/>
 						</div>
-						{#if pickedBenchmarks.length > 1}
-							<p class="cmp-sub">Averaged across the selected benchmarks.</p>
+						<p class="cmp-sub">
+							Mean over the tasks selected above, grouped by task type — the number after each type
+							is how many tasks it averages.
+						</p>
+						{#if droppedTaskCount > 0}
+							<p class="cmp-sub warn-sub" role="note">
+								<span aria-hidden="true">⚠</span>
+								{droppedTaskCount}
+								{droppedTaskCount === 1 ? 'task is' : 'tasks are'} excluded because not every selected
+								model was scored on
+								{droppedTaskCount === 1 ? 'it' : 'them'} — every mean here is over tasks all the models
+								share, so the numbers stay directly comparable.
+							</p>
 						{/if}
 						{#if effectiveTaskView === 'table'}
 							<div class="cmp-compare center" style:grid-template-columns={cmpCols}>
@@ -962,10 +1232,10 @@
 										ts.scores.map((v) => (v === undefined ? null : v)),
 										'max'
 									)}
-									<div class="rl">{humanizeType(ts.type)}</div>
+									<div class="rl">{typeAxisLabel(ts)}</div>
 									{#each ts.scores as v, i (pickedRows[i].model.name)}
 										<div class="rv" class:winner={winners[i] && pickedRows.length > 1}>
-											{v !== undefined ? (v * 100).toFixed(2) : '—'}
+											{v !== undefined ? (v * 100).toFixed(2) : 'NA'}
 										</div>
 									{/each}
 								{/each}
@@ -991,40 +1261,6 @@
 						{/if}
 					</section>
 				{/if}
-
-				<!-- Individual tasks -->
-				<section class="cmp-section">
-					<div class="section-head-row">
-						<h2>Tasks</h2>
-						<div class="section-controls">
-							{@render taskPicker()}
-							<span class="cmp-count">{pickedTasks.length} / {MAX_TASKS}</span>
-						</div>
-					</div>
-					{#if taskScores.length > 0}
-						<div class="cmp-compare center" style:grid-template-columns={cmpCols}>
-							{@render compareHead('Task')}
-							{#each taskScores as ts (ts.name)}
-								{@const winners = winnersForRow(
-									ts.scores.map((v) => (v === undefined ? null : v)),
-									'max'
-								)}
-								<div class="rl">
-									<span class="rl-name">{ts.name}</span><span class="rl-sub">{ts.type}</span>
-								</div>
-								{#each ts.scores as v, i (pickedRows[i].model.name)}
-									<div class="rv" class:winner={winners[i] && pickedRows.length > 1}>
-										{v !== undefined ? (v * 100).toFixed(2) : '—'}
-									</div>
-								{/each}
-							{/each}
-						</div>
-					{:else}
-						<p class="cmp-hint">
-							Add tasks above to compare individual task scores across the selected models.
-						</p>
-					{/if}
-				</section>
 			{/if}
 		{/if}
 	</main>
@@ -1278,6 +1514,76 @@
 		color: var(--text-muted);
 		margin: 0;
 	}
+	/* Expand/collapse for the ranked task table. */
+	.show-all {
+		margin-top: 10px;
+		font-size: 12.5px;
+	}
+	.restore-btn {
+		margin-inline-start: 6px;
+		font-size: 12.5px;
+	}
+	/* Task row label: text block + a remove button pinned to the right.
+	   Two-class selector so this beats the plain `.rl` column layout declared
+	   further down (equal specificity would hand it to the later rule). */
+	.rl.task-rl {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.task-rl-text {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.task-link {
+		color: inherit;
+		text-decoration: none;
+	}
+	.task-link:hover {
+		color: var(--link);
+		text-decoration: underline;
+	}
+	/* Only surfaces on row hover / keyboard focus — a × on every row at rest
+	   would compete with the task names for attention. */
+	.task-drop {
+		flex: none;
+		padding: 0 5px;
+		border: none;
+		border-radius: 4px;
+		background: none;
+		color: var(--text-subtle);
+		font-size: 15px;
+		line-height: 1.2;
+		cursor: pointer;
+		opacity: 0;
+	}
+	.rl.task-rl:hover .task-drop,
+	.task-drop:focus-visible {
+		opacity: 1;
+	}
+	.task-drop:hover {
+		color: var(--tint-orange-fg);
+		background: var(--primary-soft);
+	}
+	@media (hover: none) {
+		.task-drop {
+			opacity: 1;
+		}
+	}
+	/* Task excluded from the task-type means (not scored by every model). */
+	.excluded-tag {
+		color: var(--tint-amber-fg);
+	}
+	/* Non-zero-shot marker on an individual score. */
+	.trained-flag {
+		margin-left: 3px;
+		font-size: 10px;
+		color: var(--tint-amber-fg);
+		vertical-align: super;
+	}
 	.section-head-row {
 		display: flex;
 		align-items: center;
@@ -1475,6 +1781,11 @@
 	}
 	/* Flag non-zero-shot coverage so uneven comparisons stand out. */
 	.zs-sub.warn {
+		color: var(--tint-amber-fg);
+	}
+
+	/* Task-type coverage caveat — same amber weight as the zero-shot note. */
+	.warn-sub {
 		color: var(--tint-amber-fg);
 	}
 
