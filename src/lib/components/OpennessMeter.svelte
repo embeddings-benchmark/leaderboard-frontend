@@ -13,8 +13,13 @@
 		breakdown?: boolean;
 		// Dense variant for table cells: smaller pips, no score label.
 		compact?: boolean;
+		// Override whether the "N/6" label shows. Defaults to on for the full
+		// variant and off for `compact` (table cells get the score from the
+		// hover breakdown instead) — the /models card wants dense pips *and*
+		// the number, since it has no hover affordance.
+		showScore?: boolean;
 	}
-	let { model, breakdown = false, compact = false }: Props = $props();
+	let { model, breakdown = false, compact = false, showScore }: Props = $props();
 
 	let score = $derived(opennessScore(model));
 	let dims = $derived(opennessDimensions(model));
@@ -24,6 +29,7 @@
 	// dict is missing we fall back to filling the first `score` pips and drop the
 	// (unknowable) breakdown entirely.
 	let hasDims = $derived(Object.keys(model.openness ?? {}).length > 0);
+	let scoreVisible = $derived(showScore ?? !compact);
 	let pips = $derived(
 		hasDims
 			? dims.map((d) => ({ label: d.label, on: d.open }))
@@ -39,7 +45,7 @@
 					<span class="pip" class:on={p.on}></span>
 				{/each}
 			</div>
-			{#if !compact}
+			{#if scoreVisible}
 				<span class="score"><strong>{score}</strong>/{OPENNESS_MAX}</span>
 			{/if}
 		</div>

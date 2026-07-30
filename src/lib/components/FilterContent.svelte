@@ -361,7 +361,6 @@
 		     users to select everything expecting to clear the filter. -->
 		<FilterFacet
 			label="Openness"
-			hint="Requires every checked dimension."
 			count={filters.opennessReqs.size > 0
 				? `${filters.opennessReqs.size}/${OPENNESS_REQ_IDS.length}`
 				: undefined}

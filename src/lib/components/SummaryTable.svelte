@@ -1,8 +1,12 @@
 <script lang="ts" module>
+	import { COLUMN_INFO } from '$lib/column-info';
+
 	// Tooltip copy is invariant across instances and benchmarks. Promoted
 	// to a module-scope const so each SummaryTable mount doesn't re-build
-	// the same object literal.
+	// the same object literal. Columns shared with ModelsTable (/models)
+	// take their copy from `COLUMN_INFO` so the two can't drift.
 	const INFO = {
+		...COLUMN_INFO,
 		rank: {
 			title: 'Rank (Borda)',
 			text: 'Rank is computed via the Borda count: each task votes for models by their relative performance. The model with the most votes across tasks gets the highest rank. Borda tends to reward consistent breadth over single peaks.'
@@ -14,22 +18,6 @@
 		zeroShot: {
 			title: 'Zero-shot %',
 			text: "What portion of the benchmark a model has not been trained on. 100% means fully out-of-distribution; 50% means it was fine-tuned on half the tasks. '⚠️ NA' means we don't know."
-		},
-		totalParams: {
-			title: 'Total parameters',
-			text: 'Total parameter count including embedding weights. Higher means more CPU/GPU memory required.'
-		},
-		openness: {
-			title: 'Openness',
-			text: 'How open the model is, scored 1–6 across open weights, open license, open training code, open training data, a paper, and a model card. Hover a cell for the full per-dimension breakdown.'
-		},
-		embedding: {
-			title: 'Embedding dimension',
-			text: 'The size of the vector each model produces. Higher dimensions cost more storage per embedding and more compute downstream.'
-		},
-		maxTokens: {
-			title: 'Max tokens',
-			text: 'How many tokens (word-pieces) the model can process in a single input. Larger is usually better for long-context tasks.'
 		},
 		meanTask: {
 			title: 'Mean (Task)',
@@ -933,35 +921,15 @@
 		color: var(--text-subtle);
 		font-weight: 500;
 	}
-	/* Openness column: center the compact pip meter; the anchor gets a hover
-	   cursor to signal the breakdown tooltip. */
+	/* `.openness-cell` / `.openness-trigger` live in
+	   src/lib/styles/leaderboard-table.css — shared with ModelsTable. Only the
+	   centring is local: this table centres the column, /models left-aligns it
+	   alongside its other attribute columns. */
 	.openness-head .sort-btn {
 		justify-content: center;
 	}
 	.openness-cell {
 		text-align: center;
-		white-space: nowrap;
-	}
-	.openness-cell.has-openness {
-		cursor: help;
-	}
-	/* Center the compact meter within the cell. */
-	.openness-cell :global(.openness) {
-		display: inline-flex;
-	}
-	/* Keyboard tab stop for the breakdown tip — visually just the meter. */
-	.openness-trigger {
-		display: inline-flex;
-		padding: 2px;
-		border: none;
-		border-radius: 4px;
-		background: none;
-		cursor: inherit;
-		color: inherit;
-	}
-	.openness-trigger:focus-visible {
-		outline: 2px solid var(--primary);
-		outline-offset: 1px;
 	}
 	.sort-btn:hover {
 		color: var(--text);
@@ -988,13 +956,8 @@
 		color: var(--primary-strong);
 		opacity: 1;
 	}
-	.unit {
-		margin-left: 2px;
-		font-size: 0.78em;
-		font-weight: 500;
-		color: var(--text-subtle);
-		letter-spacing: 0.02em;
-	}
+	/* `.unit` lives in src/lib/styles/leaderboard-table.css — shared with
+	   ModelsTable so the two tables format params identically. */
 	/* Pin button + rank pill share the leftmost column. */
 	.rank-cell {
 		display: flex;

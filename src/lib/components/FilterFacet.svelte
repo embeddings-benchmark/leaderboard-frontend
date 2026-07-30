@@ -10,9 +10,6 @@
 		allSelected: boolean;
 		// Optional fraction shown next to the label, e.g. `5/10`.
 		count?: string;
-		// Short line under the head explaining non-default semantics. Used by
-		// the Openness facet, whose checks are ANDed (see `toggleAllLabel`).
-		hint?: string;
 		// Overrides the head button's label. The default "All"/"Clear" flip
 		// encodes OR-facet semantics where all-selected == no filter; a facet
 		// with AND semantics must not borrow that affordance.
@@ -49,7 +46,6 @@
 		onToggleAll,
 		allSelected,
 		count,
-		hint,
 		toggleAllLabel,
 		toggleAllDisabled = false,
 		pillClass,
@@ -76,9 +72,6 @@
 			{toggleAllLabel ?? (allSelected ? 'Clear' : 'All')}
 		</button>
 	</div>
-	{#if hint}
-		<p class="facet-hint">{hint}</p>
-	{/if}
 	{#if searchPlaceholder !== undefined}
 		<input
 			type="search"

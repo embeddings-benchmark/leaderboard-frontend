@@ -267,6 +267,23 @@ function clamp(n: number, lo = 0, hi = 1): number {
 	return Math.max(lo, Math.min(hi, n));
 }
 
+// Openness derived from traits the fixture already carries, so the summary
+// table's Openness column has a realistic spread without hand-maintaining a
+// dict on all 13 models. Proprietary models can still have a paper and a model
+// card; open-weights models additionally earn weights + license, and training
+// code / data on a deterministic alternation so scores aren't all identical.
+function mockOpenness(model: MockModel, idx: number): Record<string, boolean> {
+	const open = model.openWeights;
+	return {
+		'open weights': open,
+		'open license': open,
+		'open training code': open && idx % 3 === 0,
+		'open training data': open && idx % 4 === 0,
+		paper: idx % 2 === 0,
+		'model card': true
+	};
+}
+
 function buildRow(
 	model: MockModel,
 	taskTypes: string[],
@@ -274,6 +291,7 @@ function buildRow(
 	benchmarkSeed: number,
 	idx: number
 ): SummaryRow {
+	const openness = mockOpenness(model, idx);
 	const meta: ModelMeta = {
 		name: model.name,
 		displayName: model.displayName,
@@ -288,7 +306,9 @@ function buildRow(
 		modelType: model.modelType,
 		instructionTuned: model.instructionTuned,
 		openWeights: model.openWeights,
-		sentenceTransformersCompatible: model.sentenceTransformersCompatible
+		sentenceTransformersCompatible: model.sentenceTransformersCompatible,
+		openness,
+		opennessScore: Object.values(openness).filter(Boolean).length
 	};
 
 	const scoresByTaskType: Record<string, number> = {};

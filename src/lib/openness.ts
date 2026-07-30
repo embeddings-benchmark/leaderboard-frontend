@@ -9,8 +9,10 @@ import type { ModelMeta } from './types';
 // - `key`  matches the API dict keys exactly.
 // - `label` display text.
 //
-// `model card` is always satisfied (documenting one is required to add a
-// model), so the practical score range is 1–6.
+// Scores run 0–6. In practice `model card` is always satisfied (documenting
+// one is required to add a model), so most models land in 1–6 — but the API
+// can ship an explicit `opennessScore` of 0, so nothing downstream may assume
+// a floor of 1.
 export const OPENNESS_DIMENSIONS = [
 	{
 		id: 'weights',
@@ -66,10 +68,15 @@ export function opennessDimensions(m: ModelMeta): { label: string; open: boolean
 // every key in the dict — `openness` is a `Record<string, boolean>`, so an
 // extra/legacy key from the API would otherwise push the score out of step with
 // the 6-row breakdown `opennessDimensions` renders (e.g. "7/6").
+//
+// For the same reason the fallback requires at least one *canonical* key to be
+// present: a dict of nothing but unrecognized keys carries no openness data we
+// can read, and scoring it 0 would render as "fully closed" rather than the
+// "unknown" it actually is.
 export function opennessScore(m: ModelMeta): number | null {
 	if (typeof m.opennessScore === 'number') return m.opennessScore;
 	const o = m.openness;
-	if (o && Object.keys(o).length > 0) {
+	if (o && OPENNESS_DIMENSIONS.some((d) => d.key in o)) {
 		return OPENNESS_DIMENSIONS.reduce((n, d) => n + (o[d.key] === true ? 1 : 0), 0);
 	}
 	return null;

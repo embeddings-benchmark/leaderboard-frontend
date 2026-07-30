@@ -40,6 +40,19 @@ describe('opennessScore', () => {
 		expect(opennessScore(model({ openness: {} }))).toBeNull();
 	});
 
+	// A dict of nothing but unrecognized keys is unreadable, not "all closed" —
+	// scoring it 0 would render as fully closed instead of unknown.
+	it('returns null when the dict has no canonical keys at all', () => {
+		expect(opennessScore(model({ openness: { 'open something else': true } }))).toBeNull();
+	});
+
+	// Present-but-false still counts as data: the model is genuinely closed on
+	// every dimension we can read, which is a 0 rather than an unknown.
+	it('scores a dict of all-false canonical keys as 0', () => {
+		const closed = Object.fromEntries(OPENNESS_DIMENSIONS.map((d) => [d.key, false]));
+		expect(opennessScore(model({ openness: closed }))).toBe(0);
+	});
+
 	it('honors an explicit score of 0 even with an empty dict', () => {
 		expect(opennessScore(model({ opennessScore: 0 }))).toBe(0);
 	});

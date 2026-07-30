@@ -334,7 +334,12 @@
 		return list;
 	});
 
-	// Drop tasks from the pick list once the benchmark supplying them is removed.
+	// Drop tasks from the pick list — and from the exclusion list — once the
+	// benchmark supplying them is removed. Exclusions have to be pruned on the
+	// same beat as picks: an out-of-scope `?xtask=` entry is invisible (the
+	// Restore button keys off `activeExclusions`) but still bites the moment a
+	// benchmark carrying that task comes back, silently hiding a row the user
+	// has no way to connect to a drop they made benchmarks ago.
 	$effect(() => {
 		// Skip until a summary has loaded — otherwise a URL-hydrated `?task=`
 		// gets cleared during the load gap before `availableTasks` populates.
@@ -342,6 +347,8 @@
 		const valid = new Set(availableTasks.map((t) => t.name));
 		const next = pickedTasks.filter((n) => valid.has(n));
 		if (next.length !== pickedTasks.length) pickedTasks = next;
+		const nextX = excludedTasks.filter((n) => valid.has(n));
+		if (nextX.length !== excludedTasks.length) excludedTasks = nextX;
 	});
 
 	// Task selection *follows* the benchmark selection by default: an empty

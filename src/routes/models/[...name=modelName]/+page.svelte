@@ -363,7 +363,7 @@
 					>
 				</div>
 				<div class="kpi">
-					<span class="kpi-label">Active params</span>
+					<span class="kpi-label">Active parameters</span>
 					<span class="kpi-value"
 						>{fmtParamsValue(model.activeParamsB)}{#if fmtParamsUnit(model.activeParamsB)}<span
 								class="unit">{fmtParamsUnit(model.activeParamsB)}</span

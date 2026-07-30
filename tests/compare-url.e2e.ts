@@ -162,8 +162,8 @@ test.describe('/compare model picker', () => {
 		await page.getByRole('button', { name: /^Clear$/ }).click();
 		await expect(modelChips(page)).toHaveCount(0);
 		await expect(page.locator('section.empty')).toContainText(/Pick at least one model/);
-		await expect(page.locator('section.grid')).toHaveCount(0);
-		await expect(page.locator('section.radar-card')).toHaveCount(0);
+		await expect(page.locator('.cmp-compare')).toHaveCount(0);
+		await expect(page.locator('.figure-card')).toHaveCount(0);
 		await expect.poll(async () => (await currentUrl(page)).searchParams.has('model')).toBe(false);
 	});
 

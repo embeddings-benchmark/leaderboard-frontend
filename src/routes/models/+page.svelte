@@ -3,10 +3,11 @@
 	import { resolve } from '$app/paths';
 	import { safeIdle } from '$lib/idle';
 	import { filters, MODEL_MODALITIES } from '$lib/stores/filters.svelte';
-	import { opennessMeets } from '$lib/openness';
+	import { opennessMeets, opennessScore } from '$lib/openness';
 	import FilterSidebar from '$lib/components/FilterSidebar.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import ModelsTable from '$lib/components/ModelsTable.svelte';
+	import OpennessMeter from '$lib/components/OpennessMeter.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
@@ -68,7 +69,8 @@
 		{ id: 'params', label: 'Parameters' },
 		{ id: 'embedDim', label: 'Embed dim' },
 		{ id: 'maxTokens', label: 'Max tokens' },
-		{ id: 'released', label: 'Release date' }
+		{ id: 'released', label: 'Release date' },
+		{ id: 'openness', label: 'Openness' }
 	] as const;
 	type SortId = (typeof SORTS)[number]['id'];
 	type SortDir = 'asc' | 'desc';
@@ -81,7 +83,8 @@
 		params: 'desc',
 		embedDim: 'desc',
 		maxTokens: 'desc',
-		released: 'desc'
+		released: 'desc',
+		openness: 'desc'
 	};
 	// Defaults seed first; onMount below syncs from URL to avoid hydration mismatch.
 	const SORT_IDS = new Set(SORTS.map((s) => s.id));
@@ -241,6 +244,10 @@
 				cmp = (a.maxTokens ?? -1) - (b.maxTokens ?? -1);
 			} else if (sort === 'released') {
 				cmp = COLLATOR.compare(a.releaseDate ?? '', b.releaseDate ?? '');
+			} else if (sort === 'openness') {
+				// `null` (no openness data) sorts below a genuine 0 — same
+				// missing-value convention as the numeric columns above.
+				cmp = (opennessScore(a) ?? -1) - (opennessScore(b) ?? -1);
 			} else {
 				cmp = 0;
 			}
@@ -364,6 +371,9 @@
 								<span class="title">
 									<span class="org">{m.org}</span><span class="sep">/</span>{m.displayName}
 								</span>
+								{#if m.releaseDate}
+									<span class="title-date">Released {m.releaseDate}</span>
+								{/if}
 							</div>
 							<span class="type-chip" data-type={m.modelType}>
 								<span>{m.modelType}</span>
@@ -371,7 +381,7 @@
 						</div>
 						<dl class="card-stats">
 							<div>
-								<dt>Params</dt>
+								<dt>Parameters</dt>
 								<dd>{fmtParamsCompact(m.totalParamsB)}</dd>
 							</div>
 							<div>
@@ -383,8 +393,14 @@
 								<dd>{fmtInt(m.maxTokens)}</dd>
 							</div>
 							<div>
-								<dt>Released</dt>
-								<dd>{m.releaseDate ?? '—'}</dd>
+								<dt>Openness</dt>
+								<dd class="openness-stat">
+									{#if opennessScore(m) !== null}
+										<OpennessMeter model={m} compact showScore />
+									{:else}
+										—
+									{/if}
+								</dd>
 							</div>
 						</dl>
 						<div class="badges">
@@ -485,6 +501,32 @@
 		color: var(--border-strong);
 		margin: 0 1px;
 		font-weight: 400;
+	}
+	/* Release date as a byline rather than a stat — it identifies the model
+	   more than it specs it, and moving it here frees its grid slot for
+	   Openness while keeping `.card-stats` a tidy 2×2. */
+	.title-date {
+		display: block;
+		margin-top: 2px;
+		font-size: 11px;
+		color: var(--text-subtle);
+		font-variant-numeric: tabular-nums;
+	}
+	/* The compact meter carries its own score label here (cards have no hover
+	   breakdown), so pull the label down to match sibling `dd` typography. */
+	.openness-stat {
+		display: flex;
+		align-items: center;
+	}
+	.openness-stat :global(.score) {
+		font-size: 13px;
+	}
+	.openness-stat :global(.score strong) {
+		font-size: 14px;
+		font-weight: 700;
+	}
+	.openness-stat :global(.meter) {
+		gap: 7px;
 	}
 	@media (max-width: 640px) {
 		.card-stats {
