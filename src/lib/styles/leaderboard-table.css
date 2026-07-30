@@ -511,7 +511,9 @@
 .openness-cell.has-openness {
 	cursor: help;
 }
-/* Centre the compact meter within the cell. */
+/* Shrink the meter to its content so the cell's own text-align decides where
+   it sits — SummaryTable centres the column, /models leaves it left-aligned
+   with its other attribute columns. */
 .openness-cell .openness {
 	display: inline-flex;
 }
