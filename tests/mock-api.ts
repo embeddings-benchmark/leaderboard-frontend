@@ -63,13 +63,25 @@ const MOCK_MODELS: ModelMeta[] = [
 		totalParamsB: 0.1,
 		embeddingDim: 384,
 		maxTokens: 512,
+		releaseDate: '2025-01-15',
 		modelType: 'dense',
 		instructionTuned: false,
 		openWeights: true,
 		sentenceTransformersCompatible: true,
 		modalities: ['text'],
 		// Multi-language universe for /models language URL-roundtrip test.
-		languages: ['English', 'Spanish', 'French']
+		languages: ['English', 'Spanish', 'French'],
+		// Fully open — the high end of the openness column, and the only model
+		// that survives every openness filter requirement at once (AND semantics).
+		openness: {
+			'open weights': true,
+			'open license': true,
+			'open training code': true,
+			'open training data': true,
+			paper: true,
+			'model card': true
+		},
+		opennessScore: 6
 	},
 	{
 		// Distinct model type so /models model-type filter has a multi-option universe.
@@ -81,10 +93,43 @@ const MOCK_MODELS: ModelMeta[] = [
 		totalParamsB: 0.05,
 		embeddingDim: 0,
 		maxTokens: 512,
+		releaseDate: '2025-02-20',
 		modelType: 'cross-encoder',
 		instructionTuned: false,
 		openWeights: false,
 		sentenceTransformersCompatible: false,
+		modalities: ['text'],
+		languages: ['English'],
+		// Partially open — gives the column a second distinct score to sort by,
+		// and gets filtered out by any requirement it doesn't satisfy.
+		openness: {
+			'open weights': false,
+			'open license': false,
+			'open training code': false,
+			'open training data': false,
+			paper: true,
+			'model card': true
+		},
+		opennessScore: 2
+	},
+	{
+		// No `openness` / `opennessScore` at all — exercises the null path: the
+		// column stays visible (other rows have data) but this cell renders
+		// empty, and every openness requirement filters it out. Mirrors the
+		// first model's type/languages so no filter universe changes.
+		name: 'mock-org/mock-unknown-openness',
+		displayName: 'mock-unknown-openness',
+		org: 'mock-org',
+		zeroShotPct: 100,
+		activeParamsB: 0.2,
+		totalParamsB: 0.2,
+		embeddingDim: 384,
+		maxTokens: 512,
+		releaseDate: '2025-03-10',
+		modelType: 'dense',
+		instructionTuned: false,
+		openWeights: true,
+		sentenceTransformersCompatible: true,
 		modalities: ['text'],
 		languages: ['English']
 	}

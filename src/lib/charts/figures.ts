@@ -50,7 +50,7 @@ export function performanceSizePlot(
 		mode: 'markers',
 		type: 'scatter',
 		hovertemplate:
-			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active params: %{customdata[2]}<br>' +
+			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active parameters: %{customdata[2]}<br>' +
 			'Max tokens: %{customdata[0]}<br>Embedding dim: %{customdata[1]}<br>' +
 			'Rank: %{customdata[3]}<extra></extra>',
 		customdata,

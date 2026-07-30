@@ -163,6 +163,14 @@ body:has(.sidebar:not(.collapsed)) {
 .link-btn:hover {
 	text-decoration: underline;
 }
+.link-btn:disabled {
+	color: var(--text-subtle);
+	cursor: default;
+	opacity: 0.6;
+}
+.link-btn:disabled:hover {
+	text-decoration: none;
+}
 .pills {
 	display: flex;
 	flex-wrap: wrap;

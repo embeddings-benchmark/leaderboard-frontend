@@ -413,6 +413,15 @@
 	position: absolute;
 	inset: 0;
 }
+/* …except over cells with their own interactive content: that overlay would
+   otherwise swallow the hover and the tab-stop button. Lift such cells above
+   it so the Openness breakdown stays reachable; the rest of the row still
+   navigates. Add to this selector list if another interactive cell lands in
+   an overview table. */
+.tbl-overview .openness-cell {
+	position: relative;
+	z-index: 1;
+}
 .tbl-overview .row-link-icon {
 	flex-direction: row;
 	align-items: flex-start;
@@ -491,4 +500,43 @@
 	outline: 2px solid var(--primary);
 	outline-offset: 1px;
 	border-radius: 3px;
+}
+/* Openness column — shared by SummaryTable (/benchmark/[name]) and
+   ModelsTable (/models). Both render the same compact pip meter wrapped in a
+   button so the breakdown tooltip has a keyboard tab stop. Header rules stay
+   local to each table: the two use different sort-button markup. */
+.openness-cell {
+	white-space: nowrap;
+}
+.openness-cell.has-openness {
+	cursor: help;
+}
+/* Centre the compact meter within the cell. */
+.openness-cell .openness {
+	display: inline-flex;
+}
+/* Keyboard tab stop for the breakdown tip — visually just the meter. */
+.openness-trigger {
+	display: inline-flex;
+	padding: 2px;
+	border: none;
+	border-radius: 4px;
+	background: none;
+	cursor: inherit;
+	color: inherit;
+}
+.openness-trigger:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 1px;
+}
+/* Param unit (B/M) — subtle trailing unit so the number reads first. Shared by
+   SummaryTable (/benchmark/[name]) and ModelsTable (/models); scoped to `.tbl`
+   so it can't leak onto the `.unit` spans in /compare and the model detail
+   hero, which set their own sizing. */
+.tbl .unit {
+	margin-left: 2px;
+	font-size: 0.78em;
+	font-weight: 500;
+	color: var(--text-subtle);
+	letter-spacing: 0.02em;
 }

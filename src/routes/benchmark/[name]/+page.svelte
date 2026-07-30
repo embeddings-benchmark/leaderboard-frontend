@@ -27,6 +27,7 @@
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import { apiUrl, isIconUrl, sortModalities } from '$lib/format';
+	import { opennessScore, opennessDimensions, OPENNESS_DIMENSIONS } from '$lib/openness';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
@@ -242,30 +243,57 @@
 		const headers = [
 			'Rank',
 			'Model',
+			'Model Type',
+			'Open Weights',
+			'Instruction Tuned',
+			'ST Compatible',
+			'Modalities',
+			'License',
+			'Release Date',
+			'Memory (MB)',
 			'Zero-shot',
 			'Active Params (B)',
 			'Total Params (B)',
 			'Embedding Dim',
 			'Max Tokens',
+			'Openness Score',
+			...OPENNESS_DIMENSIONS.map((d) => `Openness: ${d.label}`),
 			...(showTask ? ['Mean (Task)'] : []),
 			...(showType ? ['Mean (TaskType)'] : []),
 			...(showPP ? ['Mean (Public)', 'Mean (Private)'] : []),
 			...(showTT ? s.taskTypes : [])
 		];
 		const pct = (v: number | null | undefined) => (v == null ? null : (v * 100).toFixed(2));
-		const rows: CsvCell[][] = s.rows.map((row) => [
-			row.rank,
-			row.model.name,
-			row.zeroShotPct === -1 ? 'NA' : row.zeroShotPct,
-			row.activeParamsB,
-			row.totalParamsB,
-			row.embeddingDim,
-			row.maxTokens,
-			...(showTask ? [pct(row.meanTask)] : []),
-			...(showType ? [pct(row.meanTaskType)] : []),
-			...(showPP ? [pct(meanOver(row, publicNames)), pct(meanOver(row, privateNames))] : []),
-			...(showTT ? s.taskTypes.map((tt) => pct(row.scoresByTaskType[tt])) : [])
-		]);
+		const bool = (v: boolean | null | undefined): string | null =>
+			v == null ? null : v ? 'true' : 'false';
+		const rows: CsvCell[][] = s.rows.map((row) => {
+			const m = row.model;
+			const oScore = opennessScore(m);
+			const oDims = opennessDimensions(m);
+			return [
+				row.rank,
+				m.name,
+				m.modelType,
+				bool(m.openWeights),
+				bool(m.instructionTuned),
+				bool(m.sentenceTransformersCompatible),
+				sortModalities(m.modalities).join('; ') || null,
+				m.license ?? null,
+				m.releaseDate ?? null,
+				m.memoryUsageMb ?? null,
+				row.zeroShotPct === -1 ? 'NA' : row.zeroShotPct,
+				row.activeParamsB,
+				row.totalParamsB,
+				row.embeddingDim,
+				row.maxTokens,
+				oScore,
+				...OPENNESS_DIMENSIONS.map((_, i) => (oScore === null ? null : bool(oDims[i].open))),
+				...(showTask ? [pct(row.meanTask)] : []),
+				...(showType ? [pct(row.meanTaskType)] : []),
+				...(showPP ? [pct(meanOver(row, publicNames)), pct(meanOver(row, privateNames))] : []),
+				...(showTT ? s.taskTypes.map((tt) => pct(row.scoresByTaskType[tt])) : [])
+			];
+		});
 		return { headers, rows };
 	}
 

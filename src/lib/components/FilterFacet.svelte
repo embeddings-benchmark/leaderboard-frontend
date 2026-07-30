@@ -10,6 +10,11 @@
 		allSelected: boolean;
 		// Optional fraction shown next to the label, e.g. `5/10`.
 		count?: string;
+		// Overrides the head button's label. The default "All"/"Clear" flip
+		// encodes OR-facet semantics where all-selected == no filter; a facet
+		// with AND semantics must not borrow that affordance.
+		toggleAllLabel?: string;
+		toggleAllDisabled?: boolean;
 		pillClass?: string;
 		// Per-pill data attributes, e.g. `(m) => ({ 'data-modality': m })`
 		// to drive the per-modality / per-stype tint CSS in app.css.
@@ -41,6 +46,8 @@
 		onToggleAll,
 		allSelected,
 		count,
+		toggleAllLabel,
+		toggleAllDisabled = false,
 		pillClass,
 		pillAttrs,
 		pillIcon,
@@ -61,8 +68,8 @@
 			{label}
 			{#if count}<span class="muted-inline">{count}</span>{/if}
 		</span>
-		<button type="button" class="link-btn" onclick={onToggleAll}>
-			{allSelected ? 'Clear' : 'All'}
+		<button type="button" class="link-btn" onclick={onToggleAll} disabled={toggleAllDisabled}>
+			{toggleAllLabel ?? (allSelected ? 'Clear' : 'All')}
 		</button>
 	</div>
 	{#if searchPlaceholder !== undefined}

@@ -162,8 +162,8 @@ test.describe('/compare model picker', () => {
 		await page.getByRole('button', { name: /^Clear$/ }).click();
 		await expect(modelChips(page)).toHaveCount(0);
 		await expect(page.locator('section.empty')).toContainText(/Pick at least one model/);
-		await expect(page.locator('section.grid')).toHaveCount(0);
-		await expect(page.locator('section.radar-card')).toHaveCount(0);
+		await expect(page.locator('.cmp-compare')).toHaveCount(0);
+		await expect(page.locator('.figure-card')).toHaveCount(0);
 		await expect.poll(async () => (await currentUrl(page)).searchParams.has('model')).toBe(false);
 	});
 
@@ -291,40 +291,38 @@ test.describe('/compare deep-link seeding', () => {
 	});
 });
 
-test.describe('/compare grid + radar rendering', () => {
-	test('score grid renders one bench-cell per (benchmark × model)', async ({ page }) => {
+test.describe('/compare figure + benchmark table rendering', () => {
+	test('task-type figure renders and the benchmark table shows the single benchmark', async ({
+		page
+	}) => {
+		// The "Performance by task type" figure is radar (≥3 task types) or a
+		// grouped bar — either way a Plotly <svg> paints. The benchmark section is
+		// a table: 1 benchmark × 2 models = 2 cells.
 		await page.goto('/compare');
 		await waitForCompareReady(page);
+		await expect(page.locator('.figure-card')).toBeVisible({ timeout: 15_000 });
+		await expect(page.locator('.figure-card svg').first()).toBeVisible({ timeout: 15_000 });
+		await expect(page.locator('.bench-rv')).toHaveCount(2);
+	});
 
+	test('benchmark table grows when a second benchmark is added', async ({ page }) => {
+		await page.goto('/compare');
+		await waitForCompareReady(page);
 		// 1 benchmark × 2 models.
-		await expect(page.locator('section.grid .bench-cell')).toHaveCount(2);
-		const scores = page.locator('section.grid .bench-cell .score');
-		await expect(scores).toHaveCount(2);
-		for (const text of await scores.allTextContents()) {
-			expect(text).toMatch(/^(\d+\.\d{2}|—)$/);
-		}
-	});
-
-	test('radar renders for single-benchmark + multi-model state', async ({ page }) => {
-		await page.goto('/compare');
-		await waitForCompareReady(page);
-		await expect(page.locator('section.radar-card')).toBeVisible({ timeout: 15_000 });
-		await expect(page.locator('section.radar-card svg').first()).toBeVisible({ timeout: 15_000 });
-	});
-
-	test('radar disappears when a second benchmark is added', async ({ page }) => {
-		// Radar is gated on `pickedBenchmarks.length === 1`.
-		await page.goto('/compare');
-		await waitForCompareReady(page);
-		await expect(page.locator('section.radar-card')).toBeVisible({ timeout: 15_000 });
+		await expect(page.locator('.bench-rv')).toHaveCount(2);
 
 		await page.getByRole('button', { name: /Add benchmark/ }).click();
 		const dialog = page.getByRole('dialog', { name: 'Pick benchmark' });
 		await dialog.getByRole('button', { name: /MTEB\(eng, v2\)/ }).click();
 		await page.keyboard.press('Escape');
 		await expect(benchChips(page)).toHaveCount(2);
-		await expect(page.locator('section.radar-card')).toHaveCount(0);
+
 		// 2 benches × 2 models.
-		await expect(page.locator('section.grid .bench-cell')).toHaveCount(4);
+		await expect(page.locator('.bench-rv')).toHaveCount(4);
+		const scores = page.locator('.bench-rv .score');
+		await expect(scores).toHaveCount(4);
+		for (const text of await scores.allTextContents()) {
+			expect(text).toMatch(/^(\d+\.\d{2}|—)$/);
+		}
 	});
 });

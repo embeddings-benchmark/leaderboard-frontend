@@ -1,8 +1,12 @@
 <script lang="ts" module>
+	import { COLUMN_INFO } from '$lib/column-info';
+
 	// Tooltip copy is invariant across instances and benchmarks. Promoted
 	// to a module-scope const so each SummaryTable mount doesn't re-build
-	// the same object literal.
+	// the same object literal. Columns shared with ModelsTable (/models)
+	// take their copy from `COLUMN_INFO` so the two can't drift.
 	const INFO = {
+		...COLUMN_INFO,
 		rank: {
 			title: 'Rank (Borda)',
 			text: 'Rank is computed via the Borda count: each task votes for models by their relative performance. The model with the most votes across tasks gets the highest rank. Borda tends to reward consistent breadth over single peaks.'
@@ -14,18 +18,6 @@
 		zeroShot: {
 			title: 'Zero-shot %',
 			text: "What portion of the benchmark a model has not been trained on. 100% means fully out-of-distribution; 50% means it was fine-tuned on half the tasks. '⚠️ NA' means we don't know."
-		},
-		totalParams: {
-			title: 'Total parameters',
-			text: 'Total parameter count including embedding weights. Higher means more CPU/GPU memory required.'
-		},
-		embedding: {
-			title: 'Embedding dimension',
-			text: 'The size of the vector each model produces. Higher dimensions cost more storage per embedding and more compute downstream.'
-		},
-		maxTokens: {
-			title: 'Max tokens',
-			text: 'How many tokens (word-pieces) the model can process in a single input. Larger is usually better for long-context tasks.'
 		},
 		meanTask: {
 			title: 'Mean (Task)',
@@ -147,6 +139,9 @@
 	import ModelCellName from './ModelCellName.svelte';
 	import PinButton from './PinButton.svelte';
 	import ModelHoverPortal from './ModelHoverPortal.svelte';
+	import OpennessMeter from './OpennessMeter.svelte';
+	import OpennessHoverPortal from './OpennessHoverPortal.svelte';
+	import { opennessScore } from '$lib/openness';
 	import HoverPortal from './HoverPortal.svelte';
 	import InfoDot from './InfoDot.svelte';
 	import MarkdownText from './MarkdownText.svelte';
@@ -167,6 +162,7 @@
 		| 'rank'
 		| 'model'
 		| 'totalParams'
+		| 'openness'
 		| 'zeroShot'
 		| 'meanTask'
 		| 'meanTaskType'
@@ -192,6 +188,10 @@
 				return { v: row.model.displayName.toLowerCase(), missing: false };
 			case 'totalParams':
 				return { v: row.totalParamsB ?? 0, missing: !row.totalParamsB };
+			case 'openness': {
+				const s = opennessScore(row.model);
+				return { v: s ?? 0, missing: s == null };
+			}
 			case 'zeroShot':
 				// -1 is the "unknown" sentinel; treat as missing so it sorts
 				// to the bottom regardless of direction.
@@ -367,6 +367,9 @@
 	// ViDoRe / RTEB don't track training-data overlap for their tasks, so
 	// every row would render as a misleading uniform 100% — hide the column.
 	let showZeroShot = $derived(summary.showZeroShot ?? true);
+	// Only surface the Openness column when at least one row carries openness
+	// data — avoids an all-empty column against an older API that omits it.
+	let showOpenness = $derived(summary.rows.some((r) => opennessScore(r.model) !== null));
 	// Recompute Mean (Public) / Mean (Private) from the model's per-task scores
 	// using the benchmark's `tasksMeta[].isPublic` flag. This way the means
 	// update live when the user filters the task set, instead of staying frozen
@@ -460,6 +463,11 @@
 		hide: () => void;
 	};
 	let modelTipPortal = $state<ModelTip | undefined>(undefined);
+	type OpennessTip = {
+		showFor: (t: HTMLElement, model: SummaryRow['model']) => void;
+		hide: () => void;
+	};
+	let opennessTipPortal = $state<OpennessTip | undefined>(undefined);
 
 	// Tooltip is `position: fixed; transform: translate(-50%, …)` so x is
 	// the desired *centre*. Clamp it to the viewport with a half-width
@@ -493,6 +501,15 @@
 	function hideModelTip(e?: PointerEvent | FocusEvent) {
 		if (e && !isBoundaryCross(e)) return;
 		modelTipPortal?.hide();
+	}
+
+	function showOpennessTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
+		if (e.type === 'pointerover' && !isBoundaryCross(e)) return;
+		opennessTipPortal?.showFor(e.currentTarget as HTMLElement, row.model);
+	}
+	function hideOpennessTip(e?: PointerEvent | FocusEvent) {
+		if (e && e.type === 'pointerout' && !isBoundaryCross(e)) return;
+		opennessTipPortal?.hide();
 	}
 
 	// Hiding is debounced so the user can cross the 6 px gap between the
@@ -574,13 +591,32 @@
 						aria-sort={sort.aria('totalParams')}
 					>
 						<button class="sort-btn tbl-num" onclick={() => sort.click('totalParams')}>
-							<span>Total Params</span>
+							<span>Parameters</span>
 							<InfoDot ariaLabel="What is {INFO.totalParams.title}?" />
 							<span class="ind" class:on={sort.key === 'totalParams'}
 								>{sort.icon('totalParams')}</span
 							>
 						</button>
 					</th>
+					{#if showOpenness}
+						<th
+							scope="col"
+							class="openness-head"
+							data-tip-title={INFO.openness.title}
+							data-tip={INFO.openness.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('openness')}
+						>
+							<button class="sort-btn" onclick={() => sort.click('openness')}>
+								<span>Openness</span>
+								<InfoDot ariaLabel="What is {INFO.openness.title}?" />
+								<span class="ind" class:on={sort.key === 'openness'}>{sort.icon('openness')}</span>
+							</button>
+						</th>
+					{/if}
 					{#if showZeroShot}
 						<th
 							scope="col"
@@ -729,6 +765,32 @@
 									class="unit">{fmtParamsUnit(row.totalParamsB)}</span
 								>{/if}
 						</td>
+						{#if showOpenness}
+							{@const hasOpenness = opennessScore(row.model) !== null}
+							<td
+								class="openness-cell"
+								class:has-openness={hasOpenness}
+								onpointerover={(e) => hasOpenness && showOpennessTip(e, row)}
+								onpointerout={hideOpennessTip}
+								onfocusin={(e) => hasOpenness && showOpennessTip(e, row)}
+								onfocusout={hideOpennessTip}
+							>
+								{#if hasOpenness}
+									<!-- A `<td>` isn't focusable, so the breakdown portal was pointer-only.
+									     A real button gives keyboard users a tab stop; the tip shows on
+									     focus (handled by the cell's `onfocusin`) and Escape dismisses it,
+									     per the ARIA tooltip pattern. The button's accessible name comes
+									     from the meter's own `role="img"` label. -->
+									<button
+										type="button"
+										class="openness-trigger"
+										onkeydown={(e) => e.key === 'Escape' && hideOpennessTip()}
+									>
+										<OpennessMeter model={row.model} compact />
+									</button>
+								{/if}
+							</td>
+						{/if}
 						{#if showZeroShot}
 							<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
 								{fmtZeroShot(row.zeroShotPct)}
@@ -803,6 +865,9 @@
 	     leaderboard tables (Summary / PerTask / PerLanguage) render
 	     byte-identical bubbles. -->
 	<ModelHoverPortal bind:this={modelTipPortal} />
+
+	<!-- Per-cell openness breakdown — same card-style meter + dimensions. -->
+	<OpennessHoverPortal bind:this={opennessTipPortal} />
 </div>
 
 <style>
@@ -856,6 +921,16 @@
 		color: var(--text-subtle);
 		font-weight: 500;
 	}
+	/* `.openness-cell` / `.openness-trigger` live in
+	   src/lib/styles/leaderboard-table.css — shared with ModelsTable. Only the
+	   centring is local: this table centres the column, /models left-aligns it
+	   alongside its other attribute columns. */
+	.openness-head .sort-btn {
+		justify-content: center;
+	}
+	.openness-cell {
+		text-align: center;
+	}
 	.sort-btn:hover {
 		color: var(--text);
 		background: color-mix(in srgb, var(--primary-soft) 60%, transparent);
@@ -881,13 +956,8 @@
 		color: var(--primary-strong);
 		opacity: 1;
 	}
-	.unit {
-		margin-left: 2px;
-		font-size: 0.78em;
-		font-weight: 500;
-		color: var(--text-subtle);
-		letter-spacing: 0.02em;
-	}
+	/* `.unit` lives in src/lib/styles/leaderboard-table.css — shared with
+	   ModelsTable so the two tables format params identically. */
 	/* Pin button + rank pill share the leftmost column. */
 	.rank-cell {
 		display: flex;
