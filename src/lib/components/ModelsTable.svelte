@@ -176,7 +176,7 @@
 					<td class="tbl-col-type">
 						<span class="tbl-type-chip" data-type={m.modelType}>{m.modelType}</span>
 					</td>
-					<td class="tbl-num param-cell" data-model-type={m.modelType}>
+					<td class="tbl-num tbl-col-num">
 						{fmtParamsValue(m.totalParamsB)}{#if fmtParamsUnit(m.totalParamsB)}<span class="unit"
 								>{fmtParamsUnit(m.totalParamsB)}</span
 							>{/if}
@@ -230,7 +230,8 @@
 	</table>
 </div>
 
-<!-- Column-header tip for Openness. -->
+<!-- Column-header tips — Parameters / Openness / Embed dim / Max tokens, each
+     supplying its copy via `data-tip` from the shared `COLUMN_INFO`. -->
 <HoverPortal visible={tipState.visible} title={tipState.title} x={tipState.x} y={tipState.y}>
 	{tipState.text}
 </HoverPortal>
