@@ -40,6 +40,28 @@ export function sortModalities<T extends string>(mods: readonly T[] | undefined)
 }
 
 /**
+ * Required modalities (e.g. a benchmark's or task's) the model can't encode.
+ * Empty when the model covers everything required, or when nothing is
+ * required. `modelModalities` defaults to `["text"]` when empty/missing —
+ * mirrors the backend's own default (see `ModelMeta.modalities` in types.ts)
+ * so a model with an omitted field isn't flagged against a text-only
+ * benchmark.
+ *
+ * Surfaces cases like a text-only model ranked on a benchmark whose corpus
+ * is image+text (e.g. ViDoRe) — the model can't have "seen" the images, so
+ * its score likely comes from an OCR/caption fallback rather than genuine
+ * multimodal understanding.
+ */
+export function missingModalities(
+	modelModalities: readonly string[] | undefined,
+	requiredModalities: readonly string[] | undefined
+): string[] {
+	if (!requiredModalities || requiredModalities.length === 0) return [];
+	const have = new Set(modelModalities?.length ? modelModalities : ['text']);
+	return requiredModalities.filter((m) => !have.has(m));
+}
+
+/**
  * Resolve an API-relative URL (one starting with "/") against PUBLIC_API_URL.
  * Absolute URLs and empty/null inputs pass through unchanged. Used so the
  * backend can serve cache-friendly proxy paths (e.g. /v1/icon/<name>) without

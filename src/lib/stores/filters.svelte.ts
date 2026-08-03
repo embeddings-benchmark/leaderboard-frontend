@@ -21,7 +21,8 @@ export const MODEL_TYPES: ModelType[] = [
 	'cross-encoder',
 	'late-interaction',
 	'sparse',
-	'router'
+	'router',
+	'hybrid'
 ];
 
 export const MODEL_MODALITIES = ['text', 'image', 'audio', 'video'] as const;
@@ -41,6 +42,9 @@ interface FiltersState {
 	availability: Availability;
 	instructions: InstructionMode;
 	sentenceTransformersOnly: boolean;
+	// Drops rows for experiment/ablation variants (`SummaryRow.experiments`
+	// set) — keeps only each model's canonical base-run row.
+	excludeExperiments: boolean;
 	// Slider bounds; fall back to global defaults when no benchmark is loaded.
 	availableMinModelSizeM: number;
 	availableMaxModelSizeM: number;
@@ -56,6 +60,7 @@ function defaultState(): FiltersState {
 		availability: 'both',
 		instructions: 'both',
 		sentenceTransformersOnly: false,
+		excludeExperiments: false,
 		availableMinModelSizeM: SIZE_MIN_M,
 		availableMaxModelSizeM: SIZE_MAX_M
 	};
@@ -245,6 +250,7 @@ function createFilters() {
 		if (zs === 'allow_all' || zs === 'remove_unknown' || zs === 'only_zero_shot')
 			state.zeroShot = zs;
 		if (p.get('st') === '1') state.sentenceTransformersOnly = true;
+		if (p.get('noexp') === '1') state.excludeExperiments = true;
 		// Set facets: seed delegates to FacetFilter, which intersects URL values
 		// with the current universe (silently drops unknowns from stale links).
 		for (const f of allFacets) f.seed();
@@ -270,7 +276,8 @@ function createFilters() {
 				avail: state.availability !== 'both' ? state.availability : null,
 				inst: state.instructions !== 'both' ? state.instructions : null,
 				zs: state.zeroShot !== 'allow_all' ? state.zeroShot : null,
-				st: state.sentenceTransformersOnly ? '1' : null
+				st: state.sentenceTransformersOnly ? '1' : null,
+				noexp: state.excludeExperiments ? '1' : null
 			};
 			for (const f of allFacets) patch[f.urlParam] = f.urlValue();
 			updateUrl(patch);
@@ -286,6 +293,7 @@ function createFilters() {
 		state.availability = 'both';
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
+		state.excludeExperiments = false;
 		for (const f of modelFacets) f.reset();
 		sync();
 	}
@@ -360,6 +368,13 @@ function createFilters() {
 		},
 		set sentenceTransformersOnly(v: boolean) {
 			state.sentenceTransformersOnly = v;
+			sync();
+		},
+		get excludeExperiments() {
+			return state.excludeExperiments;
+		},
+		set excludeExperiments(v: boolean) {
+			state.excludeExperiments = v;
 			sync();
 		},
 		// Each get returns the underlying SvelteSet — same identity-preserving
@@ -565,6 +580,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		filters.availability !== 'both' ||
 		filters.instructions !== 'both' ||
 		filters.sentenceTransformersOnly ||
+		filters.excludeExperiments ||
 		filters.modelTypes.size !== MODEL_TYPES.length ||
 		filters.modelModalities.size !== MODEL_MODALITIES.length ||
 		filters.sizeActive ||
@@ -579,6 +595,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
 
 		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
+
+		if (filters.excludeExperiments && row.experiments) return false;
 
 		if (!filters.modelTypes.has(m.modelType)) return false;
 

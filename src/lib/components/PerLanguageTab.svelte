@@ -37,14 +37,14 @@
 	}
 
 	type Tip = {
-		showFor: (t: HTMLElement, row: SummaryRow) => void;
+		showFor: (t: HTMLElement, row: SummaryRow, requiredModalities?: string[]) => void;
 		hide: () => void;
 	};
 	let tipPortal = $state<Tip | undefined>(undefined);
 
 	function onCellEnter(e: PointerEvent | FocusEvent, row: SummaryRow) {
 		if (!isBoundaryCross(e)) return;
-		tipPortal?.showFor(e.currentTarget as HTMLElement, row);
+		tipPortal?.showFor(e.currentTarget as HTMLElement, row, benchmarkModalities);
 	}
 	function onCellLeave(e?: PointerEvent | FocusEvent) {
 		if (e && !isBoundaryCross(e)) return;
@@ -61,8 +61,10 @@
 		// subscription so pin clicks elsewhere don't invalidate this
 		// derived.
 		active?: boolean;
+		// See `SummaryTable.svelte` — forwarded to `ModelCellName`.
+		benchmarkModalities?: string[];
 	}
-	let { summary, languageView, active = true }: Props = $props();
+	let { summary, languageView, active = true, benchmarkModalities = undefined }: Props = $props();
 
 	let LANGUAGES = $derived.by(() => {
 		if (languageView === 'all') {
@@ -220,7 +222,11 @@
 							onfocusin={(e) => onCellEnter(e, row)}
 							onfocusout={onCellLeave}
 						>
-							<ModelCellName model={row.model} experiments={row.experiments} />
+							<ModelCellName
+								model={row.model}
+								experiments={row.experiments}
+								requiredModalities={benchmarkModalities}
+							/>
 						</th>
 						<td
 							class="tbl-num {heat(mean, worstMean, bestMean)}"

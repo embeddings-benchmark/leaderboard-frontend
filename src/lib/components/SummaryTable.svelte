@@ -161,8 +161,12 @@
 		// (e.g. /benchmark/[name] only mounts the active tab when prerender
 		// is off) keep the live-pin behaviour.
 		active?: boolean;
+		// Benchmark's modalities — forwarded to `ModelCellName` so it can flag
+		// models that can't encode one of them (e.g. a text-only model on a
+		// benchmark whose corpus is image+text).
+		benchmarkModalities?: string[];
 	}
-	let { summary, active = true }: Props = $props();
+	let { summary, active = true, benchmarkModalities = undefined }: Props = $props();
 
 	type SortKey =
 		| 'rank'
@@ -461,7 +465,7 @@
 		y: 0
 	});
 	type ModelTip = {
-		showFor: (t: HTMLElement, row: SummaryRow) => void;
+		showFor: (t: HTMLElement, row: SummaryRow, requiredModalities?: string[]) => void;
 		hide: () => void;
 	};
 	let modelTipPortal = $state<ModelTip | undefined>(undefined);
@@ -493,7 +497,7 @@
 
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
 		if (!isBoundaryCross(e)) return;
-		modelTipPortal?.showFor(e.currentTarget as HTMLElement, row);
+		modelTipPortal?.showFor(e.currentTarget as HTMLElement, row, benchmarkModalities);
 	}
 	function hideModelTip(e?: PointerEvent | FocusEvent) {
 		if (e && !isBoundaryCross(e)) return;
@@ -728,7 +732,11 @@
 							onfocusin={(e) => showModelTip(e, row)}
 							onfocusout={hideModelTip}
 						>
-							<ModelCellName model={row.model} experiments={row.experiments} />
+							<ModelCellName
+								model={row.model}
+								experiments={row.experiments}
+								requiredModalities={benchmarkModalities}
+							/>
 						</th>
 						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
 							{fmtParamsValue(row.totalParamsB)}{#if fmtParamsUnit(row.totalParamsB)}<span

@@ -405,7 +405,11 @@
 					     stays scoped to the visible tab). -->
 					{#if visited.has('summary')}
 						<div class="tab-pane" class:active={activeTab === 'summary'}>
-							<SummaryTable summary={filteredSummary} active={activeTab === 'summary'} />
+							<SummaryTable
+								summary={filteredSummary}
+								active={activeTab === 'summary'}
+								benchmarkModalities={benchmark.modalities}
+							/>
 						</div>
 					{/if}
 					{#if visited.has('perf_size')}
@@ -425,7 +429,11 @@
 						     nearly instant. Only applied to table panes — Plotly tabs
 						     need a real-size container on mount. -->
 						<div class="tab-pane" class:active={activeTab === 'perf_task'} data-prepaint>
-							<PerTaskTab summary={filteredSummary} active={activeTab === 'perf_task'} />
+							<PerTaskTab
+								summary={filteredSummary}
+								active={activeTab === 'perf_task'}
+								benchmarkModalities={benchmark.modalities}
+							/>
 						</div>
 					{/if}
 					{#if visited.has('perf_language') && hasLanguageView && benchmark.languageView}
@@ -434,6 +442,7 @@
 								summary={filteredSummary}
 								languageView={benchmark.languageView}
 								active={activeTab === 'perf_language'}
+								benchmarkModalities={benchmark.modalities}
 								bind:this={perLanguageTab}
 							/>
 						</div>

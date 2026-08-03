@@ -107,6 +107,10 @@
 		// /models is benchmark-agnostic, so the per-benchmark "Zero-shot"
 		// segmented control doesn't apply there — hide it entirely.
 		hideZeroShot?: boolean;
+		// `SummaryRow.experiments` (ablation variants) only exist on benchmark
+		// leaderboard rows, not the /models catalogue — hide the "Hide
+		// experiment variants" toggle there.
+		hideExperiments?: boolean;
 		// Optional inline "Language" facet shown inside the model-filters
 		// block. Wired up only by /models, which holds the picked/available
 		// state locally (it's the only page that filters models by language
@@ -126,6 +130,7 @@
 		hideScope = false,
 		flatModel = false,
 		hideZeroShot = false,
+		hideExperiments = false,
 		languageOptions,
 		languagesPicked,
 		onToggleLanguage,
@@ -209,6 +214,13 @@
 				key: 'st',
 				label: 'ST compatible',
 				clear: () => (filters.sentenceTransformersOnly = false)
+			});
+		}
+		if (filters.excludeExperiments) {
+			list.push({
+				key: 'noexp',
+				label: 'No experiments',
+				clear: () => (filters.excludeExperiments = false)
 			});
 		}
 		// An active size filter also drops unsized (proprietary) models —
@@ -406,6 +418,16 @@
 				onChange={(v) => (filters.sentenceTransformersOnly = v)}
 			/>
 		</div>
+
+		{#if !hideExperiments}
+			<div class="group">
+				<Switch
+					label="Hide experiment variants"
+					checked={filters.excludeExperiments}
+					onChange={(v) => (filters.excludeExperiments = v)}
+				/>
+			</div>
+		{/if}
 
 		<FilterFacet
 			label="Model type"

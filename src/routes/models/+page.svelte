@@ -412,6 +412,7 @@
 		hideScope
 		flatModel
 		hideZeroShot
+		hideExperiments
 		languageOptions={LANGUAGES}
 		languagesPicked={languagesPicked as unknown as Set<string>}
 		onToggleLanguage={(l) => languageFacet.toggle(l)}
