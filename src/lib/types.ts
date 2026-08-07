@@ -139,12 +139,13 @@ export interface ModelMeta {
 	modelType: ModelType;
 	instructionTuned: boolean;
 	openWeights: boolean;
-	// Per-criterion openness checklist (e.g. "open weights", "open license",
-	// "open training code", "open training data", "paper", "model card") →
-	// whether this model satisfies it. `opennessScore` is the count of `true`
-	// entries, surfaced as a quick "N/M" badge without summing client-side.
-	openness?: Record<string, boolean>;
-	opennessScore?: number;
+	// Openness ("OSAI index"-style): a per-dimension breakdown of how open the
+	// model is, plus a 0–6 summary score. Both optional — older cached payloads
+	// or a not-yet-updated API omit them, and the UI must degrade gracefully.
+	// Dimension keys: "open weights", "open license", "open training code",
+	// "open training data", "paper", "model card" (model card is always true).
+	openness?: Record<string, boolean> | null;
+	opennessScore?: number | null;
 	sentenceTransformersCompatible: boolean;
 	// Modalities the model can encode (e.g. ["text"], ["text", "image"]).
 	// Defaults to ["text"] when the upstream ModelMeta omits the field.

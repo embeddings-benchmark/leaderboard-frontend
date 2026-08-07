@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # PostToolUse hook: when an Edit/Write/MultiEdit on a web file (html/css/js/
-# ts/svelte/…) introduces content referencing modern web APIs or
+# ts/svelte/…) newly introduces content referencing modern web APIs or
 # accessibility features, suggest the /modern-web-guidance:modern-web-guidance
-# skill. Pattern list mirrors the trigger topics in the skill's own
-# description — see the system prompt entry.
+# skill. Diffs old vs new content so edits to unrelated code in a file
+# that already mentions, e.g., aria-label as ambient context don't fire.
 set -u
 
 payload=$(cat)
@@ -15,13 +15,20 @@ case "${f##*.}" in
 	*) exit 0 ;;
 esac
 
-# Pull whatever the tool wrote. Edit ⇒ new_string, Write ⇒ content,
-# MultiEdit ⇒ concatenated edits[].new_string.
+# Pull whatever the tool wrote and (where applicable) replaced.
+# Edit ⇒ {old,new}_string · Write ⇒ content (no old) · MultiEdit ⇒
+# concatenated edits[].{old,new}_string.
 new_content=$(jq -r '
 	if .tool_input.new_string then .tool_input.new_string
 	elif .tool_input.content then .tool_input.content
 	elif .tool_input.edits then ([.tool_input.edits[].new_string] | join("\n"))
 	else empty
+	end
+' <<<"$payload")
+old_content=$(jq -r '
+	if .tool_input.old_string then .tool_input.old_string
+	elif .tool_input.edits then ([.tool_input.edits[].old_string] | join("\n"))
+	else ""
 	end
 ' <<<"$payload")
 [ -z "$new_content" ] && exit 0
@@ -36,9 +43,15 @@ new_content=$(jq -r '
 #  * Accessibility: aria-*, role=, tabindex, prefers-reduced-motion, prefers-color-scheme
 patterns='backdrop-filter|container-type|@container|:has\(|anchor-name|anchor-position|view-transition|content-visibility|:user-valid|:user-invalid|:focus-visible|popover|<dialog|showModal|\binert\b|prefers-reduced-motion|prefers-color-scheme|\bcolor-scheme\b|aria-[a-z-]+|role=|tabindex=|IntersectionObserver|requestIdleCallback|ResizeObserver|navigator\.share|showOpenFilePicker|navigator\.usb|WebAssembly|WebTransport|fetchpriority|scroll-timeline|view-timeline'
 
-grep -qE "$patterns" <<<"$new_content" || exit 0
+# Compute the diff of pattern tokens: only tokens that appear in the new
+# content but not in the old qualify as "introduced by this edit".
+new_tokens=$(grep -oE "$patterns" <<<"$new_content" | sort -u)
+[ -z "$new_tokens" ] && exit 0
+old_tokens=$(grep -oE "$patterns" <<<"$old_content" | sort -u)
+introduced=$(comm -23 <(echo "$new_tokens") <(echo "$old_tokens"))
+[ -z "$introduced" ] && exit 0
 
-topics=$(grep -oE "$patterns" <<<"$new_content" | sort -u | head -6 | paste -sd ',' - | sed 's/,/, /g')
+topics=$(echo "$introduced" | head -6 | paste -sd ',' - | sed 's/,/, /g')
 jq -nc --arg f "$f" --arg topics "$topics" '{
 	hookSpecificOutput: {
 		hookEventName: "PostToolUse",

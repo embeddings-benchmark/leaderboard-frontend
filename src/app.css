@@ -308,8 +308,8 @@ code {
 	--category-tint-fg: var(--tint-orange-fg);
 }
 :where([data-type='late-interaction']) {
-	--category-tint: var(--tint-green);
-	--category-tint-fg: var(--tint-green-fg);
+	--category-tint: var(--tint-teal);
+	--category-tint-fg: var(--tint-teal-fg);
 }
 :where([data-type='sparse']) {
 	--category-tint: var(--tint-amber);

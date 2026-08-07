@@ -20,10 +20,14 @@ export function performanceSizePlot(
 ): PlotSpec {
 	const rows = summary.rows.filter(
 		(r): r is BenchmarkSummary['rows'][number] & { meanTask: number; activeParamsB: number } =>
-			r.activeParamsB != null && r.activeParamsB > 0 && r.meanTask != null
+			r.activeParamsB != null && r.meanTask != null
 	);
 
-	const x = rows.map((r) => r.activeParamsB * 1e9);
+	// Static/model2vec models are entirely a lookup table, so their reported
+	// active-parameter count is legitimately 0 (n_parameters -
+	// n_embedding_parameters). A log-scale axis can't place a point at 0, so
+	// clamp to 1 param — they still show up, pinned to the left edge.
+	const x = rows.map((r) => Math.max(r.activeParamsB * 1e9, 1));
 	const y = rows.map((r) => r.meanTask * 100);
 	// `embeddingDim` / `maxTokens` are declared `number` on the TS side but
 	// the backend returns `null` for models whose metadata doesn't pin them
@@ -33,10 +37,10 @@ export function performanceSizePlot(
 	const colors = rows.map((r) => Math.log10(Math.max(r.maxTokens ?? 1, 1)));
 	const text = rows.map((r) => r.model.displayName);
 	const isPinned = rows.map((r) => pinned.has(r.model.name));
-	const customdata = rows.map((r) => [
+	const customdata = rows.map((r, i) => [
 		r.maxTokens != null ? r.maxTokens.toLocaleString() : '—',
 		r.embeddingDim != null ? r.embeddingDim.toLocaleString() : '—',
-		(r.activeParamsB * 1e9).toLocaleString(),
+		x[i].toLocaleString(),
 		r.rank
 	]);
 
@@ -50,7 +54,7 @@ export function performanceSizePlot(
 		mode: 'markers',
 		type: 'scatter',
 		hovertemplate:
-			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active params: %{customdata[2]}<br>' +
+			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active parameters: %{customdata[2]}<br>' +
 			'Max tokens: %{customdata[0]}<br>Embedding dim: %{customdata[1]}<br>' +
 			'Rank: %{customdata[3]}<extra></extra>',
 		customdata,

@@ -54,6 +54,7 @@
 										height="24"
 										loading="lazy"
 										decoding="async"
+										crossorigin="anonymous"
 									/>
 								{:else}
 									<span class="icon-tile icon-tile-text row-icon" aria-hidden="true">{b.icon}</span>

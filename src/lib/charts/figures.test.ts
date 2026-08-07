@@ -61,14 +61,26 @@ function summary(rows: SummaryRow[], taskTypes: string[] = []): BenchmarkSummary
 }
 
 describe('performanceSizePlot', () => {
-	it('drops rows with no active params or null meanTask', () => {
+	it('drops rows with null active params or null meanTask', () => {
 		const a = row(1, model('a', { activeParamsB: 1 }), 0.7);
-		const b = row(2, model('b', { activeParamsB: 0 }), 0.5); // dropped: no params
+		const b = row(2, model('b', { activeParamsB: null }), 0.5); // dropped: unknown params
 		const c = row(3, model('c', { activeParamsB: 2 }), null); // dropped: null mean
 		const spec = performanceSizePlot(summary([a, b, c]));
 		const trace = spec.data[0] as { x: number[]; y: number[] };
 		expect(trace.x).toEqual([1e9]);
 		expect(trace.y).toEqual([70]);
+	});
+
+	it('clamps 0 active params to 1 instead of dropping the row', () => {
+		// Static/model2vec models are entirely a lookup table, so their
+		// active-parameter count (n_parameters - n_embedding_parameters) is
+		// legitimately 0 — a log-scale axis can't place a point at 0, so we
+		// clamp to 1 rather than dropping the model from the chart (#5079).
+		const a = row(1, model('a', { activeParamsB: 0 }), 0.6);
+		const spec = performanceSizePlot(summary([a]));
+		const trace = spec.data[0] as { x: number[]; y: number[] };
+		expect(trace.x).toEqual([1]);
+		expect(trace.y).toEqual([60]);
 	});
 
 	it('highlights pinned rows with a thicker marker outline', () => {

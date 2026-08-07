@@ -6,13 +6,15 @@
 	import CiteBlock from '$lib/components/CiteBlock.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
+	import OpennessMeter from '$lib/components/OpennessMeter.svelte';
+	import { opennessScore } from '$lib/openness';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
 	import { sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
-	import { fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
+	import { COLLATOR, fmtInt, fmtParamsUnit, fmtParamsValue, modelPath, slug } from '$lib/format';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -181,6 +183,46 @@
 						{/if}
 					</dd>
 				</div>
+				{#if model.languages && model.languages.length > 0}
+					{@const PREVIEW = 12}
+					{@const langs = [...new Set(model.languages.map((l) => l.trim()).filter(Boolean))].sort(
+						COLLATOR.compare
+					)}
+					{@const previewed = langs.slice(0, PREVIEW)}
+					{@const hidden = langs.length - previewed.length}
+					<div class="row">
+						<dt>Languages</dt>
+						<dd>
+							{#if hidden <= 0}
+								<span class="chips">
+									{#each langs as l (l)}
+										<span class="chip">{l}</span>
+									{/each}
+								</span>
+							{:else}
+								<!-- Same fold-out shape as "Trained on": closed state shows the
+								     first N languages plus a "+M more" pill; opening reveals the
+								     full set and flips the pill to "Show fewer". -->
+								<details class="chip-foldout details-flat">
+									<summary>
+										<span class="chips">
+											{#each previewed as l (l)}
+												<span class="chip">{l}</span>
+											{/each}
+											<span class="chip more-toggle more-collapsed">+{hidden} more</span>
+											<span class="chip more-toggle more-expanded">Show fewer</span>
+										</span>
+									</summary>
+									<span class="chips chips-rest">
+										{#each langs.slice(PREVIEW) as l (l)}
+											<span class="chip">{l}</span>
+										{/each}
+									</span>
+								</details>
+							{/if}
+						</dd>
+					</div>
+				{/if}
 				{#if model.license}
 					<div class="row">
 						<dt>License</dt>
@@ -262,18 +304,6 @@
 						</dd>
 					</div>
 				{/if}
-				{#if model.extraRequirementsGroups && model.extraRequirementsGroups.length > 0}
-					<div class="row">
-						<dt>Extras</dt>
-						<dd>
-							<span class="chips">
-								{#each model.extraRequirementsGroups as group (group)}
-									<code class="chip">{group}</code>
-								{/each}
-							</span>
-						</dd>
-					</div>
-				{/if}
 				{#if model.trainingDatasets && model.trainingDatasets.length > 0}
 					{@const PREVIEW = 8}
 					{@const datasets = model.trainingDatasets}
@@ -299,7 +329,7 @@
 									     first N chips with a "+M more" pill so the reader still
 									     sees a representative sample; opening flips that pill to
 									     "Show fewer" and renders the full set. -->
-								<details class="trained-on details-flat">
+								<details class="chip-foldout details-flat">
 									<summary>
 										<span class="chips">
 											{#each previewed as ds (ds)}
@@ -339,39 +369,47 @@
 			</dl>
 			<CiteBlock kind="model" citation={model.citation} />
 		</div>
-		<div class="kpis">
-			<div class="kpi">
-				<span class="kpi-label">Total params</span>
-				<span class="kpi-value"
-					>{fmtParamsValue(model.totalParamsB)}{#if fmtParamsUnit(model.totalParamsB)}<span
-							class="unit">{fmtParamsUnit(model.totalParamsB)}</span
-						>{/if}</span
-				>
+		<div class="hero-right">
+			<div class="kpis">
+				<div class="kpi">
+					<span class="kpi-label">Parameters</span>
+					<span class="kpi-value"
+						>{fmtParamsValue(model.totalParamsB)}{#if fmtParamsUnit(model.totalParamsB)}<span
+								class="unit">{fmtParamsUnit(model.totalParamsB)}</span
+							>{/if}</span
+					>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Active parameters</span>
+					<span class="kpi-value"
+						>{fmtParamsValue(model.activeParamsB)}{#if fmtParamsUnit(model.activeParamsB)}<span
+								class="unit">{fmtParamsUnit(model.activeParamsB)}</span
+							>{/if}</span
+					>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Embedding dim</span>
+					<span class="kpi-value">{fmtInt(model.embeddingDim)}</span>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Max tokens</span>
+					<span class="kpi-value">{fmtInt(model.maxTokens)}</span>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Memory</span>
+					<span class="kpi-value">{fmtMemoryMb(model.memoryUsageMb)}</span>
+				</div>
+				<div class="kpi">
+					<span class="kpi-label">Released</span>
+					<span class="kpi-value date">{model.releaseDate ?? '—'}</span>
+				</div>
 			</div>
-			<div class="kpi">
-				<span class="kpi-label">Active params</span>
-				<span class="kpi-value"
-					>{fmtParamsValue(model.activeParamsB)}{#if fmtParamsUnit(model.activeParamsB)}<span
-							class="unit">{fmtParamsUnit(model.activeParamsB)}</span
-						>{/if}</span
-				>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Embedding dim</span>
-				<span class="kpi-value">{fmtInt(model.embeddingDim)}</span>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Max tokens</span>
-				<span class="kpi-value">{fmtInt(model.maxTokens)}</span>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Memory</span>
-				<span class="kpi-value">{fmtMemoryMb(model.memoryUsageMb)}</span>
-			</div>
-			<div class="kpi">
-				<span class="kpi-label">Released</span>
-				<span class="kpi-value date">{model.releaseDate ?? '—'}</span>
-			</div>
+			{#if opennessScore(model) !== null}
+				<section class="openness-block" aria-label="Openness">
+					<h2 class="openness-title">Openness</h2>
+					<OpennessMeter {model} breakdown />
+				</section>
+			{/if}
 		</div>
 	</section>
 
@@ -404,6 +442,23 @@
 <style>
 	.hero-left :global(.cite) {
 		margin-top: 10px;
+	}
+	.hero-right {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		min-width: 0;
+	}
+	.openness-block {
+		padding-top: 16px;
+		border-top: 1px solid var(--border);
+	}
+	.openness-title {
+		font-size: 15px;
+		font-weight: 700;
+		color: var(--text);
+		letter-spacing: 0.01em;
+		margin: 0 0 10px;
 	}
 	.hero::before {
 		content: '';
@@ -466,18 +521,18 @@
 	.spec-list .chip-link:hover {
 		background: color-mix(in srgb, var(--link) 10%, var(--surface));
 	}
-	/* Trained-on fold-out: <summary> carries the preview chips + a
-	   pill-styled "+N more" toggle; the matching "Show fewer" pill
-	   becomes visible only while the <details> is open. */
-	.trained-on summary {
+	/* Chip fold-out (shared by "Trained on" + "Languages"): <summary>
+	   carries the preview chips + a pill-styled "+N more" toggle; the
+	   matching "Show fewer" pill becomes visible only while open. */
+	.chip-foldout summary {
 		cursor: pointer;
 	}
-	.trained-on summary:focus-visible {
+	.chip-foldout summary:focus-visible {
 		outline: 2px solid var(--primary);
 		outline-offset: 2px;
 		border-radius: 4px;
 	}
-	.trained-on .more-toggle {
+	.chip-foldout .more-toggle {
 		font-family: var(--font-sans);
 		color: var(--link);
 		border-color: color-mix(in srgb, var(--link) 40%, var(--border));
@@ -485,16 +540,16 @@
 		cursor: pointer;
 		user-select: none;
 	}
-	.trained-on .more-expanded {
+	.chip-foldout .more-expanded {
 		display: none;
 	}
-	.trained-on[open] .more-collapsed {
+	.chip-foldout[open] .more-collapsed {
 		display: none;
 	}
-	.trained-on[open] .more-expanded {
+	.chip-foldout[open] .more-expanded {
 		display: inline-block;
 	}
-	.trained-on .chips-rest {
+	.chip-foldout .chips-rest {
 		margin-top: 4px;
 	}
 	.spec-list .model-link {

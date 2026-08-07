@@ -11,8 +11,9 @@
 		/** Which Plotly trace modules to register before drawing. Default
 		 *  `scatter` covers the perf-by-size / perf-by-time figures on
 		 *  /benchmark/[name]; the /compare radar passes `scatterpolar`
-		 *  so we don't bundle polar code into the benchmark route. */
-		traces?: ('scatter' | 'scatterpolar')[];
+		 *  so we don't bundle polar code into the benchmark route, and the
+		 *  /compare grouped bar passes `bar`. */
+		traces?: ('scatter' | 'scatterpolar' | 'bar')[];
 	}
 	let { data, layout = {}, config = {}, height = 480, traces = ['scatter'] }: Props = $props();
 
@@ -144,7 +145,9 @@
 			traces.map((name) =>
 				name === 'scatterpolar'
 					? import('plotly.js/lib/scatterpolar').then((m) => m.default)
-					: import('plotly.js/lib/scatter').then((m) => m.default)
+					: name === 'bar'
+						? import('plotly.js/lib/bar').then((m) => m.default)
+						: import('plotly.js/lib/scatter').then((m) => m.default)
 			)
 		);
 		Plotly.register(traceMods);

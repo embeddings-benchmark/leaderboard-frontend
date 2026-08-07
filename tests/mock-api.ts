@@ -13,6 +13,9 @@ import { buildMockSummary } from './fixtures/mockSummary';
 import type { TaskMeta, ModelMeta } from '../src/lib/types';
 
 const PORT = parseInt(process.env.MOCK_API_PORT || '8787', 10);
+const BENCHMARK_ALIASES: Record<string, string> = {
+	'MTEB(eng)': 'MTEB(eng, v2)'
+};
 
 // Cache summaries so repeated /scores calls don't redo the deterministic
 // row generation. Build prerender alone hits each one many times.
@@ -60,13 +63,25 @@ const MOCK_MODELS: ModelMeta[] = [
 		totalParamsB: 0.1,
 		embeddingDim: 384,
 		maxTokens: 512,
+		releaseDate: '2025-01-15',
 		modelType: 'dense',
 		instructionTuned: false,
 		openWeights: true,
 		sentenceTransformersCompatible: true,
 		modalities: ['text'],
 		// Multi-language universe for /models language URL-roundtrip test.
-		languages: ['English', 'Spanish', 'French']
+		languages: ['English', 'Spanish', 'French'],
+		// Fully open — the high end of the openness column, and the only model
+		// that survives every openness filter requirement at once (AND semantics).
+		openness: {
+			'open weights': true,
+			'open license': true,
+			'open training code': true,
+			'open training data': true,
+			paper: true,
+			'model card': true
+		},
+		opennessScore: 6
 	},
 	{
 		// Distinct model type so /models model-type filter has a multi-option universe.
@@ -78,10 +93,43 @@ const MOCK_MODELS: ModelMeta[] = [
 		totalParamsB: 0.05,
 		embeddingDim: 0,
 		maxTokens: 512,
+		releaseDate: '2025-02-20',
 		modelType: 'cross-encoder',
 		instructionTuned: false,
 		openWeights: false,
 		sentenceTransformersCompatible: false,
+		modalities: ['text'],
+		languages: ['English'],
+		// Partially open — gives the column a second distinct score to sort by,
+		// and gets filtered out by any requirement it doesn't satisfy.
+		openness: {
+			'open weights': false,
+			'open license': false,
+			'open training code': false,
+			'open training data': false,
+			paper: true,
+			'model card': true
+		},
+		opennessScore: 2
+	},
+	{
+		// No `openness` / `opennessScore` at all — exercises the null path: the
+		// column stays visible (other rows have data) but this cell renders
+		// empty, and every openness requirement filters it out. Mirrors the
+		// first model's type/languages so no filter universe changes.
+		name: 'mock-org/mock-unknown-openness',
+		displayName: 'mock-unknown-openness',
+		org: 'mock-org',
+		zeroShotPct: 100,
+		activeParamsB: 0.2,
+		totalParamsB: 0.2,
+		embeddingDim: 384,
+		maxTokens: 512,
+		releaseDate: '2025-03-10',
+		modelType: 'dense',
+		instructionTuned: false,
+		openWeights: true,
+		sentenceTransformersCompatible: true,
 		modalities: ['text'],
 		languages: ['English']
 	}
@@ -111,12 +159,13 @@ createServer((req, res) => {
 		const encName = slash === -1 ? rest : rest.slice(0, slash);
 		const sub = slash === -1 ? '' : rest.slice(slash + 1);
 		const name = decodeURIComponent(encName);
-		const bench = BENCHMARK_INDEX[name];
+		const canonicalName = BENCHMARK_ALIASES[name] ?? name;
+		const bench = BENCHMARK_INDEX[canonicalName];
 		if (!bench) return json(res, { error: 'not found', name }, 404);
 		if (!sub) return json(res, bench);
-		if (sub === 'scores') return json(res, getSummary(name));
-		if (sub === 'leaders') return json(res, { benchmarkName: name, buckets: [] });
-		if (sub === 'per-language') return json(res, { benchmarkName: name, rows: [] });
+		if (sub === 'scores') return json(res, getSummary(canonicalName));
+		if (sub === 'leaders') return json(res, { benchmarkName: canonicalName, buckets: [] });
+		if (sub === 'per-language') return json(res, { benchmarkName: canonicalName, rows: [] });
 	}
 
 	if (path.startsWith('/v1/tasks/')) {

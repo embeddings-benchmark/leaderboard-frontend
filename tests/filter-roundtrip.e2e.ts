@@ -27,6 +27,28 @@ async function togglePill(locator: Locator) {
 	await locator.click({ force: true });
 }
 
+// Stub `navigator.clipboard.writeText` so we can read back what the share
+// button copied without requesting browser clipboard permission.
+async function installClipboardSpy(page: Page) {
+	await page.evaluate(() => {
+		(window as unknown as { __copied: string | null }).__copied = null;
+		navigator.clipboard.writeText = async (t: string) => {
+			(window as unknown as { __copied: string }).__copied = t;
+		};
+	});
+}
+// Click the ShareUrlButton and assert it copied the live `page.url()` — i.e.
+// the address bar reflects the active filters. Regression guard for the
+// `$app/navigation.replaceState` quirk where `page.url` stays stale after
+// shallow URL updates.
+async function expectShareCopiesCurrentUrl(page: Page) {
+	await page.locator('button.share-btn').click();
+	const copied = await page.evaluate(
+		() => (window as unknown as { __copied: string | null }).__copied ?? ''
+	);
+	expect(copied).toBe(page.url());
+}
+
 async function waitForCatalogue(page: Page) {
 	// Wait until at least one real card paints so `filtersSeeded` has flipped.
 	await expect(page.locator('a[href*="/benchmark/"]').first()).toBeVisible({ timeout: 15_000 });
@@ -40,6 +62,7 @@ test.describe('/benchmarks filter URL roundtrip', () => {
 	test('modality toggle: chip + URL + deep-link restore + Reset all', async ({ page }) => {
 		await page.goto('/benchmarks');
 		await waitForCatalogue(page);
+		await installClipboardSpy(page);
 		const baseline = await cardCount(page);
 		expect(baseline).toBeGreaterThan(0);
 		await expect(activeStrip(page)).toHaveCount(0);
@@ -48,6 +71,9 @@ test.describe('/benchmarks filter URL roundtrip', () => {
 		await expect(page).toHaveURL(/[?&]mods=/);
 		await expect(activeChips(page)).toContainText('Modality');
 		await expect(resetAll(page)).toBeVisible();
+		// ShareUrlButton must serialise the active filters — `page.url` stays
+		// stale after `replaceState`, so reading it would drop ?mods=.
+		await expectShareCopiesCurrentUrl(page);
 
 		const filteredUrl = page.url();
 		await page.goto(filteredUrl);
@@ -314,11 +340,13 @@ test.describe('/benchmark/[name] filter URL roundtrip (shared store path)', () =
 		await page.goto(url);
 		const openRadio = page.getByRole('radio', { name: 'Open', exact: true }).first();
 		await expect(openRadio).toBeVisible({ timeout: 20_000 });
+		await installClipboardSpy(page);
 
 		await openRadio.click();
 		await expect(page).toHaveURL(/[?&]avail=open/);
 		await expect(activeChips(page)).toContainText('Open only');
 		await expect(resetAll(page)).toBeVisible();
+		await expectShareCopiesCurrentUrl(page);
 
 		const filteredUrl = page.url();
 		await page.goto(filteredUrl);

@@ -20,9 +20,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      BASE_PATH: /${{ github.event.repository.name }}
+      BASE_PATH: ${{ vars.GH_PAGES_BASE_PATH || '' }}
       PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL || 'https://mteb-leaderboard-backend.hf.space' }}
-      PUBLIC_SITE_URL: ${{ vars.GH_PAGES_SITE_URL || 'https://embeddings-benchmark.github.io' }}
+      PUBLIC_SITE_URL: ${{ vars.GH_PAGES_SITE_URL || 'https://leaderboard.mteb.org' }}
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/common

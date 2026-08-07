@@ -1,8 +1,9 @@
 import { untrack } from 'svelte';
-import type { SvelteSet } from 'svelte/reactivity';
+import { SvelteSet } from 'svelte/reactivity';
 
 import type { BenchmarkSummary, ModelType, SummaryRow, TaskMeta } from '$lib/types';
 import { modelSearchKey } from '$lib/format';
+import { opennessMeets, OPENNESS_FILTERABLE } from '$lib/openness';
 import { readParams, updateUrl } from '$lib/url-state';
 import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
 
@@ -121,6 +122,12 @@ function createFilters() {
 	// (everything selected) matches the legacy behaviour.
 	modelTypesFacet.reset();
 	modelModalitiesFacet.reset();
+
+	// Openness requirements: a set of dimension ids the model must ALL satisfy
+	// (AND semantics). Unlike the OR-facets above, empty = no filter and there
+	// is no "all selected = off" shortcut. Managed directly (not a FacetFilter)
+	// because the semantics differ.
+	const opennessReqs = new SvelteSet<string>();
 
 	// `scope` = benchmark-scope facets (driven by availableX, dropped on /models).
 	// `model` = model-row facets (fixed universes).
@@ -251,6 +258,12 @@ function createFilters() {
 			state.zeroShot = zs;
 		if (p.get('st') === '1') state.sentenceTransformersOnly = true;
 		if (p.get('noexp') === '1') state.excludeExperiments = true;
+		const openreq = p.get('openreq');
+		if (openreq !== null) {
+			opennessReqs.clear();
+			const valid = new Set<string>(OPENNESS_FILTERABLE.map((d) => d.id));
+			for (const id of openreq.split(',')) if (valid.has(id)) opennessReqs.add(id);
+		}
 		// Set facets: seed delegates to FacetFilter, which intersects URL values
 		// with the current universe (silently drops unknowns from stale links).
 		for (const f of allFacets) f.seed();
@@ -277,7 +290,14 @@ function createFilters() {
 				inst: state.instructions !== 'both' ? state.instructions : null,
 				zs: state.zeroShot !== 'allow_all' ? state.zeroShot : null,
 				st: state.sentenceTransformersOnly ? '1' : null,
-				noexp: state.excludeExperiments ? '1' : null
+				noexp: state.excludeExperiments ? '1' : null,
+				// Canonical order (not insertion order) so the URL is stable.
+				openreq:
+					opennessReqs.size > 0
+						? OPENNESS_FILTERABLE.filter((d) => opennessReqs.has(d.id))
+								.map((d) => d.id)
+								.join(',')
+						: null
 			};
 			for (const f of allFacets) patch[f.urlParam] = f.urlValue();
 			updateUrl(patch);
@@ -294,6 +314,7 @@ function createFilters() {
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
 		state.excludeExperiments = false;
+		opennessReqs.clear();
 		for (const f of modelFacets) f.reset();
 		sync();
 	}
@@ -375,6 +396,22 @@ function createFilters() {
 		},
 		set excludeExperiments(v: boolean) {
 			state.excludeExperiments = v;
+			sync();
+		},
+		// Openness requirements (AND). Returns the live SvelteSet for identity-
+		// stable subscriptions; mutate via toggleOpennessReq / setAllOpennessReqs
+		// so URL sync stays automatic.
+		get opennessReqs(): SvelteSet<string> {
+			return opennessReqs;
+		},
+		toggleOpennessReq(id: string) {
+			if (opennessReqs.has(id)) opennessReqs.delete(id);
+			else opennessReqs.add(id);
+			sync();
+		},
+		setAllOpennessReqs(checked: boolean) {
+			opennessReqs.clear();
+			if (checked) for (const d of OPENNESS_FILTERABLE) opennessReqs.add(d.id);
 			sync();
 		},
 		// Each get returns the underlying SvelteSet — same identity-preserving
@@ -581,6 +618,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		filters.instructions !== 'both' ||
 		filters.sentenceTransformersOnly ||
 		filters.excludeExperiments ||
+		filters.opennessReqs.size > 0 ||
 		filters.modelTypes.size !== MODEL_TYPES.length ||
 		filters.modelModalities.size !== MODEL_MODALITIES.length ||
 		filters.sizeActive ||
@@ -597,6 +635,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		if (filters.sentenceTransformersOnly && !m.sentenceTransformersCompatible) return false;
 
 		if (filters.excludeExperiments && row.experiments) return false;
+
+		if (filters.opennessReqs.size > 0 && !opennessMeets(m, filters.opennessReqs)) return false;
 
 		if (!filters.modelTypes.has(m.modelType)) return false;
 

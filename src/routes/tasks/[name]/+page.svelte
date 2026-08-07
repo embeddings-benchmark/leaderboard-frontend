@@ -197,6 +197,12 @@
 		return sorted.map((row, i) => ({ ...row, rank: i + 1 }));
 	});
 
+	// Count of fully-evaluated models: `score` is `null` whenever any subset is
+	// missing under the current split mode, so non-null means the model
+	// covered every subset. Powers the Models scored KPI so partial-coverage
+	// rows aren't tallied.
+	let fullyEvaluatedCount = $derived(scores.filter((s) => s.score !== null).length);
+
 	let multipleBenchmarks = $derived(benchmarks.length > 1);
 
 	// Instant tooltip for the `info-dot` (?) buttons in the spec list.
@@ -449,7 +455,7 @@
 				<span class="kpi-label">Models scored</span>
 				<span class="kpi-value">
 					{#if loadingScores}<span class="loading-dot" aria-label="Loading">…</span
-						>{:else}{scores.length}{/if}
+						>{:else}{fullyEvaluatedCount}{/if}
 				</span>
 			</div>
 		</div>
