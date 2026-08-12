@@ -168,7 +168,9 @@
 		| 'meanTaskType'
 		| 'meanPublic'
 		| 'meanPrivate'
-		| `tt:${string}`;
+		| `tt:${string}`
+		// Encodes `cg:{dimension}::{label}` — split on the first '::'.
+		| `cg:${string}`;
 
 	// Per-summary-tab sort. URL prefix `s.summary` / `d.summary` keeps
 	// the per-task and per-language tabs independent (each has its own
@@ -212,6 +214,11 @@
 		if (key.startsWith('tt:')) {
 			const tt = key.slice(3);
 			const v = row.scoresByTaskType[tt];
+			return { v: v ?? 0, missing: v === undefined };
+		}
+		if (key.startsWith('cg:')) {
+			const [dim, label] = key.slice(3).split('::');
+			const v = row.scoresByCustomGroup?.[dim]?.[label];
 			return { v: v ?? 0, missing: v === undefined };
 		}
 		return { v: 0, missing: true };
@@ -325,6 +332,24 @@
 	);
 	let best = $derived(typeBests.best);
 	let worst = $derived(typeBests.worst);
+	// One bestWorstPerColumn pass per custom-grouping dimension — cheaper and
+	// simpler than fighting the helper's generic-key signature into a single
+	// call across dimensions, and mirrors the `typeBests` shape per dimension.
+	let customGroupBests = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const out = new Map<string, { best: Record<string, number>; worst: Record<string, number> }>();
+		for (const dim of summary.customGroupings ?? []) {
+			out.set(
+				dim.name,
+				bestWorstPerColumn(
+					dim.groups.map((g) => g.label),
+					summary.rows,
+					(r, label) => r.scoresByCustomGroup?.[dim.name]?.[label]
+				)
+			);
+		}
+		return out;
+	});
 	// Walk rows once and produce all the per-column bests/worsts at once.
 	let meanStats = $derived.by(() => {
 		let bTask = -Infinity,
@@ -364,6 +389,12 @@
 	let showMeanTaskType = $derived(summary.aggregations?.includes('mean_task_type') ?? false);
 	let showTaskTypes = $derived(summary.aggregations?.includes('task_types') ?? false);
 	let showPublicPrivate = $derived(summary.aggregations?.includes('public_private') ?? false);
+	// Gated on both the aggregation flag AND non-empty data — defends
+	// against a stale API that sends the flag without `customGroupings`.
+	let showCustomGroups = $derived(
+		(summary.aggregations?.includes('custom_groups') ?? false) &&
+			(summary.customGroupings?.length ?? 0) > 0
+	);
 	// ViDoRe / RTEB don't track training-data overlap for their tasks, so
 	// every row would render as a misleading uniform 100% — hide the column.
 	let showZeroShot = $derived(summary.showZeroShot ?? true);
@@ -537,6 +568,21 @@
 	function keepTip() {
 		cancelHide();
 	}
+
+	// Column count preceding the custom-group columns — the super-header
+	// row's leading filler `<th>` spans exactly this many columns so the
+	// per-dimension labels above land over the right columns below.
+	// Computed rather than hand-maintained so it can't drift from the
+	// column `{#if}` blocks in the template.
+	let fixedColsBeforeCustomGroups = $derived(
+		3 + // Rank, Model, Parameters
+			(showOpenness ? 1 : 0) +
+			(showZeroShot ? 1 : 0) +
+			(showMeanTask ? 1 : 0) +
+			(showMeanTaskType ? 1 : 0) +
+			(showPublicPrivate ? 2 : 0) +
+			(showTaskTypes ? sortedTaskTypes.length : 0)
+	);
 </script>
 
 <div class="summary">
@@ -544,6 +590,16 @@
 		<table class="tbl summary-table" use:stickyHead>
 			<caption class="sr-only">Model leaderboard</caption>
 			<thead>
+				{#if showCustomGroups}
+					<tr class="cg-superhead">
+						<th colspan={fixedColsBeforeCustomGroups} aria-hidden="true"></th>
+						{#each summary.customGroupings ?? [] as dim (dim.name)}
+							<th colspan={dim.groups.length} class="cg-dim-head" scope="colgroup">
+								{dim.name}
+							</th>
+						{/each}
+					</tr>
+				{/if}
 				<tr>
 					<th
 						scope="col"
@@ -738,6 +794,31 @@
 							</th>
 						{/each}
 					{/if}
+					{#if showCustomGroups}
+						{#each summary.customGroupings ?? [] as dim (dim.name)}
+							{#each dim.groups as g (g.label)}
+								{@const k = `cg:${dim.name}::${g.label}` as SortKey}
+								{@const title = `${dim.name}: ${g.label}`}
+								<th
+									scope="col"
+									class="tbl-num"
+									aria-sort={sort.aria(k)}
+									data-tip-title={title}
+									data-tip={g.description ?? `Mean score across ${dim.name} = "${g.label}" tasks.`}
+									onpointerenter={showTip}
+									onpointerleave={hideTip}
+									onfocusin={showTip}
+									onfocusout={hideTip}
+								>
+									<button class="sort-btn tbl-num" onclick={() => sort.click(k)} {title}>
+										<span>{g.label}</span>
+										<InfoDot ariaLabel="What is {title}?" />
+										<span class="ind" class:on={sort.key === k}>{sort.icon(k)}</span>
+									</button>
+								</th>
+							{/each}
+						{/each}
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -839,6 +920,22 @@
 								</td>
 							{/each}
 						{/if}
+						{#if showCustomGroups}
+							{#each summary.customGroupings ?? [] as dim (dim.name)}
+								{@const bw = customGroupBests.get(dim.name)}
+								{#each dim.groups as g (g.label)}
+									{@const v = row.scoresByCustomGroup?.[dim.name]?.[g.label]}
+									{@const cgWorst = bw?.worst[g.label] ?? Infinity}
+									{@const cgBest = bw?.best[g.label] ?? -Infinity}
+									<td
+										class="tbl-num {heat(v, cgWorst, cgBest)}"
+										class:tbl-best={v !== undefined && v === cgBest}
+									>
+										{v !== undefined ? fmtPct(v) : ''}
+									</td>
+								{/each}
+							{/each}
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -876,6 +973,23 @@
 	   content. */
 	.summary-table {
 		width: 100%;
+	}
+	/* Super-header row grouping a dimension's columns under its name (e.g.
+	   "Memory Type" spanning Episodic/Dialogue/Semantic/Procedural). Sits
+	   above the regular sortable header row; the leading filler `<th>`
+	   deliberately carries no background/border so it reads as blank space
+	   over the sticky rank/model columns below. */
+	.cg-superhead th {
+		border-bottom: none;
+		font-weight: 600;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.cg-dim-head {
+		padding: 6px 12px 2px;
+		text-align: center;
+		background: var(--surface-muted);
+		white-space: nowrap;
 	}
 	/* Tooltip shell + title styles live in HoverPortal.svelte. We only
 	   own the column-tip body wrapper so MarkdownText output (links,
