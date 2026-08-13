@@ -569,20 +569,12 @@
 		cancelHide();
 	}
 
-	// Column count preceding the custom-group columns — the super-header
-	// row's leading filler `<th>` spans exactly this many columns so the
-	// per-dimension labels above land over the right columns below.
-	// Computed rather than hand-maintained so it can't drift from the
-	// column `{#if}` blocks in the template.
-	let fixedColsBeforeCustomGroups = $derived(
-		3 + // Rank, Model, Parameters
-			(showOpenness ? 1 : 0) +
-			(showZeroShot ? 1 : 0) +
-			(showMeanTask ? 1 : 0) +
-			(showMeanTaskType ? 1 : 0) +
-			(showPublicPrivate ? 2 : 0) +
-			(showTaskTypes ? sortedTaskTypes.length : 0)
-	);
+	// Every non-custom-group header cell spans both header rows (via this
+	// rowspan) when a second row exists, so the extra row's height is only
+	// ever spent on the aggregated columns themselves — not blank space
+	// over Rank/Model/etc. `undefined` omits the attribute entirely when
+	// there's only one header row to begin with.
+	let cgRowspan = $derived(showCustomGroups ? 2 : undefined);
 </script>
 
 <div class="summary">
@@ -590,20 +582,11 @@
 		<table class="tbl summary-table" use:stickyHead>
 			<caption class="sr-only">Model leaderboard</caption>
 			<thead>
-				{#if showCustomGroups}
-					<tr class="cg-superhead">
-						<th colspan={fixedColsBeforeCustomGroups} aria-hidden="true"></th>
-						{#each summary.customGroupings ?? [] as dim (dim.name)}
-							<th colspan={dim.groups.length} class="cg-dim-head" scope="colgroup">
-								{dim.name}
-							</th>
-						{/each}
-					</tr>
-				{/if}
 				<tr>
 					<th
 						scope="col"
 						class="sticky-left rank-head"
+						rowspan={cgRowspan}
 						data-tip-title={INFO.rank.title}
 						data-tip={INFO.rank.text}
 						onpointerenter={showTip}
@@ -621,6 +604,7 @@
 					<th
 						scope="col"
 						class="sticky-model"
+						rowspan={cgRowspan}
 						aria-sort={sort.aria('model')}
 						data-tip-title={INFO.model.title}
 						data-tip={INFO.model.text}
@@ -638,6 +622,7 @@
 					<th
 						scope="col"
 						class="tbl-num"
+						rowspan={cgRowspan}
 						data-tip-title={INFO.totalParams.title}
 						data-tip={INFO.totalParams.text}
 						onpointerenter={showTip}
@@ -658,6 +643,7 @@
 						<th
 							scope="col"
 							class="openness-head"
+							rowspan={cgRowspan}
 							data-tip-title={INFO.openness.title}
 							data-tip={INFO.openness.text}
 							onpointerenter={showTip}
@@ -677,6 +663,7 @@
 						<th
 							scope="col"
 							class="tbl-num"
+							rowspan={cgRowspan}
 							data-tip-title={INFO.zeroShot.title}
 							data-tip={INFO.zeroShot.text}
 							onpointerenter={showTip}
@@ -695,6 +682,7 @@
 					{#if showMeanTask}
 						<th
 							class="tbl-num"
+							rowspan={cgRowspan}
 							data-tip-title={INFO.meanTask.title}
 							data-tip={INFO.meanTask.text}
 							onpointerenter={showTip}
@@ -713,6 +701,7 @@
 					{#if showMeanTaskType}
 						<th
 							class="tbl-num"
+							rowspan={cgRowspan}
 							data-tip-title={INFO.meanTaskType.title}
 							data-tip={INFO.meanTaskType.text}
 							onpointerenter={showTip}
@@ -733,6 +722,7 @@
 					{#if showPublicPrivate}
 						<th
 							class="tbl-num"
+							rowspan={cgRowspan}
 							data-tip-title={INFO.meanPublic.title}
 							data-tip={INFO.meanPublic.text}
 							onpointerenter={showTip}
@@ -751,6 +741,7 @@
 						</th>
 						<th
 							class="tbl-num"
+							rowspan={cgRowspan}
 							data-tip-title={INFO.meanPrivate.title}
 							data-tip={INFO.meanPrivate.text}
 							onpointerenter={showTip}
@@ -778,6 +769,7 @@
 							<th
 								scope="col"
 								class="tbl-num"
+								rowspan={cgRowspan}
 								aria-sort={sort.aria(k)}
 								data-tip-title={full}
 								data-tip={desc ?? ''}
@@ -795,6 +787,20 @@
 						{/each}
 					{/if}
 					{#if showCustomGroups}
+						{#each summary.customGroupings ?? [] as dim (dim.name)}
+							<th colspan={dim.groups.length} class="cg-dim-head" scope="colgroup">
+								{dim.name}
+							</th>
+						{/each}
+					{/if}
+				</tr>
+				{#if showCustomGroups}
+					<!-- Second header row exists ONLY for the aggregated custom-group
+					     columns — every other header cell above spans both rows via
+					     `rowspan={cgRowspan}` instead of leaving a blank cell here, so
+					     the extra row doesn't add height over the whole table, just
+					     over the dimension(s) that actually need a sub-header. -->
+					<tr class="cg-subhead">
 						{#each summary.customGroupings ?? [] as dim (dim.name)}
 							{#each dim.groups as g (g.label)}
 								{@const k = `cg:${dim.name}::${g.label}` as SortKey}
@@ -818,8 +824,8 @@
 								</th>
 							{/each}
 						{/each}
-					{/if}
-				</tr>
+					</tr>
+				{/if}
 			</thead>
 			<tbody>
 				{#each renderedRows as row (row.model.name)}
@@ -974,20 +980,21 @@
 	.summary-table {
 		width: 100%;
 	}
-	/* Super-header row grouping a dimension's columns under its name (e.g.
-	   "Memory Type" spanning Episodic/Dialogue/Semantic/Procedural). Sits
-	   above the regular sortable header row; the leading filler `<th>`
-	   deliberately carries no background/border so it reads as blank space
-	   over the sticky rank/model columns below. */
-	.cg-superhead th {
+	/* Dimension label cell (e.g. "Memory Type") grouping a set of columns
+	   under one name — sits in the main header row's trailing edge, colspan
+	   over its group columns, with a bottom border removed so it visually
+	   merges into the sub-header row of individual group columns beneath it
+	   (`.cg-subhead`). Every other header cell in this row uses `rowspan`
+	   instead of a matching cell here, so this second row only ever adds
+	   height above the aggregated columns, not the whole table. */
+	.cg-dim-head {
+		padding: 6px 12px 2px;
+		text-align: center;
+		vertical-align: bottom;
 		border-bottom: none;
 		font-weight: 600;
 		font-size: 12px;
 		color: var(--text-muted);
-	}
-	.cg-dim-head {
-		padding: 6px 12px 2px;
-		text-align: center;
 		background: var(--surface-muted);
 		white-space: nowrap;
 	}
