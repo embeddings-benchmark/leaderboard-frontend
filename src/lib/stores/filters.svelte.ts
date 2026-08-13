@@ -709,6 +709,16 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				agg = computeAgg(row);
 				perRowAgg.set(row, agg);
 			}
+			// `...row` carries scoresByCustomGroup through unchanged — this
+			// client-side path (task-type/domain/modality sidebar filters,
+			// no server round-trip) can't recompute it like scoresByTaskType
+			// above: the API never sends per-task group membership, only the
+			// already-aggregated group scores, so there's nothing to
+			// re-bucket against the narrowed task set on the client. The
+			// *language* filter doesn't hit this path at all — it triggers
+			// a server refetch (leaderboard.svelte.ts's requestSummaryForLanguages)
+			// and the API recomputes scoresByCustomGroup itself
+			// (aggregators.py's _recompute_lenient_custom_groups).
 			rows.push({
 				...row,
 				meanTask: agg.meanTask,

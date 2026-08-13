@@ -212,9 +212,14 @@ export interface SummaryRow {
 	// the lazy /per-task endpoint when it lands.
 	scoresByTask: Record<string, number>;
 	// dimension name -> group label -> score, for benchmarks that declare
-	// custom groupings. Not recomputed under a task/language filter (unlike
-	// scoresByTaskType/meanTask/meanTaskType) — stays frozen at the
-	// unfiltered values from the API.
+	// custom groupings. The *language* filter recomputes this server-side
+	// (see aggregators.py's _recompute_lenient_custom_groups) same as
+	// scoresByTaskType/meanTask/meanTaskType. The client-side task-type /
+	// domain / modality sidebar filters (filters.svelte.ts, no server
+	// round-trip) do NOT recompute it — the API never sends per-task group
+	// membership, only the aggregated group scores, so there's nothing to
+	// re-bucket against a narrowed task set on the client; it stays frozen
+	// at the values for the full (or language-filtered) task set.
 	scoresByCustomGroup?: Record<string, Record<string, number>>;
 	// Tasks (within this benchmark) the model declares in its training
 	// datasets — used by PerTaskTab to surface a ⚠️ next to scores that
