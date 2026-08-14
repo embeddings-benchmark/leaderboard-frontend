@@ -12,6 +12,12 @@ export type BenchmarkAggregation =
 export interface CustomGroup {
 	label: string;
 	description?: string | null;
+	// Task membership — lets the frontend recompute scoresByCustomGroup
+	// under the client-side task-type/domain/modality sidebar filters
+	// (filters.svelte.ts), the same way scoresByTaskType is recomputed
+	// from TaskMeta.type. Empty when the API can't attribute a computed
+	// column back to a declared group (shouldn't happen in practice).
+	tasks: string[];
 }
 
 // A named custom dimension a benchmark declares (e.g. "Memory Type" ->

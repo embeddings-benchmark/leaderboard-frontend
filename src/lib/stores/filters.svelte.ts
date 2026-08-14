@@ -1,7 +1,7 @@
 import { untrack } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 
-import type { BenchmarkSummary, ModelType, SummaryRow, TaskMeta } from '$lib/types';
+import type { BenchmarkSummary, CustomGrouping, ModelType, SummaryRow, TaskMeta } from '$lib/types';
 import { modelSearchKey } from '$lib/format';
 import { opennessMeets, OPENNESS_FILTERABLE } from '$lib/openness';
 import { readParams, updateUrl } from '$lib/url-state';
@@ -477,6 +477,32 @@ function isFullSet(selected: Set<string>, available: string[]): boolean {
 	return available.every((x) => selected.has(x));
 }
 
+// Static per-summary reverse lookup (dimension -> task name -> group label),
+// built once from summary.customGroupings — it doesn't depend on the active
+// filters, so it's cached separately rather than rebuilt on every filter
+// change like tasksByType is. Backs the client-side scoresByCustomGroup
+// recompute in narrowTasks/computeAgg below.
+const _customGroupTaskLookupCache = new WeakMap<
+	BenchmarkSummary,
+	Map<string, Map<string, string>>
+>();
+function customGroupTaskLookup(summary: BenchmarkSummary): Map<string, Map<string, string>> {
+	const cached = _customGroupTaskLookupCache.get(summary);
+	if (cached) return cached;
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const byDim = new Map<string, Map<string, string>>();
+	for (const dim of summary.customGroupings ?? []) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const taskToLabel = new Map<string, string>();
+		for (const g of dim.groups) {
+			for (const t of g.tasks) taskToLabel.set(t, g.label);
+		}
+		byDim.set(dim.name, taskToLabel);
+	}
+	_customGroupTaskLookupCache.set(summary, byDim);
+	return byDim;
+}
+
 // Cached per (summary, task-filter signature) so name-search keystrokes
 // reuse the previous narrowing result.
 interface NarrowingResult {
@@ -486,12 +512,21 @@ interface NarrowingResult {
 	taskTypesOut: string[];
 	taskNamesOut: string[];
 	tasksByType: Map<string, string[]>;
+	// dimension name -> group label -> visible task names, intersected with
+	// the current filter narrowing (empty in fullView — computeAgg isn't
+	// called there, rows pass through summary.rows unchanged).
+	customGroupTasksByLabel: Map<string, Map<string, string[]>>;
+	// summary.customGroupings narrowed the same way taskTypesOut narrows
+	// summary.taskTypes — a group with zero visible tasks drops out of its
+	// dimension entirely; a dimension with zero remaining groups drops too.
+	customGroupingsOut: CustomGrouping[];
 	perRowAgg: WeakMap<
 		SummaryRow,
 		{
 			meanTask: number | null;
 			meanTaskType: number | null;
 			scoresByTaskType: Record<string, number>;
+			scoresByCustomGroup: Record<string, Record<string, number>>;
 		}
 	>;
 	// Per-task sorted (name, score) lists — backs the Borda cache,
@@ -526,10 +561,14 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 	let taskNamesOut: string[];
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const tasksByType = new Map<string, string[]>();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const customGroupTasksByLabel = new Map<string, Map<string, string[]>>();
+	let customGroupingsOut: CustomGrouping[];
 	if (fullView) {
 		visibleTasks = summary.tasksMeta;
 		taskTypesOut = summary.taskTypes;
 		taskNamesOut = summary.tasks;
+		customGroupingsOut = summary.customGroupings ?? [];
 	} else {
 		visibleTasks = summary.tasksMeta.filter((t) => {
 			if (!fullTypes && !filters.taskTypes.has(t.type)) return false;
@@ -544,11 +583,34 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 		taskTypesOut = summary.taskTypes.filter((t) => visibleTaskTypes.has(t));
 		taskNamesOut = summary.tasks.filter((t) => visibleTaskNames.has(t));
 		// Bucket once so the per-row aggregate loop is O(rows × visibleTasks).
+		const customGroupTaskLookupByDim = customGroupTaskLookup(summary);
 		for (const t of visibleTasks) {
 			const arr = tasksByType.get(t.type);
 			if (arr) arr.push(t.name);
 			else tasksByType.set(t.type, [t.name]);
+
+			for (const [dim, taskToLabel] of customGroupTaskLookupByDim) {
+				const label = taskToLabel.get(t.name);
+				if (label === undefined) continue;
+				let byLabel = customGroupTasksByLabel.get(dim);
+				if (!byLabel) {
+					// eslint-disable-next-line svelte/prefer-svelte-reactivity
+					byLabel = new Map();
+					customGroupTasksByLabel.set(dim, byLabel);
+				}
+				const labelArr = byLabel.get(label);
+				if (labelArr) labelArr.push(t.name);
+				else byLabel.set(label, [t.name]);
+			}
 		}
+		customGroupingsOut = (summary.customGroupings ?? [])
+			.map((dim) => ({
+				...dim,
+				groups: dim.groups.filter(
+					(g) => (customGroupTasksByLabel.get(dim.name)?.get(g.label)?.length ?? 0) > 0
+				)
+			}))
+			.filter((dim) => dim.groups.length > 0);
 	}
 
 	const result: NarrowingResult = {
@@ -558,6 +620,8 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 		taskTypesOut,
 		taskNamesOut,
 		tasksByType,
+		customGroupTasksByLabel,
+		customGroupingsOut,
 		perRowAgg: new WeakMap(),
 		sortedByTask: new Map()
 	};
@@ -574,14 +638,24 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			rows: [],
 			tasks: [],
 			tasksMeta: [],
-			taskTypes: []
+			taskTypes: [],
+			customGroupings: []
 		};
 	}
 	// Language is server-scoped via `?languages=` — don't refilter client-side.
 	const lenient =
 		filters.languages.size > 0 && filters.languages.size < filters.availableLanguages.length;
 	const narrow = narrowTasks(summary, lenient);
-	const { fullView, visibleTasks, taskTypesOut, taskNamesOut, tasksByType, perRowAgg } = narrow;
+	const {
+		fullView,
+		visibleTasks,
+		taskTypesOut,
+		taskNamesOut,
+		tasksByType,
+		customGroupTasksByLabel,
+		customGroupingsOut,
+		perRowAgg
+	} = narrow;
 
 	// All tasks filtered out → drop rows too; otherwise the table renders model
 	// names with all-`—` aggregates.
@@ -591,7 +665,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			rows: [],
 			tasks: [],
 			tasksMeta: [],
-			taskTypes: []
+			taskTypes: [],
+			customGroupings: []
 		};
 	}
 
@@ -698,7 +773,32 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				}
 			}
 			const meanTaskType = meanOrNull(mttSum, mttN, taskTypesOut.length);
-			return { meanTask, meanTaskType, scoresByTaskType };
+
+			// Same bucket-and-average shape as scoresByTaskType just above,
+			// keyed by (dimension, label) instead of task type — backed by
+			// customGroupTasksByLabel (narrowTasks), which already
+			// intersected each group's declared tasks with the current
+			// task-type/domain/modality narrowing.
+			const scoresByCustomGroup: Record<string, Record<string, number>> = {};
+			for (const [dim, byLabel] of customGroupTasksByLabel) {
+				const dimOut: Record<string, number> = {};
+				for (const [label, tasks] of byLabel) {
+					let groupSum = 0;
+					let groupN = 0;
+					for (const name of tasks) {
+						const v = row.scoresByTask[name];
+						if (v !== undefined) {
+							groupSum += v;
+							groupN++;
+						}
+					}
+					const groupMean = meanOrNull(groupSum, groupN, tasks.length);
+					if (groupMean !== null) dimOut[label] = groupMean;
+				}
+				if (Object.keys(dimOut).length > 0) scoresByCustomGroup[dim] = dimOut;
+			}
+
+			return { meanTask, meanTaskType, scoresByTaskType, scoresByCustomGroup };
 		};
 
 		rows = [];
@@ -709,21 +809,12 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				agg = computeAgg(row);
 				perRowAgg.set(row, agg);
 			}
-			// `...row` carries scoresByCustomGroup through unchanged — this
-			// client-side path (task-type/domain/modality sidebar filters,
-			// no server round-trip) can't recompute it like scoresByTaskType
-			// above: the API never sends per-task group membership, only the
-			// already-aggregated group scores, so there's nothing to
-			// re-bucket against the narrowed task set on the client. The
-			// *language* filter doesn't hit this path at all — it triggers
-			// a server refetch (leaderboard.svelte.ts's requestSummaryForLanguages)
-			// and the API recomputes scoresByCustomGroup itself
-			// (aggregators.py's _recompute_lenient_custom_groups).
 			rows.push({
 				...row,
 				meanTask: agg.meanTask,
 				meanTaskType: agg.meanTaskType,
-				scoresByTaskType: agg.scoresByTaskType
+				scoresByTaskType: agg.scoresByTaskType,
+				scoresByCustomGroup: agg.scoresByCustomGroup
 			});
 		}
 	}
@@ -784,6 +875,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		taskTypes: taskTypesOut,
 		tasks: taskNamesOut,
 		tasksMeta: visibleTasks,
+		customGroupings: customGroupingsOut,
 		rows: rankedRows
 	};
 }

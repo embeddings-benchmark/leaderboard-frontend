@@ -206,10 +206,49 @@ const LMEB = makeBenchmark({
 		{
 			name: 'Memory Type',
 			groups: [
-				{ label: 'Episodic', description: 'Recall past events grounded in temporal cues.' },
-				{ label: 'Dialogue', description: 'Maintain context across multi-turn interactions.' },
-				{ label: 'Semantic', description: null },
-				{ label: 'Procedural', description: 'Recall learned skills and structured procedures.' }
+				{
+					label: 'Episodic',
+					description: 'Recall past events grounded in temporal cues.',
+					tasks: ['LmebTask_1', 'LmebTask_2']
+				},
+				{
+					label: 'Dialogue',
+					description: 'Maintain context across multi-turn interactions.',
+					tasks: [
+						'LmebTask_3',
+						'LmebTask_4',
+						'LmebTask_5',
+						'LmebTask_6',
+						'LmebTask_7',
+						'LmebTask_8'
+					]
+				},
+				{
+					label: 'Semantic',
+					description: null,
+					tasks: [
+						'LmebTask_9',
+						'LmebTask_10',
+						'LmebTask_11',
+						'LmebTask_12',
+						'LmebTask_13',
+						'LmebTask_14',
+						'LmebTask_15',
+						'LmebTask_16'
+					]
+				},
+				{
+					label: 'Procedural',
+					description: 'Recall learned skills and structured procedures.',
+					tasks: [
+						'LmebTask_17',
+						'LmebTask_18',
+						'LmebTask_19',
+						'LmebTask_20',
+						'LmebTask_21',
+						'LmebTask_22'
+					]
+				}
 			]
 		}
 	]
