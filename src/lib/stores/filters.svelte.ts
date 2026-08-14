@@ -606,8 +606,13 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 		customGroupingsOut = (summary.customGroupings ?? [])
 			.map((dim) => ({
 				...dim,
+				// Scoped groups (tasksComplete === false) have empty `tasks`, so
+				// they never get a bucket below — always keep them (frozen, see
+				// computeAgg) instead of reading that as "zero visible tasks".
 				groups: dim.groups.filter(
-					(g) => (customGroupTasksByLabel.get(dim.name)?.get(g.label)?.length ?? 0) > 0
+					(g) =>
+						g.tasksComplete === false ||
+						(customGroupTasksByLabel.get(dim.name)?.get(g.label)?.length ?? 0) > 0
 				)
 			}))
 			.filter((dim) => dim.groups.length > 0);
@@ -796,6 +801,22 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 					if (groupMean !== null) dimOut[label] = groupMean;
 				}
 				if (Object.keys(dimOut).length > 0) scoresByCustomGroup[dim] = dimOut;
+			}
+
+			// Scoped groups never get a bucket above, so carry the row's
+			// original server value through instead of leaving it missing.
+			for (const dim of customGroupingsOut) {
+				for (const g of dim.groups) {
+					if (g.tasksComplete !== false) continue;
+					const v = row.scoresByCustomGroup?.[dim.name]?.[g.label];
+					if (v === undefined) continue;
+					let dimOut = scoresByCustomGroup[dim.name];
+					if (!dimOut) {
+						dimOut = {};
+						scoresByCustomGroup[dim.name] = dimOut;
+					}
+					dimOut[g.label] = v;
+				}
 			}
 
 			return { meanTask, meanTaskType, scoresByTaskType, scoresByCustomGroup };

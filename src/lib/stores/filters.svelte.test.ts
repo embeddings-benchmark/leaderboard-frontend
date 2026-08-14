@@ -269,6 +269,78 @@ describe('applyFilters: custom-group narrowing', () => {
 	});
 });
 
+describe('applyFilters: tasksComplete=false (scoped) groups are frozen, not recomputed or dropped', () => {
+	// A scoped group's declared tasks is empty by construction (mirrors
+	// CustomGroupSchema.tasksComplete), so it never gets a bucket and would
+	// otherwise read as "zero visible tasks" and get dropped.
+	const SCOPED_GROUPING: CustomGrouping = {
+		name: 'ScopedDim',
+		groups: [{ label: 'GScoped', tasks: [], description: null, tasksComplete: false }]
+	};
+	const MIXED_GROUPING: CustomGrouping = {
+		name: 'MixedDim',
+		groups: [
+			{ label: 'MComplete', tasks: ['T1'], description: null },
+			{ label: 'MScoped', tasks: [], description: null, tasksComplete: false }
+		]
+	};
+
+	function fixtureSummaryWithScopedGroups(): BenchmarkSummary {
+		const summary = fixtureSummary();
+		return {
+			...summary,
+			customGroupings: [...summary.customGroupings!, SCOPED_GROUPING, MIXED_GROUPING],
+			rows: summary.rows.map((r) => ({
+				...r,
+				scoresByCustomGroup: {
+					...r.scoresByCustomGroup,
+					// Distinct per-row sentinel so a wrong-row bug wouldn't slip
+					// past a coincidental match.
+					ScopedDim: { GScoped: r.rank * 0.111 },
+					MixedDim: { MComplete: r.rank * 0.222, MScoped: r.rank * 0.333 }
+				}
+			}))
+		};
+	}
+
+	it('stays present in customGroupings even when a filter would otherwise empty its bucket', () => {
+		filters.setAll('taskTypes', ['Retrieval'], true); // drops T3 -> Dim's G2 empties too
+		const out = applyFilters(fixtureSummaryWithScopedGroups());
+		const dimNames = out.customGroupings!.map((d) => d.name);
+		expect(dimNames).toContain('ScopedDim');
+		const scopedDim = out.customGroupings!.find((d) => d.name === 'ScopedDim')!;
+		expect(scopedDim.groups.map((g) => g.label)).toEqual(['GScoped']);
+		// Dim's G2 (a genuinely empty, non-scoped group) still drops as before.
+		const dim = out.customGroupings!.find((d) => d.name === 'Dim')!;
+		expect(dim.groups.map((g) => g.label)).toEqual(['G1']);
+	});
+
+	it("freezes a scoped group's score at the server value instead of recomputing it", () => {
+		const unfiltered = fixtureSummaryWithScopedGroups();
+		const a = unfiltered.rows.find((r) => r.model.name === 'org/A')!;
+		const frozenValue = a.scoresByCustomGroup!.ScopedDim.GScoped;
+
+		filters.setAll('taskTypes', ['Retrieval'], true);
+		const out = applyFilters(fixtureSummaryWithScopedGroups());
+		const outA = out.rows.find((r) => r.model.name === 'org/A')!;
+		expect(outA.scoresByCustomGroup!.ScopedDim.GScoped).toBe(frozenValue);
+	});
+
+	it('recomputes a complete group but freezes an incomplete group within the same dimension', () => {
+		const unfiltered = fixtureSummaryWithScopedGroups();
+		const a = unfiltered.rows.find((r) => r.model.name === 'org/A')!;
+		const frozenValue = a.scoresByCustomGroup!.MixedDim.MScoped;
+
+		filters.setAll('taskTypes', ['Retrieval'], true); // T1, T2 visible
+		const out = applyFilters(fixtureSummaryWithScopedGroups());
+		const outA = out.rows.find((r) => r.model.name === 'org/A')!;
+		// MComplete's declared tasks = ['T1'], unaffected by the T3 drop ->
+		// recomputes to org/A's T1 score (0.9), not frozen.
+		expect(outA.scoresByCustomGroup!.MixedDim.MComplete).toBeCloseTo(0.9, 5);
+		expect(outA.scoresByCustomGroup!.MixedDim.MScoped).toBe(frozenValue);
+	});
+});
+
 describe('applyFilters: model-row narrowing', () => {
 	it('proprietary-only / open-only flip rows in/out', () => {
 		filters.availability = 'open';
