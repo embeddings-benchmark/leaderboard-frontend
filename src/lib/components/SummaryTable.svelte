@@ -9,7 +9,7 @@
 		...COLUMN_INFO,
 		rank: {
 			title: 'Rank (Borda)',
-			text: 'Rank is computed via the Borda count: each task votes for models by their relative performance. The model with the most votes across tasks gets the highest rank. Borda tends to reward consistent breadth over single peaks.'
+			text: 'Rank is computed via the Borda count: each task votes for models by their relative performance. The model with the most votes across tasks gets the highest rank. Borda tends to reward consistent breadth over single peaks.\n\nThe range under each rank is a 95% interval over the choice of tasks: the tasks currently shown are resampled with replacement, the Borda count is recomputed on each draw, and the range covers 95% of the ranks that come back. Models whose ranges overlap are not separated by this benchmark. Filtering to fewer tasks widens the ranges, because fewer votes decide the order.'
 		},
 		model: {
 			title: 'Model',
@@ -134,6 +134,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { createSortState } from '$lib/stores/sort.svelte';
+	import { rankIntervalsCached, type RankInterval } from '$lib/rank-ci';
 	import { safeIdle } from '$lib/idle';
 	import { clampTooltipX, isBoundaryCross } from '$lib/cell-hover';
 	import ModelCellName from './ModelCellName.svelte';
@@ -297,6 +298,42 @@
 		}, 60);
 	});
 	let renderedRows = $derived(sortedRows.slice(0, visibleRows));
+
+	// Rank intervals over task resampling. Keyed on the visible task and model
+	// sets inside `rankIntervalsCached`, so sorting a column or paging in more
+	// rows reuses the previous bootstrap; only a filter that changes which
+	// tasks or models are in play pays for a recompute. Skipped entirely while
+	// this pane is parked behind another tab.
+	let rankCi = $derived.by(() => {
+		if (!active || summary.rows.length < 2 || summary.tasks.length === 0) {
+			return new Map<string, RankInterval>();
+		}
+		return rankIntervalsCached(
+			summary.tasks,
+			summary.rows.map((r) => ({
+				name: r.model.name,
+				scoresByTask: r.scoresByTask,
+				// Matches the Borda tie-break in `applyFilters`.
+				tieBreak: r.meanTask ?? -Infinity
+			}))
+		);
+	});
+
+	/**
+	 * Interval to print under a rank pill, or null when there is nothing to say.
+	 * The bounds are widened to cover the rank the row is displaying: in the
+	 * unfiltered view that rank comes from the API while the interval is
+	 * computed here, and the two orderings can disagree on ties. Printing a
+	 * range that excludes the number above it would read as a bug rather than
+	 * as uncertainty.
+	 */
+	function rankRange(row: SummaryRow): { lo: number; hi: number } | null {
+		const iv = rankCi.get(row.model.name);
+		if (!iv) return null;
+		const lo = Math.min(iv.lower, row.rank);
+		const hi = Math.max(iv.upper, row.rank);
+		return lo === hi ? null : { lo, hi };
+	}
 
 	// Display the per-task-type columns A→Z. The API preserves
 	// benchmark-specific order, but readers scan a wide table faster
@@ -742,11 +779,21 @@
 			</thead>
 			<tbody>
 				{#each renderedRows as row (row.model.name)}
+					{@const range = rankRange(row)}
 					<tr class:pinned={pinnedModels.has(row.model.name)}>
 						<td class="sticky-left">
 							<div class="rank-cell">
 								<PinButton name={row.model.name} />
-								<span class="rank-pill">#{row.rank}</span>
+								<span class="rank-stack">
+									<span class="rank-pill">#{row.rank}</span>
+									{#if range}
+										<span
+											class="rank-range"
+											title="95% interval over which tasks are in the benchmark: ranks {range.lo} to {range.hi}"
+											>{range.lo}&ndash;{range.hi}</span
+										>
+									{/if}
+								</span>
 							</div>
 						</td>
 						<th
@@ -964,6 +1011,24 @@
 		align-items: center;
 		gap: 8px;
 		padding: 4px 8px;
+	}
+
+	/* Pill above, resampling range below. The range is deliberately quiet —
+	   the rank is still the headline; the range is the caveat attached to it. */
+	.rank-stack {
+		display: inline-flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1px;
+		min-width: 0;
+	}
+
+	.rank-range {
+		font-size: 10px;
+		line-height: 1.1;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 	}
 	/* Combined pin + rank column. Single source of truth for the
 	   column width — `.sticky-model` reads the same token for its
