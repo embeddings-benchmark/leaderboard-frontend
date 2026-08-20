@@ -83,6 +83,21 @@ describe('performanceSizePlot', () => {
 		expect(trace.y).toEqual([60]);
 	});
 
+	it('includes known and unknown total parameters in hover data', () => {
+		const known = row(1, model('known', { totalParamsB: 1.5 }), 0.7);
+		const unknown = row(2, model('unknown', { totalParamsB: null }), 0.6);
+		const spec = performanceSizePlot(summary([known, unknown]));
+		const trace = spec.data[0] as {
+			customdata: Array<Array<string | number>>;
+			hovertemplate: string;
+		};
+
+		expect(trace.customdata[0][3]).toBe((1.5e9).toLocaleString());
+		expect(trace.customdata[1][3]).toBe('—');
+		expect(trace.hovertemplate).toContain('Total parameters: %{customdata[3]}');
+		expect(trace.hovertemplate).toContain('Rank: %{customdata[4]}');
+	});
+
 	it('highlights pinned rows with a thicker marker outline', () => {
 		const a = row(1, model('a', { activeParamsB: 1 }), 0.7);
 		const b = row(2, model('b', { activeParamsB: 1 }), 0.6);

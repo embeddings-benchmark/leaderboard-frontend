@@ -41,6 +41,7 @@ export function performanceSizePlot(
 		r.maxTokens != null ? r.maxTokens.toLocaleString() : '—',
 		r.embeddingDim != null ? r.embeddingDim.toLocaleString() : '—',
 		x[i].toLocaleString(),
+		r.totalParamsB != null ? (r.totalParamsB * 1e9).toLocaleString() : '—',
 		r.rank
 	]);
 
@@ -55,8 +56,9 @@ export function performanceSizePlot(
 		type: 'scatter',
 		hovertemplate:
 			'<b>%{text}</b><br>Mean(Task): %{y:.2f}<br>Active parameters: %{customdata[2]}<br>' +
+			'Total parameters: %{customdata[3]}<br>' +
 			'Max tokens: %{customdata[0]}<br>Embedding dim: %{customdata[1]}<br>' +
-			'Rank: %{customdata[3]}<extra></extra>',
+			'Rank: %{customdata[4]}<extra></extra>',
 		customdata,
 		marker: {
 			size: sizes,
