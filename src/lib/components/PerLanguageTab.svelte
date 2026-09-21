@@ -14,16 +14,26 @@
 	import SortHeader from './SortHeader.svelte';
 	import { onMount } from 'svelte';
 
-	// Real per-(model, language) scores from
+	// Real per-(model, experiment variant, language) scores from
 	// `/v1/benchmarks/{name}/per-language`. Lazy-fetched on tab mount so
 	// the Summary tab doesn't pay the explode + group_by cost. Until the
 	// fetch resolves the table renders `'—'` placeholders; once `data`
-	// is set the derived blocks rebuild against real scores.
+	// is set the derived blocks rebuild against real scores. Keyed by
+	// `rowId` (model + experiments), not bare model name — a model's base
+	// run and its ablations are separate `SummaryRow`s with separate
+	// per-language scores, matching how every other tab keys its rows.
 	let data = $state<BenchmarkPerLanguage | null>(null);
 	let scoresByModel = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const m = new Map<string, Record<string, number>>();
-		if (data) for (const r of data.rows) m.set(r.modelName, r.scoresByLanguage);
+		if (data) {
+			for (const r of data.rows) {
+				m.set(
+					rowId({ model: { name: r.modelName }, experiments: r.experiments }),
+					r.scoresByLanguage
+				);
+			}
+		}
 		return m;
 	});
 	onMount(() => {
@@ -32,7 +42,7 @@
 		});
 	});
 	function langScore(row: SummaryRow, lang: string): number | null {
-		const v = scoresByModel.get(row.model.name)?.[lang];
+		const v = scoresByModel.get(rowId(row))?.[lang];
 		return typeof v === 'number' ? v * 100 : null;
 	}
 
@@ -182,8 +192,7 @@
 
 <div class="wrap">
 	<p class="muted head-note">
-		Example per-language scores for the visible models. Click any column header to sort. Values are
-		simulated until the backend exposes the real per-language breakdown.
+		Per-language scores for the visible models. Click any column header to sort.
 	</p>
 	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl lang-table" use:stickyHead>

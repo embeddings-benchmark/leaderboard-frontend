@@ -119,6 +119,30 @@ export function modelPath(name: string): string {
  * matches the backend's variant id (sorted keys, ``__`` between pairs, ``_``
  * between key and value).
  */
+/**
+ * Deterministic string form of one experiment-kwarg value, mirroring the
+ * backend's recursive dict/list serialisation
+ * (`mteb.models.model_meta._serialize_experiment_kwargs_to_name`'s
+ * `_serialize_value`). Plain `${value}` on an object or array always
+ * stringifies to `"[object Object]"` regardless of content — using that
+ * directly would collide two different nested-kwargs experiments (e.g.
+ * `{model_kwargs: {a: 1}}` vs `{model_kwargs: {b: 2}}`) onto the same
+ * `rowId`, and renders literally as `[object Object]` in the chip label.
+ */
+export function serializeExperimentValue(value: unknown): string {
+	if (value === null || value === undefined) return String(value);
+	if (Array.isArray(value)) {
+		return `[${value.map(serializeExperimentValue).join(',')}]`;
+	}
+	if (typeof value === 'object') {
+		const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+			a < b ? -1 : a > b ? 1 : 0
+		);
+		return `{${entries.map(([k, v]) => `${k}:${serializeExperimentValue(v)}`).join(',')}}`;
+	}
+	return String(value);
+}
+
 export function rowId(row: {
 	model: { name: string };
 	experiments?: Record<string, unknown> | null;
@@ -130,7 +154,7 @@ export function rowId(row: {
 	const serialized = keys
 		.slice()
 		.sort()
-		.map((k) => `${k}_${exp[k]}`)
+		.map((k) => `${k}_${serializeExperimentValue(exp[k])}`)
 		.join('__');
 	return `${row.model.name}::${serialized}`;
 }

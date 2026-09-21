@@ -255,8 +255,18 @@
 	z-index: 2;
 	min-width: 220px;
 	max-width: 280px;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	/* No `overflow: hidden` here (unlike an earlier version of this rule) —
+	   `.tbl-model-link` wraps long names via `overflow-wrap: anywhere`, but
+	   the experiment-variant chip appended after it (`.variant-chip` in
+	   ModelCellName) is a separate inline element; the whitespace between
+	   them still inherits `nowrap` from the base `.tbl th, .tbl td` rule,
+	   so the chip can't drop to its own line and instead overflows the
+	   column box on long model names. `overflow: hidden` clipped that
+	   overflow away entirely, making the chip randomly disappear depending
+	   on model-name length. Matches `.sticky-model` in SummaryTable, which
+	   hit the same bug and already dropped `overflow: hidden` for it.
+	   `text-overflow: ellipsis` was a no-op either way — it only applies
+	   under `white-space: nowrap`, which `.tbl-model-link` overrides. */
 }
 .tbl thead th.tbl-sticky-col {
 	background: var(--surface-muted);

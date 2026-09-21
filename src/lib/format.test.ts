@@ -14,6 +14,8 @@ import {
 	maxOf,
 	minOf,
 	nextSort,
+	rowId,
+	serializeExperimentValue,
 	slug,
 	sortIcon,
 	summarizeModelLanguages,
@@ -302,5 +304,56 @@ describe('nextSort', () => {
 	it('switching to a different column ⇒ activate it at its own default', () => {
 		expect(nextSort('rank', 'score', 'asc', defaultDir)).toEqual({ key: 'rank', dir: 'asc' });
 		expect(nextSort('score', 'rank', 'asc', defaultDir)).toEqual({ key: 'score', dir: 'desc' });
+	});
+});
+
+describe('serializeExperimentValue', () => {
+	it('renders primitives as plain strings', () => {
+		expect(serializeExperimentValue(true)).toBe('true');
+		expect(serializeExperimentValue(42)).toBe('42');
+		expect(serializeExperimentValue('multi_vector')).toBe('multi_vector');
+		expect(serializeExperimentValue(null)).toBe('null');
+	});
+
+	it('renders an empty nested object as "{}", not "[object Object]"', () => {
+		// Matches `results/.../experiments/model_kwargs_{}/` on disk —
+		// `experiment_kwargs: { model_kwargs: {} }`.
+		expect(serializeExperimentValue({})).toBe('{}');
+	});
+
+	it('renders a non-empty nested object with sorted keys, recursively', () => {
+		expect(serializeExperimentValue({ b: 2, a: { c: 3 } })).toBe('{a:{c:3},b:2}');
+	});
+
+	it('renders arrays element-wise', () => {
+		expect(serializeExperimentValue([1, 'x', {}])).toBe('[1,x,{}]');
+	});
+});
+
+describe('rowId', () => {
+	it('returns the bare model name when there are no experiment kwargs', () => {
+		expect(rowId({ model: { name: 'org/model' } })).toBe('org/model');
+		expect(rowId({ model: { name: 'org/model' }, experiments: null })).toBe('org/model');
+		expect(rowId({ model: { name: 'org/model' }, experiments: {} })).toBe('org/model');
+	});
+
+	it('appends a deterministic serialization for experiment variants', () => {
+		expect(
+			rowId({ model: { name: 'org/model' }, experiments: { vector_type: 'multi_vector' } })
+		).toBe('org/model::vector_type_multi_vector');
+	});
+
+	it('gives two different nested-kwargs variants distinct ids (no [object Object] collision)', () => {
+		const idA = rowId({
+			model: { name: 'org/model' },
+			experiments: { model_kwargs: { a: 1 } }
+		});
+		const idB = rowId({
+			model: { name: 'org/model' },
+			experiments: { model_kwargs: { b: 2 } }
+		});
+		expect(idA).not.toBe(idB);
+		expect(idA).not.toContain('[object Object]');
+		expect(idB).not.toContain('[object Object]');
 	});
 });

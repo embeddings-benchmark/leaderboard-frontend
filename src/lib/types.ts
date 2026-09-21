@@ -215,14 +215,16 @@ export interface BenchmarkSummary {
 	showZeroShot?: boolean;
 }
 
-// `/v1/benchmarks/{name}/per-language` payload — one row per model with
-// its mean main_score per language label (e.g. "English" → 0.732).
-// Loaded lazily by PerLanguageTab on mount. Keys match the language
-// labels emitted on `Benchmark.languages` / `TaskMeta.languages` so
-// joins are direct.
+// `/v1/benchmarks/{name}/per-language` payload — one row per (model,
+// experiment variant) with its mean main_score per language label (e.g.
+// "English" → 0.732). Loaded lazily by PerLanguageTab on mount. Keys match
+// the language labels emitted on `Benchmark.languages` / `TaskMeta.languages`
+// so joins are direct. Same (model, experiments) granularity as `SummaryRow`
+// — match a row here to its `SummaryRow` via `rowId()`, not `modelName` alone.
 export interface BenchmarkPerLanguageRow {
 	modelName: string;
 	scoresByLanguage: Record<string, number>;
+	experiments?: Record<string, unknown> | null;
 }
 export interface BenchmarkPerLanguage {
 	benchmarkName: string;
