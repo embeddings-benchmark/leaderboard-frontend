@@ -332,9 +332,8 @@
 	);
 	let best = $derived(typeBests.best);
 	let worst = $derived(typeBests.worst);
-	// One bestWorstPerColumn pass per custom-grouping dimension — cheaper and
-	// simpler than fighting the helper's generic-key signature into a single
-	// call across dimensions, and mirrors the `typeBests` shape per dimension.
+	// One bestWorstPerColumn pass per dimension — labels aren't unique across
+	// dimensions, so they can't share a single pass like typeBests.
 	let customGroupBests = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const out = new Map<string, { best: Record<string, number>; worst: Record<string, number> }>();
@@ -569,11 +568,8 @@
 		cancelHide();
 	}
 
-	// Every non-custom-group header cell spans both header rows (via this
-	// rowspan) when a second row exists, so the extra row's height is only
-	// ever spent on the aggregated columns themselves — not blank space
-	// over Rank/Model/etc. `undefined` omits the attribute entirely when
-	// there's only one header row to begin with.
+	// Non-custom-group header cells span both header rows when the custom-group
+	// row exists, so its extra height lands only on the aggregated columns.
 	let cgRowspan = $derived(showCustomGroups ? 2 : undefined);
 </script>
 

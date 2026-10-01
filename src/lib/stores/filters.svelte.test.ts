@@ -39,10 +39,9 @@ function makeTask(name: string, type: string, overrides: Partial<TaskMeta> = {})
 	};
 }
 
-// Two-group "Dim" dimension used by the custom-group narrowing tests below —
-// G1 covers the two Retrieval tasks, G2 the one Classification task, so a
-// task-type filter cleanly drops G2 (all of its tasks excluded) while
-// leaving G1 untouched, and the "tasks" facet can partially narrow G1.
+// G1 = both Retrieval tasks, G2 = the one Classification task — a task-type
+// filter drops G2 entirely while leaving G1 untouched (or partially narrowed
+// via the "tasks" facet).
 const CUSTOM_GROUPING_FIXTURE: CustomGrouping[] = [
 	{
 		name: 'Dim',
@@ -229,11 +228,8 @@ describe('applyFilters: custom-group narrowing', () => {
 	});
 
 	it('the "tasks" picker narrows a group mean to just the picked tasks within it', () => {
-		// Keep T1 and T3 via the individual task picker, drop T2 — same
-		// "total = visible tasks in this bucket" semantics scoresByTaskType
-		// already uses (its typeTasks.length is also visible-only), so G1's
-		// mean narrows from mean(T1, T2) to just T1; G2 (only ever T3) is
-		// untouched.
+		// Keep T1 and T3, drop T2 -> G1's mean narrows from mean(T1, T2) to
+		// just T1; G2 (only ever T3) is untouched.
 		filters.setAll('tasks', ['T1', 'T3'], true);
 		const out = applyFilters(fixtureSummary());
 		expect(out.customGroupings![0].groups.map((g) => g.label)).toEqual(['G1', 'G2']);
@@ -244,11 +240,8 @@ describe('applyFilters: custom-group narrowing', () => {
 	});
 
 	it('nulls a group when the model is missing a score for one of its visible tasks', () => {
-		// org/D has no T2 score at all (simulates a model that didn't run
-		// that task). Narrow to Retrieval (T1, T2 visible, same as the
-		// "drops an empty group" test above) — G1 needs both, so org/D
-		// (T1 only) goes null under strict (no language filter) semantics,
-		// while org/A (has both) still gets a value.
+		// org/D has no T2 score (didn't run that task) — narrowed to Retrieval,
+		// G1 needs both T1+T2, so org/D goes null while org/A still gets a value.
 		const summary = fixtureSummary();
 		const d = summary.rows.find((r) => r.model.name === 'org/D')!;
 		delete d.scoresByTask.T2;

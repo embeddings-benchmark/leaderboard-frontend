@@ -477,10 +477,9 @@ function isFullSet(selected: Set<string>, available: string[]): boolean {
 	return available.every((x) => selected.has(x));
 }
 
-// Static per-summary reverse lookup (dimension -> task name -> group label),
-// built once from summary.customGroupings — it doesn't depend on the active
-// filters, so it's cached separately rather than rebuilt on every filter
-// change like tasksByType is. Backs the client-side scoresByCustomGroup
+// Reverse lookup (dimension -> task name -> group label) built once from
+// summary.customGroupings. Cached separately from tasksByType since it
+// doesn't depend on the active filters — backs the scoresByCustomGroup
 // recompute in narrowTasks/computeAgg below.
 const _customGroupTaskLookupCache = new WeakMap<
 	BenchmarkSummary,
@@ -512,13 +511,11 @@ interface NarrowingResult {
 	taskTypesOut: string[];
 	taskNamesOut: string[];
 	tasksByType: Map<string, string[]>;
-	// dimension name -> group label -> visible task names, intersected with
-	// the current filter narrowing (empty in fullView — computeAgg isn't
-	// called there, rows pass through summary.rows unchanged).
+	// dimension -> label -> visible task names (empty in fullView, where
+	// computeAgg is skipped and rows pass through unchanged).
 	customGroupTasksByLabel: Map<string, Map<string, string[]>>;
-	// summary.customGroupings narrowed the same way taskTypesOut narrows
-	// summary.taskTypes — a group with zero visible tasks drops out of its
-	// dimension entirely; a dimension with zero remaining groups drops too.
+	// summary.customGroupings narrowed like taskTypesOut narrows taskTypes —
+	// empty groups/dimensions drop out.
 	customGroupingsOut: CustomGrouping[];
 	perRowAgg: WeakMap<
 		SummaryRow,
@@ -606,9 +603,8 @@ function narrowTasks(summary: BenchmarkSummary, lenient: boolean): NarrowingResu
 		customGroupingsOut = (summary.customGroupings ?? [])
 			.map((dim) => ({
 				...dim,
-				// Scoped groups (tasksComplete === false) have empty `tasks`, so
-				// they never get a bucket below — always keep them (frozen, see
-				// computeAgg) instead of reading that as "zero visible tasks".
+				// Scoped groups have empty `tasks` (so never get a bucket) — keep
+				// them regardless instead of reading that as zero visible tasks.
 				groups: dim.groups.filter(
 					(g) =>
 						g.tasksComplete === false ||
@@ -779,11 +775,8 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			}
 			const meanTaskType = meanOrNull(mttSum, mttN, taskTypesOut.length);
 
-			// Same bucket-and-average shape as scoresByTaskType just above,
-			// keyed by (dimension, label) instead of task type — backed by
-			// customGroupTasksByLabel (narrowTasks), which already
-			// intersected each group's declared tasks with the current
-			// task-type/domain/modality narrowing.
+			// Same bucket-and-average as scoresByTaskType above, keyed by
+			// (dimension, label) via customGroupTasksByLabel instead of task type.
 			const scoresByCustomGroup: Record<string, Record<string, number>> = {};
 			for (const [dim, byLabel] of customGroupTasksByLabel) {
 				const dimOut: Record<string, number> = {};
