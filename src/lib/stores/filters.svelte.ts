@@ -2,7 +2,7 @@ import { untrack } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
 
 import type { BenchmarkSummary, CustomGrouping, ModelType, SummaryRow, TaskMeta } from '$lib/types';
-import { modelSearchKey } from '$lib/format';
+import { modelSearchKey, rowId } from '$lib/format';
 import { opennessMeets, OPENNESS_FILTERABLE } from '$lib/openness';
 import { readParams, updateUrl } from '$lib/url-state';
 import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
@@ -867,7 +867,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				const ranked: { name: string; v: number }[] = [];
 				for (const r of summary.rows) {
 					const v = r.scoresByTask[taskName];
-					if (v !== undefined) ranked.push({ name: r.model.name, v });
+					if (v !== undefined) ranked.push({ name: rowId(r), v });
 				}
 				// Stable tie-break by name for deterministic Borda points.
 				ranked.sort((a, b) => b.v - a.v || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -876,7 +876,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		}
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const visibleNames = new Set<string>();
-		for (const r of rows) visibleNames.add(r.model.name);
+		for (const r of rows) visibleNames.add(rowId(r));
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const bordaPoints = new Map<string, number>();
 		for (const taskName of taskNamesOut) {
@@ -892,7 +892,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			}
 		}
 		rankedRows = rows
-			.map((row) => ({ row, borda: bordaPoints.get(row.model.name) ?? 0 }))
+			.map((row) => ({ row, borda: bordaPoints.get(rowId(row)) ?? 0 }))
 			.sort((a, b) => {
 				if (a.borda !== b.borda) return b.borda - a.borda;
 				const am = a.row.meanTask ?? -Infinity;

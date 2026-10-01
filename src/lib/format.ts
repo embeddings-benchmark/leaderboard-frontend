@@ -159,6 +159,12 @@ export function rowId(row: {
 	return `${row.model.name}::${serialized}`;
 }
 
+/** Strips a `rowId`'s `::k_v__...` variant suffix back to the plain model name. */
+export function baseModelName(id: string): string {
+	const i = id.indexOf('::');
+	return i === -1 ? id : id.slice(0, i);
+}
+
 /** Tabular integer with locale grouping, em-dash for falsy values. */
 export function fmtInt(n: number | null | undefined): string {
 	return n ? n.toLocaleString() : '—';

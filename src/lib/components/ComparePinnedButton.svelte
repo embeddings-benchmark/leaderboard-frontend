@@ -8,14 +8,20 @@
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { baseModelName } from '$lib/format';
 
-	let count = $derived(pinnedModels.size);
+	// /compare has no notion of experiment variants, so pins collapse to
+	// their base model name here (a variant pin still contributes its base
+	// model to the comparison); dedupe when both the base and a variant
+	// of the same model are pinned.
+	let baseNames = $derived(Array.from(new Set(Array.from(pinnedModels.value, baseModelName))));
+	let count = $derived(baseNames.length);
 	// Trim trailing slash so `/compare/` and `/compare` both match.
 	let onCompare = $derived(page.url.pathname.replace(/\/$/, '').endsWith('/compare'));
 	let visible = $derived(count >= 2 && !onCompare);
 
 	let href = $derived.by(() => {
-		const names = Array.from(pinnedModels.value).slice(0, 4);
+		const names = baseNames.slice(0, 4);
 		// Manual query build (NOT URLSearchParams). `params.set('model',
 		// 'a,b')` would URL-encode the join comma to `%2C`, leaving the
 		// compare page's `readMultiParam` to treat the whole thing as a
