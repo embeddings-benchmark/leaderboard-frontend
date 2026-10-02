@@ -368,7 +368,7 @@
 		</div>
 	{/if}
 
-	<ModelHoverPortal bind:this={tipPortal} />
+	<ModelHoverPortal bind:this={tipPortal} paretoModels={summary.paretoModels} />
 
 	{#if trainTip.visible}
 		<div

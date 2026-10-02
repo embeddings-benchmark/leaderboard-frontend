@@ -45,6 +45,15 @@
 <script lang="ts">
 	import HoverPortal from './HoverPortal.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
+	import { paretoStatus } from '$lib/pareto';
+
+	interface Props {
+		// The host table's `summary.paretoModels`. Adds a "Pareto optimal"
+		// row when set. Kept out of `rowsForModel`'s cache: filters change the
+		// frontier without changing row identity.
+		paretoModels?: ReadonlySet<string>;
+	}
+	let { paretoModels }: Props = $props();
 
 	type TipState = {
 		visible: boolean;
@@ -74,11 +83,15 @@
 	// catalogue).
 	export function showFor(target: HTMLElement, row: SummaryRow, requiredModalities?: string[]) {
 		const r = target.getBoundingClientRect();
+		const rows = rowsForModel(row);
+		const pareto = paretoStatus(row, paretoModels);
 		tip = {
 			visible: true,
 			title: `${row.model.org} / ${row.model.displayName}`,
 			modelType: row.model.modelType,
-			rows: rowsForModel(row),
+			rows: paretoModels
+				? [...rows, { k: 'Pareto optimal', v: pareto == null ? '—' : pareto ? 'Yes' : 'No' }]
+				: rows,
 			modalities: modalitiesForModel(row),
 			missingModalities: missingModalities(row.model.modalities, requiredModalities),
 			x: r.left + r.width / 2,
@@ -95,7 +108,12 @@
 		{#each tip.rows as r (r.k)}
 			<div>
 				<dt>{r.k}</dt>
-				<dd class:type-value={r.k === 'Type'}>{r.v}</dd>
+				<dd
+					class:type-value={r.k === 'Type'}
+					class:pareto-yes={r.k === 'Pareto optimal' && r.v === 'Yes'}
+				>
+					{r.v}
+				</dd>
 			</div>
 		{/each}
 		<div>
@@ -148,6 +166,11 @@
 	   without a per-type rule list. */
 	.type-value {
 		color: var(--type-tint, inherit);
+		font-weight: 700;
+	}
+	/* Matches the pink of the model cell's Pareto tag. */
+	.pareto-yes {
+		color: var(--tint-pink-fg);
 		font-weight: 700;
 	}
 	.modality-note {

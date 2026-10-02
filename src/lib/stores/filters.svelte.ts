@@ -4,6 +4,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import type { BenchmarkSummary, CustomGrouping, ModelType, SummaryRow, TaskMeta } from '$lib/types';
 import { modelSearchKey, rowId } from '$lib/format';
 import { opennessMeets, OPENNESS_FILTERABLE } from '$lib/openness';
+import { paretoFrontier } from '$lib/pareto';
 import { readParams, updateUrl } from '$lib/url-state';
 import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
 
@@ -699,9 +700,10 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		filters.modelModalities.size !== MODEL_MODALITIES.length ||
 		filters.sizeActive ||
 		filters.zeroShot !== 'allow_all';
+	const matchesQuery = (row: SummaryRow): boolean => !q || modelSearchKey(row.model).includes(q);
+	// Every row filter except the name search — see `paretoModels` below.
 	const passesRowFilter = (row: SummaryRow): boolean => {
 		const m = row.model;
-		if (q && !modelSearchKey(m).includes(q)) return false;
 		if (filters.availability === 'open' && !m.openWeights) return false;
 		if (filters.availability === 'proprietary' && m.openWeights) return false;
 
@@ -742,9 +744,9 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		return true;
 	};
 
-	let rows: SummaryRow[];
+	let candidates: SummaryRow[];
 	if (fullView) {
-		rows = summary.rows.filter(passesRowFilter);
+		candidates = summary.rows.filter(passesRowFilter);
 	} else {
 		// Strict (no language filter): every visible task must be present.
 		// Lenient (language filter on): any present value contributes — matches
@@ -833,7 +835,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			return { meanTask, meanTaskType, scoresByTaskType, scoresByCustomGroup };
 		};
 
-		rows = [];
+		candidates = [];
 		for (const row of summary.rows) {
 			if (!passesRowFilter(row)) continue;
 			let agg = perRowAgg.get(row);
@@ -841,7 +843,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				agg = computeAgg(row);
 				perRowAgg.set(row, agg);
 			}
-			rows.push({
+			candidates.push({
 				...row,
 				meanTask: agg.meanTask,
 				meanTaskType: agg.meanTaskType,
@@ -850,6 +852,12 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 			});
 		}
 	}
+
+	// Like rank, the frontier ignores the name search (a find-in-table
+	// gesture): searching "e5" must not mark the best e5 models as Pareto
+	// just because it hid the models that dominate them.
+	const paretoModels = paretoFrontier(candidates);
+	const rows = q ? candidates.filter(matchesQuery) : candidates;
 
 	// Re-rank: fresh Borda when tasks narrowed; renumber 1..N when only rows
 	// narrowed; keep API ranks for name-search-only (find-in-table gesture).
@@ -908,6 +916,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		tasks: taskNamesOut,
 		tasksMeta: visibleTasks,
 		customGroupings: customGroupingsOut,
-		rows: rankedRows
+		rows: rankedRows,
+		paretoModels
 	};
 }

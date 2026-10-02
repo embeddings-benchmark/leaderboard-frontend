@@ -262,6 +262,11 @@ export interface BenchmarkSummary {
 	// Mirrors `Benchmark.showZeroShot` — SummaryTable hides the Zero-shot
 	// column when False (ViDoRe / RTEB, where the metric is uniformly 100%).
 	showZeroShot?: boolean;
+	// Frontend-only, set by `applyFilters`: `rowId`s on the size vs.
+	// Mean (Task) Pareto frontier of the filtered rows (see `$lib/pareto`).
+	// Computed before the name search narrows rows, so searching doesn't
+	// promote a model onto the frontier.
+	paretoModels?: ReadonlySet<string>;
 }
 
 // `/v1/benchmarks/{name}/per-language` payload — one row per (model,
