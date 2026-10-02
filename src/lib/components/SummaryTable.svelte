@@ -118,6 +118,10 @@
 
 <script lang="ts">
 	import type { BenchmarkSummary, SummaryRow } from '$lib/types';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { untrack } from 'svelte';
+	import { groupByOrganization, type OrganizationGroup } from '$lib/organization-groups';
+	import { getParam, updateUrl } from '$lib/url-state';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import {
 		bestWorstPerColumn,
@@ -162,6 +166,25 @@
 		benchmarkModalities?: string[];
 	}
 	let { summary, active = true, benchmarkModalities = undefined }: Props = $props();
+	let groupOrganizations = $state(getParam('group') === 'organization');
+	const expandedOrganizations = new SvelteSet<string>();
+	let expansionBenchmark = $derived(summary.benchmarkName);
+	$effect(() => {
+		updateUrl({ group: groupOrganizations ? 'organization' : null });
+	});
+	$effect(() => {
+		// Expansion is local to a benchmark; same-benchmark filter changes
+		// retain it while replacing the members and representative.
+		void expansionBenchmark;
+		untrack(() => {
+			expandedOrganizations.clear();
+			groupOrganizations = getParam('group') === 'organization';
+		});
+	});
+	function toggleOrganization(key: string) {
+		if (expandedOrganizations.has(key)) expandedOrganizations.delete(key);
+		else expandedOrganizations.add(key);
+	}
 
 	type SortKey =
 		| 'rank'
@@ -312,7 +335,47 @@
 			safeIdle(grow);
 		}, 60);
 	});
-	let renderedRows = $derived(sortedRows.slice(0, visibleRows));
+	interface DisplayRow {
+		key: string;
+		row: SummaryRow;
+		group?: OrganizationGroup;
+		member?: boolean;
+	}
+	function groupingScore(row: SummaryRow): number | null {
+		// Match the backend's primary-metric priority, but use the live
+		// displayed means after client-side task filters have recomputed them.
+		if (showMeanTask || summary.aggregations.includes('mean_subset')) return row.meanTask;
+		if (showMeanTaskType) return row.meanTaskType;
+		if (showPublicPrivate) return publicMeansByRow.get(row) ?? null;
+		return row.meanTask;
+	}
+	let renderedRows: DisplayRow[] = $derived.by(() => {
+		if (!groupOrganizations) {
+			return sortedRows.slice(0, visibleRows).map((row) => ({ key: rowId(row), row }));
+		}
+		// Members retain the existing table sort. Order groups by their
+		// representative's position, then float groups containing pins to top.
+		const groups = groupByOrganization(sortedRows, groupingScore);
+		const positions = new Map(sortedRows.map((row, i) => [rowId(row), i]));
+		groups.sort(
+			(a, b) => positions.get(rowId(a.representative))! - positions.get(rowId(b.representative))!
+		);
+		const ordered = active
+			? floatPinnedToTop(
+					groups,
+					(g) => g.rows.some((r) => pinnedModels.has(rowId(r))),
+					pinnedModels.size
+				)
+			: groups;
+		return ordered
+			.slice(0, visibleRows)
+			.flatMap((group) => [
+				{ key: group.key, row: group.representative, group },
+				...(expandedOrganizations.has(group.key)
+					? group.rows.map((row) => ({ key: `member:${rowId(row)}`, row, member: true }))
+					: [])
+			]);
+	});
 
 	// Display the per-task-type columns A→Z. The API preserves
 	// benchmark-specific order, but readers scan a wide table faster
@@ -534,6 +597,7 @@
 	}
 
 	function showModelTip(e: PointerEvent | FocusEvent, row: SummaryRow) {
+		if (e.target instanceof Element && e.target.closest('.organization-toggle')) return;
 		if (!isBoundaryCross(e)) return;
 		modelTipPortal?.showFor(e.currentTarget as HTMLElement, row, benchmarkModalities);
 	}
@@ -583,6 +647,16 @@
 </script>
 
 <div class="summary">
+	<div class="organization-controls">
+		<label><input type="checkbox" bind:checked={groupOrganizations} /> Group by organization</label>
+		{#if groupOrganizations}
+			<p>
+				Each group shows its highest-scoring matching model’s full row. Expand to see all matching
+				rows, including experiments. Sorting uses representatives; pins float whole groups. Ranks,
+				plots, and downloads remain model-level.
+			</p>
+		{/if}
+	</div>
 	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl summary-table" use:stickyHead>
 			<caption class="sr-only">Model leaderboard</caption>
@@ -833,9 +907,14 @@
 				{/if}
 			</thead>
 			<tbody>
-				{#each renderedRows as row (rowId(row))}
+				{#each renderedRows as entry (entry.key)}
+					{@const row = entry.row}
 					{@const rid = rowId(row)}
-					<tr class:pinned={pinnedModels.has(rid)}>
+					<tr
+						class:pinned={pinnedModels.has(rid)}
+						class:organization-row={!!entry.group}
+						class:organization-member={entry.member}
+					>
 						<td class="sticky-left">
 							<div class="rank-cell">
 								<PinButton name={rid} />
@@ -851,6 +930,21 @@
 							onfocusin={(e) => showModelTip(e, row)}
 							onfocusout={hideModelTip}
 						>
+							{#if entry.group}
+								<button
+									type="button"
+									class="organization-toggle"
+									aria-expanded={expandedOrganizations.has(entry.group.key)}
+									aria-label={`${expandedOrganizations.has(entry.group.key) ? 'Collapse' : 'Expand'} ${entry.group.label} (${entry.group.rows.length} rows)`}
+									onclick={() => toggleOrganization(entry.group!.key)}
+								>
+									<span aria-hidden="true"
+										>{expandedOrganizations.has(entry.group.key) ? '▾' : '▸'}</span
+									>
+									{entry.group.label}
+									<span class="organization-count">({entry.group.rows.length})</span>
+								</button>
+							{/if}
 							<ModelCellName
 								model={row.model}
 								experiments={row.experiments}
@@ -984,6 +1078,43 @@
 </div>
 
 <style>
+	.organization-controls {
+		margin-bottom: 12px;
+	}
+	.organization-controls label {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		cursor: pointer;
+	}
+	.organization-controls p {
+		margin: 6px 0 0;
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.organization-toggle {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 0;
+		border: 0;
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.organization-toggle:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+	}
+	.organization-count {
+		color: var(--text-muted);
+		font-weight: 400;
+	}
+	.organization-member .sticky-model {
+		padding-left: 28px;
+	}
 	/* Stretch this table to the full main-column width — shared `.tbl` deliberately
 	   doesn't set a width because per-task/language tables let columns size to
 	   content. */
