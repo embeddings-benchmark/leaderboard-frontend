@@ -13,7 +13,7 @@
 		},
 		model: {
 			title: 'Model',
-			text: 'Missing results — the model may not have been run on the tasks in the benchmark. We only display models that have been run on at least one task. To submit results, see the [submitting results guide](https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/). A Pareto tag marks frontier models for a given size constraint.'
+			text: 'Missing results — the model may not have been run on the tasks in the benchmark. We only display models that have been run on at least one task. To submit results, see the [submitting results guide](https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/). A Pareto tag marks models on the size vs. Mean (Task) frontier of the current view: no other model scores higher with the same or fewer active parameters, or scores the same with fewer. Size here is active parameters, not the total shown under Parameters.'
 		},
 		zeroShot: {
 			title: 'Zero-shot %',
