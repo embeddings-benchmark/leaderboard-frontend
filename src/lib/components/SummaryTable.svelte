@@ -978,7 +978,11 @@
 	<!-- Model-cell tooltip is the shared `ModelHoverPortal` so all three
 	     leaderboard tables (Summary / PerTask / PerLanguage) render
 	     byte-identical bubbles. -->
-	<ModelHoverPortal bind:this={modelTipPortal} paretoModels={summary.paretoModels} />
+	<ModelHoverPortal
+		bind:this={modelTipPortal}
+		paretoModels={summary.paretoModels}
+		paretoRanges={summary.paretoRanges}
+	/>
 
 	<!-- Per-cell openness breakdown — same card-style meter + dimensions. -->
 	<OpennessHoverPortal bind:this={opennessTipPortal} />

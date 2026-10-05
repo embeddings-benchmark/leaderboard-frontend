@@ -45,15 +45,28 @@
 <script lang="ts">
 	import HoverPortal from './HoverPortal.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
-	import { paretoStatus } from '$lib/pareto';
+	import { fmtParetoRange, paretoStatus, type ParetoRange } from '$lib/pareto';
+	import { rowId } from '$lib/format';
 
 	interface Props {
 		// The host table's `summary.paretoModels`. Adds a "Pareto optimal"
 		// row when set. Kept out of `rowsForModel`'s cache: filters change the
 		// frontier without changing row identity.
 		paretoModels?: ReadonlySet<string>;
+		// `summary.paretoRanges`: the size budgets each frontier model is the
+		// best pick for, shown in the same row ("Best for 3.6 B–6.9 B active
+		// params" — the row label already says it's Pareto optimal).
+		paretoRanges?: ReadonlyMap<string, ParetoRange>;
 	}
-	let { paretoModels }: Props = $props();
+	let { paretoModels, paretoRanges }: Props = $props();
+
+	function paretoValue(row: SummaryRow): string {
+		const pareto = paretoStatus(row, paretoModels);
+		if (pareto == null) return '—';
+		if (!pareto) return 'No';
+		const range = paretoRanges?.get(rowId(row));
+		return range ? `Best for ${fmtParetoRange(range)} active params` : 'Yes';
+	}
 
 	type TipState = {
 		visible: boolean;
@@ -84,14 +97,11 @@
 	export function showFor(target: HTMLElement, row: SummaryRow, requiredModalities?: string[]) {
 		const r = target.getBoundingClientRect();
 		const rows = rowsForModel(row);
-		const pareto = paretoStatus(row, paretoModels);
 		tip = {
 			visible: true,
 			title: `${row.model.org} / ${row.model.displayName}`,
 			modelType: row.model.modelType,
-			rows: paretoModels
-				? [...rows, { k: 'Pareto optimal', v: pareto == null ? '—' : pareto ? 'Yes' : 'No' }]
-				: rows,
+			rows: paretoModels ? [...rows, { k: 'Pareto optimal', v: paretoValue(row) }] : rows,
 			modalities: modalitiesForModel(row),
 			missingModalities: missingModalities(row.model.modalities, requiredModalities),
 			x: r.left + r.width / 2,
@@ -110,7 +120,7 @@
 				<dt>{r.k}</dt>
 				<dd
 					class:type-value={r.k === 'Type'}
-					class:pareto-yes={r.k === 'Pareto optimal' && r.v === 'Yes'}
+					class:pareto-yes={r.k === 'Pareto optimal' && r.v !== 'No' && r.v !== '—'}
 				>
 					{r.v}
 				</dd>

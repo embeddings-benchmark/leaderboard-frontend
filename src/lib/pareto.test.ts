@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelMeta, SummaryRow } from '$lib/types';
-import { datedRows, paretoFrontier, paretoStatus, recordSetters } from './pareto';
+import {
+	datedRows,
+	fmtParetoRange,
+	paretoFrontier,
+	paretoRanges,
+	paretoStatus,
+	recordSetters
+} from './pareto';
 
 function row(name: string, activeParamsB: number | null, meanTask: number | null): SummaryRow {
 	const model: ModelMeta = {
@@ -127,5 +134,35 @@ describe('datedRows + recordSetters', () => {
 			dated('b', '2025-01-01', 0.7)
 		]);
 		expect(recordSetters(rows).map((r) => r.model.name)).toEqual(['a', 'b']);
+	});
+});
+
+describe('paretoRanges + fmtParetoRange', () => {
+	it('spans each frontier model up to the next larger one, open-ended at the top', () => {
+		const rows = [
+			row('static', 0, 0.4),
+			row('small', 0.1, 0.5),
+			row('dominated', 0.5, 0.45), // not on the frontier: no range
+			row('big', 7, 0.7)
+		];
+		const ranges = paretoRanges(rows, paretoFrontier(rows));
+		expect(Object.fromEntries(ranges)).toEqual({
+			static: { fromB: 0, toB: 0.1 },
+			small: { fromB: 0.1, toB: 7 },
+			big: { fromB: 7, toB: null }
+		});
+	});
+
+	it('gives equal-size frontier models the same range', () => {
+		const rows = [row('a', 1, 0.6), row('b', 1, 0.6), row('c', 2, 0.7)];
+		const ranges = paretoRanges(rows, paretoFrontier(rows));
+		expect(ranges.get('a')).toEqual({ fromB: 1, toB: 2 });
+		expect(ranges.get('b')).toEqual({ fromB: 1, toB: 2 });
+	});
+
+	it('formats bounded, open-ended and zero-param ranges', () => {
+		expect(fmtParetoRange({ fromB: 3.634, toB: 6.946 })).toBe('3.6 B–6.9 B');
+		expect(fmtParetoRange({ fromB: 25.6, toB: null })).toBe('25.6 B+');
+		expect(fmtParetoRange({ fromB: 0, toB: 0.006 })).toBe('0 M–6 M');
 	});
 });

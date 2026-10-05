@@ -5,8 +5,8 @@
 		bestProprietaryRow,
 		performanceSizePlot
 	} from '$lib/charts/figures';
-	import { experimentLabel, fmtParamsCompact, fmtPct, rowId } from '$lib/format';
-	import { isParetoEligible } from '$lib/pareto';
+	import { experimentLabel, fmtPct, rowId } from '$lib/format';
+	import { fmtActiveParams, isParetoEligible } from '$lib/pareto';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import FrontierChart, { type LegendItem } from './FrontierChart.svelte';
 
@@ -24,9 +24,6 @@
 			? [{ kind: 'reference' as const, label: 'Best proprietary model (most publish no size)' }]
 			: [])
 	]);
-	// `fmtParamsCompact` renders 0 as '—', but a static model's 0 active
-	// params is a real value here.
-	const fmtActive = (b: number) => (b === 0 ? '0 M' : fmtParamsCompact(b, ' '));
 	// One frontier spans every model type on the chart, but active parameters
 	// don't capture per-document cost (late-interaction stores many vectors
 	// per document; cross-encoders score every query–document pair). Say so
@@ -57,7 +54,7 @@
 				variant: experimentLabel(r.experiments),
 				modelType: r.model.modelType,
 				detail: fmtPct(r.meanTask),
-				meta: fmtActive(r.activeParamsB)
+				meta: fmtActiveParams(r.activeParamsB)
 			}))
 	);
 </script>

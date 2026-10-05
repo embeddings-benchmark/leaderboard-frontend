@@ -4,7 +4,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import type { BenchmarkSummary, CustomGrouping, ModelType, SummaryRow, TaskMeta } from '$lib/types';
 import { modelSearchKey, rowId } from '$lib/format';
 import { opennessMeets, OPENNESS_FILTERABLE } from '$lib/openness';
-import { paretoFrontier } from '$lib/pareto';
+import { paretoFrontier, paretoRanges } from '$lib/pareto';
 import { readParams, updateUrl } from '$lib/url-state';
 import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
 
@@ -857,6 +857,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// gesture): searching "e5" must not mark the best e5 models as Pareto
 	// just because it hid the models that dominate them.
 	const paretoModels = paretoFrontier(candidates);
+	const paretoRangesById = paretoRanges(candidates, paretoModels);
 	const rows = q ? candidates.filter(matchesQuery) : candidates;
 
 	// Re-rank: fresh Borda when tasks narrowed; renumber 1..N when only rows
@@ -917,6 +918,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		tasksMeta: visibleTasks,
 		customGroupings: customGroupingsOut,
 		rows: rankedRows,
-		paretoModels
+		paretoModels,
+		paretoRanges: paretoRangesById
 	};
 }

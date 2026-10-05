@@ -399,6 +399,14 @@ describe('applyFilters: Pareto frontier', () => {
 		expect([...out.paretoModels!]).toEqual(['org/A']);
 	});
 
+	it('attaches each frontier model size range, also ignoring the name search', () => {
+		// Search hides org/B, but its range is still computed from the full
+		// filtered set, so it isn't cut short by what the search hid.
+		filters.nameQuery = 'org/a';
+		const out = applyFilters(fixtureSummary());
+		expect(Object.fromEntries(out.paretoRanges!)).toEqual({ 'org/B': { fromB: 1, toB: null } });
+	});
+
 	it('ignores the name search, like rank does', () => {
 		// Searching for A hides B, which dominates it; A must not become Pareto.
 		filters.nameQuery = 'org/a';

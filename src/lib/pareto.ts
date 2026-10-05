@@ -1,5 +1,5 @@
 import type { SummaryRow } from '$lib/types';
-import { rowId } from '$lib/format';
+import { fmtParamsCompact, rowId } from '$lib/format';
 
 /**
  * Pareto frontier over (active parameters ↓, Mean (Task) ↑) — the same two
@@ -38,6 +38,44 @@ export function paretoFrontier(rows: readonly SummaryRow[]): Set<string> {
 }
 
 type EligibleRow = SummaryRow & { activeParamsB: number; meanTask: number };
+
+/**
+ * The size budgets (active parameters, in billions) for which a frontier
+ * model is the best pick: from its own size up to — not including — the next
+ * larger frontier model's size. `toB` is `null` for the largest, whose range
+ * is open-ended. Equal-size frontier models share a range.
+ */
+export interface ParetoRange {
+	fromB: number;
+	toB: number | null;
+}
+
+/** `paretoFrontier`'s rows (by `rowId`), each with its `ParetoRange`. */
+export function paretoRanges(
+	rows: readonly SummaryRow[],
+	frontier: ReadonlySet<string>
+): Map<string, ParetoRange> {
+	const onFrontier = rows.filter(isParetoEligible).filter((r) => frontier.has(rowId(r)));
+	const sizes = [...new Set(onFrontier.map((r) => r.activeParamsB))].sort((a, b) => a - b);
+	const out = new Map<string, ParetoRange>();
+	for (const r of onFrontier) {
+		const next = sizes[sizes.indexOf(r.activeParamsB) + 1];
+		out.set(rowId(r), { fromB: r.activeParamsB, toB: next ?? null });
+	}
+	return out;
+}
+
+/** Active-param count for display. `fmtParamsCompact` renders 0 as '—', but
+ *  a static model's 0 active params is a real value here. */
+export function fmtActiveParams(b: number): string {
+	return b === 0 ? '0 M' : fmtParamsCompact(b, ' ');
+}
+
+/** "3.6 B–6.9 B" or, for the largest frontier model, "25.6 B+". */
+export function fmtParetoRange(range: ParetoRange): string {
+	const from = fmtActiveParams(range.fromB);
+	return range.toB == null ? `${from}+` : `${from}–${fmtActiveParams(range.toB)}`;
+}
 
 export function isParetoEligible(row: SummaryRow): row is EligibleRow {
 	return row.activeParamsB != null && row.meanTask != null;

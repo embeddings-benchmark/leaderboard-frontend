@@ -1,3 +1,5 @@
+import type { ParetoRange } from '$lib/pareto';
+
 export type BenchmarkAggregation =
 	| 'mean_task'
 	| 'mean_task_type'
@@ -267,6 +269,9 @@ export interface BenchmarkSummary {
 	// Computed before the name search narrows rows, so searching doesn't
 	// promote a model onto the frontier.
 	paretoModels?: ReadonlySet<string>;
+	// Frontend-only, set alongside `paretoModels`: each frontier row's range of
+	// size budgets it's the best pick for (see `ParetoRange` in `$lib/pareto`).
+	paretoRanges?: ReadonlyMap<string, ParetoRange>;
 }
 
 // `/v1/benchmarks/{name}/per-language` payload — one row per (model,
