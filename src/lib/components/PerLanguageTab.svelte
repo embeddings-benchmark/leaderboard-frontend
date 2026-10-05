@@ -258,7 +258,11 @@
 		</table>
 	</div>
 
-	<ModelHoverPortal bind:this={tipPortal} />
+	<ModelHoverPortal
+		bind:this={tipPortal}
+		paretoModels={summary.paretoModels}
+		paretoRanges={summary.paretoRanges}
+	/>
 </div>
 
 <style>

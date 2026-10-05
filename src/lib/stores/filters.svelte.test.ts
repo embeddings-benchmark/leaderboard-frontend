@@ -377,3 +377,41 @@ describe('applyFilters: model-row narrowing', () => {
 		expect(empty.rows).toHaveLength(0);
 	});
 });
+
+describe('applyFilters: Pareto frontier', () => {
+	// Every fixture model has 1B active params, so the frontier is simply the
+	// top Mean (Task) among the rows that survive the filters.
+	it('marks the best model of the filtered set', () => {
+		const out = applyFilters(fixtureSummary());
+		expect([...out.paretoModels!]).toEqual(['org/B']);
+	});
+
+	it('recomputes over the rows the sidebar filters keep', () => {
+		filters.setAll('modelTypes', ['dense'], true); // drops sparse org/B
+		const out = applyFilters(fixtureSummary());
+		expect([...out.paretoModels!]).toEqual(['org/A']);
+	});
+
+	it('uses the recomputed mean when the task set narrows', () => {
+		// T1 alone: A 0.9 beats B 0.7.
+		filters.setAll('tasks', ['T1'], true);
+		const out = applyFilters(fixtureSummary());
+		expect([...out.paretoModels!]).toEqual(['org/A']);
+	});
+
+	it('attaches each frontier model size range, also ignoring the name search', () => {
+		// Search hides org/B, but its range is still computed from the full
+		// filtered set, so it isn't cut short by what the search hid.
+		filters.nameQuery = 'org/a';
+		const out = applyFilters(fixtureSummary());
+		expect(Object.fromEntries(out.paretoRanges!)).toEqual({ 'org/B': { fromB: 1, toB: null } });
+	});
+
+	it('ignores the name search, like rank does', () => {
+		// Searching for A hides B, which dominates it; A must not become Pareto.
+		filters.nameQuery = 'org/a';
+		const out = applyFilters(fixtureSummary());
+		expect(out.rows.map((r) => r.model.name)).toEqual(['org/A']);
+		expect([...out.paretoModels!]).toEqual(['org/B']);
+	});
+});
