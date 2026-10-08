@@ -45,23 +45,53 @@
 			};
 			return cachedColors;
 		}
+		const text = resolveToken('--ink-strong', '#0e1116');
+		const muted = resolveToken('--text', 'var(--tip-bg)');
+		const grid = resolveToken('--border', '#cdd0d6');
+		const surface = resolveToken('--surface', '#ffffff');
+		cachedColors = { text, muted, grid, surface };
+		return cachedColors;
+	}
+
+	// Per-theme cache of resolved tokens, shared by the layout colours above
+	// and `var(--token)` strings in trace data below.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	const tokenCache = new Map<string, string>();
+	function resolveToken(token: string, fallback: string): string {
+		const hit = tokenCache.get(token);
+		if (hit) return hit;
 		const probe = document.createElement('span');
 		probe.style.position = 'absolute';
 		probe.style.visibility = 'hidden';
 		probe.style.pointerEvents = 'none';
 		document.body.appendChild(probe);
-		const resolve = (token: string, fallback: string) => {
-			probe.style.color = `var(${token})`;
-			const v = getComputedStyle(probe).color;
-			return v && v !== 'rgb(0, 0, 0)' ? v : fallback;
-		};
-		const text = resolve('--ink-strong', '#0e1116');
-		const muted = resolve('--text', 'var(--tip-bg)');
-		const grid = resolve('--border', '#cdd0d6');
-		const surface = resolve('--surface', '#ffffff');
+		probe.style.color = `var(${token})`;
+		const v = getComputedStyle(probe).color;
 		probe.remove();
-		cachedColors = { text, muted, grid, surface };
-		return cachedColors;
+		const out = v && v !== 'rgb(0, 0, 0)' ? v : fallback;
+		tokenCache.set(token, out);
+		return out;
+	}
+
+	/** Figure specs may colour traces with theme tokens — `'var(--tint-green-fg)'`
+	 *  — so a line can follow light/dark like the rest of the UI. Plotly can't
+	 *  read CSS variables, so swap each such string for its resolved colour. */
+	const VAR_RE = /^var\((--[\w-]+)\)$/;
+	function resolveVars<T>(value: T): T {
+		if (typeof value === 'string') {
+			const m = VAR_RE.exec(value);
+			return (m && typeof window !== 'undefined' ? resolveToken(m[1], value) : value) as T;
+		}
+		if (Array.isArray(value)) {
+			// Numeric coordinate arrays are the bulk of the data; skip them whole.
+			return (typeof value[0] === 'number' ? value : value.map(resolveVars)) as T;
+		}
+		if (value && typeof value === 'object') {
+			const out: Record<string, unknown> = {};
+			for (const [k, v] of Object.entries(value)) out[k] = resolveVars(v);
+			return out as T;
+		}
+		return value;
 	}
 
 	function buildLayout(): Partial<Layout> {
@@ -152,14 +182,15 @@
 		);
 		Plotly.register(traceMods);
 		mounted = true;
-		await Plotly.newPlot(el, data, buildLayout(), { ...defaultConfig, ...config });
+		await Plotly.newPlot(el, resolveVars(data), buildLayout(), { ...defaultConfig, ...config });
 
 		// React to manual toggle (writes `data-theme` on <html>) and to OS
 		// preference changes — both routed through the shared dispatcher in
 		// `theme-bus` so we share one observer/media listener across all charts.
 		const offTheme = onThemeChange(() => {
 			cachedColors = null;
-			Plotly?.react(el, data, buildLayout(), { ...defaultConfig, ...config });
+			tokenCache.clear();
+			Plotly?.react(el, resolveVars(data), buildLayout(), { ...defaultConfig, ...config });
 		});
 
 		// Cleanup on destroy is handled in onDestroy below; stash the disposer
@@ -169,9 +200,26 @@
 
 	let teardown: (() => void) | null = null;
 
+	/** Show Plotly's own hover label on the point whose trace `ids` entry is
+	 *  `id`, as if the pointer were over it — lets a list outside the chart
+	 *  point at its bubble. No-op until Plotly has loaded or if no trace
+	 *  carries that id. */
+	export function hoverPoint(id: string) {
+		if (!Plotly || !el) return;
+		const points: { curveNumber: number; pointNumber: number }[] = [];
+		data.forEach((trace, curveNumber) => {
+			const pointNumber = ((trace as { ids?: string[] }).ids ?? []).indexOf(id);
+			if (pointNumber >= 0) points.push({ curveNumber, pointNumber });
+		});
+		if (points.length) Plotly.Fx.hover(el, points);
+	}
+	export function unhover() {
+		if (Plotly && el) Plotly.Fx.unhover(el);
+	}
+
 	$effect(() => {
 		if (!mounted || !Plotly) return;
-		Plotly.react(el, data, buildLayout(), { ...defaultConfig, ...config });
+		Plotly.react(el, resolveVars(data), buildLayout(), { ...defaultConfig, ...config });
 	});
 
 	onDestroy(() => {

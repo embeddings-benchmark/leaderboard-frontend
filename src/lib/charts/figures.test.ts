@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { BenchmarkSummary, ModelMeta, SummaryRow, TaskMeta } from '$lib/types';
-import { performanceOverTimePlot, performanceSizePlot, radarPlot } from './figures';
+import {
+	FRONTIER_RING_COLOR,
+	SIZE_FRONTIER_COLOR,
+	performanceOverTimePlot,
+	performanceSizePlot,
+	radarPlot
+} from './figures';
 
 function model(name: string, overrides: Partial<ModelMeta> = {}): ModelMeta {
 	return {
@@ -66,7 +72,7 @@ describe('performanceSizePlot', () => {
 		const b = row(2, model('b', { activeParamsB: null }), 0.5); // dropped: unknown params
 		const c = row(3, model('c', { activeParamsB: 2 }), null); // dropped: null mean
 		const spec = performanceSizePlot(summary([a, b, c]));
-		const trace = spec.data[0] as { x: number[]; y: number[] };
+		const trace = spec.data[1] as { x: number[]; y: number[] };
 		expect(trace.x).toEqual([1e9]);
 		expect(trace.y).toEqual([70]);
 	});
@@ -78,7 +84,7 @@ describe('performanceSizePlot', () => {
 		// clamp to 1 rather than dropping the model from the chart (#5079).
 		const a = row(1, model('a', { activeParamsB: 0 }), 0.6);
 		const spec = performanceSizePlot(summary([a]));
-		const trace = spec.data[0] as { x: number[]; y: number[] };
+		const trace = spec.data[1] as { x: number[]; y: number[] };
 		expect(trace.x).toEqual([1]);
 		expect(trace.y).toEqual([60]);
 	});
@@ -87,7 +93,7 @@ describe('performanceSizePlot', () => {
 		const known = row(1, model('known', { totalParamsB: 1.5 }), 0.7);
 		const unknown = row(2, model('unknown', { totalParamsB: null }), 0.6);
 		const spec = performanceSizePlot(summary([known, unknown]));
-		const trace = spec.data[0] as {
+		const trace = spec.data[1] as {
 			customdata: Array<Array<string | number>>;
 			hovertemplate: string;
 		};
@@ -102,9 +108,87 @@ describe('performanceSizePlot', () => {
 		const a = row(1, model('a', { activeParamsB: 1 }), 0.7);
 		const b = row(2, model('b', { activeParamsB: 1 }), 0.6);
 		const spec = performanceSizePlot(summary([a, b]), new Set(['b']));
-		const trace = spec.data[0] as { marker: { line: { width: number[] } } };
+		const trace = spec.data[1] as { marker: { line: { width: number[] } } };
 		// Order matches the filtered rows: a (not pinned), b (pinned).
 		expect(trace.marker.line.width).toEqual([0.5, 3]);
+	});
+
+	it('draws the Pareto frontier above the markers, sorted by size', () => {
+		const big = row(1, model('big', { activeParamsB: 7 }), 0.7);
+		const small = row(2, model('small', { activeParamsB: 0.1 }), 0.5);
+		const off = row(3, model('off', { activeParamsB: 1 }), 0.4);
+		const spec = performanceSizePlot({
+			...summary([big, small, off]),
+			paretoModels: new Set(['big', 'small'])
+		});
+		const frontier = spec.data[0] as {
+			x: number[];
+			y: number[];
+			line: { color: string; width: number; shape: string };
+			hoverinfo: string;
+			zorder: number;
+		};
+		expect(spec.data).toHaveLength(2);
+		expect(frontier.x).toEqual([0.1e9, 7e9]);
+		expect(frontier.y).toEqual([50, 70]);
+		// Plain step line, like the time chart's, in purple.
+		expect(frontier.line).toEqual({ color: SIZE_FRONTIER_COLOR, width: 2, shape: 'hv' });
+		expect(frontier.hoverinfo).toBe('skip');
+		// Dense clusters would bury the line, so it sits over the markers (default zorder 0).
+		expect(frontier.zorder).toBeGreaterThan(0);
+	});
+
+	it('colors bubbles by max tokens on a blue scale', () => {
+		const spec = performanceSizePlot(summary([row(1, model('a'), 0.5)]));
+		expect((spec.data[1] as { marker: { colorscale: string } }).marker.colorscale).toBe('Blues');
+	});
+
+	it('rings frontier markers in the frontier color, pinned rings winning', () => {
+		const a = row(1, model('a'), 0.7);
+		const b = row(2, model('b'), 0.6);
+		const c = row(3, model('c'), 0.5);
+		const spec = performanceSizePlot(
+			{ ...summary([a, b, c]), paretoModels: new Set(['a', 'b']) },
+			new Set(['b'])
+		);
+		const marker = (spec.data[1] as { marker: { line: { width: number[]; color: string[] } } })
+			.marker;
+		expect(marker.line.width).toEqual([2, 3, 0.5]);
+		expect(marker.line.color[0]).toBe(FRONTIER_RING_COLOR);
+		expect(marker.line.color[1]).toBe('#ff6f3c');
+	});
+
+	it('tags each bubble with its rowId so a side panel can find it', () => {
+		const base = row(1, model('org/m'), 0.5);
+		const variant = { ...row(2, model('org/m'), 0.6), experiments: { colbert: true } };
+		const spec = performanceSizePlot(summary([base, variant]));
+		expect((spec.data[1] as { ids: string[] }).ids).toEqual(['org/m', 'org/m::colbert_true']);
+	});
+
+	it('emits an empty frontier when the summary carries none', () => {
+		const spec = performanceSizePlot(summary([row(1, model('a'), 0.5)]));
+		expect((spec.data[0] as { x: number[] }).x).toEqual([]);
+	});
+
+	it('marks the best proprietary model with a dashed line, even without a size', () => {
+		const open = row(1, model('open'), 0.8);
+		// Closed models usually publish no param count — they still set the line.
+		const best = row(2, model('closed-best', { openWeights: false, activeParamsB: null }), 0.75);
+		const worse = row(3, model('closed-worse', { openWeights: false }), 0.6);
+		const unscored = row(4, model('closed-partial', { openWeights: false }), null);
+		const spec = performanceSizePlot(summary([open, best, worse, unscored]));
+		const shapes = spec.layout.shapes as { y0: number; line: { dash: string } }[];
+		const notes = spec.layout.annotations as { text: string }[];
+		expect(shapes).toHaveLength(1);
+		expect(shapes[0].y0).toBe(75);
+		expect(shapes[0].line.dash).toBe('dash');
+		expect(notes[0].text).toBe('Best proprietary: closed-best (75.00)');
+	});
+
+	it('omits the proprietary line when every model is open', () => {
+		const spec = performanceSizePlot(summary([row(1, model('open'), 0.8)]));
+		expect(spec.layout.shapes).toEqual([]);
+		expect(spec.layout.annotations).toEqual([]);
 	});
 
 	it('uses a log-scale x-axis', () => {
@@ -122,6 +206,13 @@ describe('performanceOverTimePlot', () => {
 		const spec = performanceOverTimePlot(summary([a]));
 		expect(spec.data).toHaveLength(2);
 		expect((spec.layout.xaxis as { type?: string }).type).toBe('date');
+	});
+
+	it('tags each marker with its rowId, oldest first', () => {
+		const late = row(1, model('late', { releaseDate: '2025-01-01' }), 0.7);
+		const early = row(2, model('early', { releaseDate: '2024-01-01' }), 0.6);
+		const spec = performanceOverTimePlot(summary([late, early]));
+		expect((spec.data[1] as { ids: string[] }).ids).toEqual(['early', 'late']);
 	});
 
 	it('drops rows missing a release date or meanTask before plotting', () => {

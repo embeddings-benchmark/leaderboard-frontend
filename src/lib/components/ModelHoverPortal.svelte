@@ -45,6 +45,28 @@
 <script lang="ts">
 	import HoverPortal from './HoverPortal.svelte';
 	import ModalityIcon from './ModalityIcon.svelte';
+	import { fmtParetoRange, paretoStatus, type ParetoRange } from '$lib/pareto';
+	import { rowId } from '$lib/format';
+
+	interface Props {
+		// The host table's `summary.paretoModels`. Adds a "Pareto optimal"
+		// row when set. Kept out of `rowsForModel`'s cache: filters change the
+		// frontier without changing row identity.
+		paretoModels?: ReadonlySet<string>;
+		// `summary.paretoRanges`: the size budgets each frontier model is the
+		// best pick for, shown in the same row ("Best for 3.6 B–6.9 B active
+		// params" — the row label already says it's Pareto optimal).
+		paretoRanges?: ReadonlyMap<string, ParetoRange>;
+	}
+	let { paretoModels, paretoRanges }: Props = $props();
+
+	function paretoValue(row: SummaryRow): string {
+		const pareto = paretoStatus(row, paretoModels);
+		if (pareto == null) return '—';
+		if (!pareto) return 'No';
+		const range = paretoRanges?.get(rowId(row));
+		return range ? `Best for ${fmtParetoRange(range)} active params` : 'Yes';
+	}
 
 	type TipState = {
 		visible: boolean;
@@ -74,11 +96,12 @@
 	// catalogue).
 	export function showFor(target: HTMLElement, row: SummaryRow, requiredModalities?: string[]) {
 		const r = target.getBoundingClientRect();
+		const rows = rowsForModel(row);
 		tip = {
 			visible: true,
 			title: `${row.model.org} / ${row.model.displayName}`,
 			modelType: row.model.modelType,
-			rows: rowsForModel(row),
+			rows: paretoModels ? [...rows, { k: 'Pareto optimal', v: paretoValue(row) }] : rows,
 			modalities: modalitiesForModel(row),
 			missingModalities: missingModalities(row.model.modalities, requiredModalities),
 			x: r.left + r.width / 2,
@@ -95,7 +118,12 @@
 		{#each tip.rows as r (r.k)}
 			<div>
 				<dt>{r.k}</dt>
-				<dd class:type-value={r.k === 'Type'}>{r.v}</dd>
+				<dd
+					class:type-value={r.k === 'Type'}
+					class:pareto-yes={r.k === 'Pareto optimal' && r.v !== 'No' && r.v !== '—'}
+				>
+					{r.v}
+				</dd>
 			</div>
 		{/each}
 		<div>
@@ -148,6 +176,11 @@
 	   without a per-type rule list. */
 	.type-value {
 		color: var(--type-tint, inherit);
+		font-weight: 700;
+	}
+	/* Matches the pink of the model cell's Pareto tag. */
+	.pareto-yes {
+		color: var(--tint-pink-fg);
 		font-weight: 700;
 	}
 	.modality-note {

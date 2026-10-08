@@ -13,7 +13,7 @@
 		},
 		model: {
 			title: 'Model',
-			text: 'Missing results — the model may not have been run on the tasks in the benchmark. We only display models that have been run on at least one task. To submit results, see the [submitting results guide](https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/).'
+			text: 'Missing results — the model may not have been run on the tasks in the benchmark. We only display models that have been run on at least one task. To submit results, see the [submitting results guide](https://embeddings-benchmark.github.io/mteb/contributing/submitting_results/). A Pareto tag marks models on the size vs. Mean (Task) frontier of the current view: no other model scores higher with the same or fewer active parameters, or scores the same with fewer. Size here is active parameters, not the total shown under Parameters.'
 		},
 		zeroShot: {
 			title: 'Zero-shot %',
@@ -949,6 +949,7 @@
 								model={row.model}
 								experiments={row.experiments}
 								requiredModalities={benchmarkModalities}
+								pareto={summary.paretoModels?.has(rid) ?? false}
 							/>
 						</th>
 						<td class="tbl-num param-cell" data-model-type={row.model.modelType}>
@@ -1071,7 +1072,11 @@
 	<!-- Model-cell tooltip is the shared `ModelHoverPortal` so all three
 	     leaderboard tables (Summary / PerTask / PerLanguage) render
 	     byte-identical bubbles. -->
-	<ModelHoverPortal bind:this={modelTipPortal} />
+	<ModelHoverPortal
+		bind:this={modelTipPortal}
+		paretoModels={summary.paretoModels}
+		paretoRanges={summary.paretoRanges}
+	/>
 
 	<!-- Per-cell openness breakdown — same card-style meter + dimensions. -->
 	<OpennessHoverPortal bind:this={opennessTipPortal} />

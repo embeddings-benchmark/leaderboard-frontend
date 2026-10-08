@@ -28,6 +28,7 @@
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
 	import { apiUrl, isIconUrl, sortModalities } from '$lib/format';
 	import { opennessScore, opennessDimensions, OPENNESS_DIMENSIONS } from '$lib/openness';
+	import { paretoStatus } from '$lib/pareto';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
 	import { getParam, updateUrl } from '$lib/url-state';
 	import ModelSearchBar from '$lib/components/ModelSearchBar.svelte';
@@ -258,6 +259,7 @@
 			'Max Tokens',
 			'Openness Score',
 			...OPENNESS_DIMENSIONS.map((d) => `Openness: ${d.label}`),
+			'Pareto Optimal',
 			...(showTask ? ['Mean (Task)'] : []),
 			...(showType ? ['Mean (TaskType)'] : []),
 			...(showPP ? ['Mean (Public)', 'Mean (Private)'] : []),
@@ -288,6 +290,7 @@
 				row.maxTokens,
 				oScore,
 				...OPENNESS_DIMENSIONS.map((_, i) => (oScore === null ? null : bool(oDims[i].open))),
+				bool(paretoStatus(row, s.paretoModels)),
 				...(showTask ? [pct(row.meanTask)] : []),
 				...(showType ? [pct(row.meanTaskType)] : []),
 				...(showPP ? [pct(meanOver(row, publicNames)), pct(meanOver(row, privateNames))] : []),

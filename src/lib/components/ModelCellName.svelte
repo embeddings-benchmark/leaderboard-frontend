@@ -9,7 +9,7 @@
 
 	import type { ModelMeta } from '$lib/types';
 	import { resolve } from '$app/paths';
-	import { missingModalities, modelPath, serializeExperimentValue } from '$lib/format';
+	import { experimentLabel, missingModalities, modelPath } from '$lib/format';
 	// Distinct from the plain-text `⚠️` used for the (non-interactive)
 	// zero-shot "NA" indicator elsewhere — this badge is a clickable/
 	// hoverable button, so it gets its own glyph rather than reusing a
@@ -29,19 +29,20 @@
 		// understanding of that modality. Omit to skip the check (e.g. a
 		// context with no single well-defined modality set).
 		requiredModalities?: string[];
+		// Whether this row is on the benchmark's size vs. Mean (Task) Pareto
+		// frontier (see `$lib/pareto`). Shows a tag right after the name, so
+		// it sits beside the name rather than under a variant chip.
+		pareto?: boolean;
 	}
-	let { model, experiments = null, requiredModalities = undefined }: Props = $props();
+	let {
+		model,
+		experiments = null,
+		requiredModalities = undefined,
+		pareto = false
+	}: Props = $props();
 
 	// Compact "k=v, k=v" rendering of the experiment kwargs for the chip.
-	// Sorted so identical kwarg sets always render identically across rows.
-	// `serializeExperimentValue` handles nested objects/arrays (e.g.
-	// `model_kwargs: {}`) — plain `${v}` on those renders `[object Object]`.
-	let variantLabel = $derived.by(() => {
-		if (!experiments) return '';
-		const keys = Object.keys(experiments).sort();
-		if (keys.length === 0) return '';
-		return keys.map((k) => `${k}=${serializeExperimentValue(experiments[k])}`).join(', ');
-	});
+	let variantLabel = $derived(experimentLabel(experiments));
 
 	let missing = $derived(missingModalities(model.modalities, requiredModalities));
 </script>
@@ -54,6 +55,9 @@
 		class="tbl-model-name">{model.displayName}</span
 	>
 </a>
+{#if pareto}
+	<span class="pareto-tag">Pareto</span>
+{/if}
 {#if variantLabel}
 	<span
 		class="variant-chip"
@@ -75,6 +79,25 @@
 {/if}
 
 <style>
+	/* Inline after the model name so it wraps with long names instead of
+	   widening the fixed-width sticky column. Pink because it's the one tint
+	   no model type uses for its name colour (and purple is the variant
+	   chip); the size chart rings frontier bubbles in the same hue. */
+	.pareto-tag {
+		display: inline-block;
+		margin-left: 6px;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--tint-pink);
+		color: var(--tint-pink-fg);
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		line-height: 16px;
+		text-transform: uppercase;
+		vertical-align: 1px;
+		white-space: nowrap;
+	}
 	.variant-chip {
 		/* `display: block` (not inline-block) so the chip always starts its
 		   own line under the model name — the alternative, relying on the

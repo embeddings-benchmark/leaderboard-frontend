@@ -159,6 +159,17 @@ export function rowId(row: {
 	return `${row.model.name}::${serialized}`;
 }
 
+/**
+ * Compact "k=v, k=v" label for a row's experiment kwargs — the text of the
+ * variant chip under a model name. Sorted so identical kwarg sets always
+ * render identically; `''` for base rows.
+ */
+export function experimentLabel(experiments: Record<string, unknown> | null | undefined): string {
+	if (!experiments) return '';
+	const keys = Object.keys(experiments).sort();
+	return keys.map((k) => `${k}=${serializeExperimentValue(experiments[k])}`).join(', ');
+}
+
 /** Strips a `rowId`'s `::k_v__...` variant suffix back to the plain model name. */
 export function baseModelName(id: string): string {
 	const i = id.indexOf('::');
