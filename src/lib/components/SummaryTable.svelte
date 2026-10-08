@@ -121,7 +121,6 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { untrack } from 'svelte';
 	import { groupByOrganization, type OrganizationGroup } from '$lib/organization-groups';
-	import { getParam, updateUrl } from '$lib/url-state';
 	import { pinnedModels } from '$lib/stores/pinned.svelte';
 	import {
 		bestWorstPerColumn,
@@ -164,21 +163,22 @@
 		// models that can't encode one of them (e.g. a text-only model on a
 		// benchmark whose corpus is image+text).
 		benchmarkModalities?: string[];
+		groupOrganizations?: boolean;
 	}
-	let { summary, active = true, benchmarkModalities = undefined }: Props = $props();
-	let groupOrganizations = $state(getParam('group') === 'organization');
+	let {
+		summary,
+		active = true,
+		benchmarkModalities = undefined,
+		groupOrganizations = false
+	}: Props = $props();
 	const expandedOrganizations = new SvelteSet<string>();
 	let expansionBenchmark = $derived(summary.benchmarkName);
-	$effect(() => {
-		updateUrl({ group: groupOrganizations ? 'organization' : null });
-	});
 	$effect(() => {
 		// Expansion is local to a benchmark; same-benchmark filter changes
 		// retain it while replacing the members and representative.
 		void expansionBenchmark;
 		untrack(() => {
 			expandedOrganizations.clear();
-			groupOrganizations = getParam('group') === 'organization';
 		});
 	});
 	function toggleOrganization(key: string) {
@@ -205,7 +205,9 @@
 	// namespace). `↕` is the resting indicator when no column is the
 	// active sort.
 	const sort = createSortState<SortKey>({
-		urlKeys: ['s.summary', 'd.summary'],
+		urlKeys: untrack(() =>
+			groupOrganizations ? ['s.organizations', 'd.organizations'] : ['s.summary', 'd.summary']
+		),
 		ascKeys: ['rank', 'model'],
 		defaultIcon: '↕'
 	});
@@ -372,7 +374,9 @@
 			.flatMap((group) => [
 				{ key: group.key, row: group.representative, group },
 				...(expandedOrganizations.has(group.key)
-					? group.rows.map((row) => ({ key: `member:${rowId(row)}`, row, member: true }))
+					? group.rows
+							.filter((row) => rowId(row) !== rowId(group.representative))
+							.map((row) => ({ key: `member:${rowId(row)}`, row, member: true }))
 					: [])
 			]);
 	});
@@ -647,19 +651,18 @@
 </script>
 
 <div class="summary">
-	<div class="organization-controls">
-		<label><input type="checkbox" bind:checked={groupOrganizations} /> Group by organization</label>
-		{#if groupOrganizations}
-			<p>
-				Each group shows its highest-scoring matching model’s full row. Expand to see all matching
-				rows, including experiments. Sorting uses representatives; pins float whole groups. Ranks,
-				plots, and downloads remain model-level.
-			</p>
-		{/if}
-	</div>
+	{#if groupOrganizations}
+		<p class="organization-description">
+			Each organization shows its highest-scoring matching model’s full row. Expand to see other
+			matching rows, including experiments. Sorting uses representatives; pins float whole groups.
+			Ranks and Pareto indicators describe models, not organizations.
+		</p>
+	{/if}
 	<div class="tbl-scroll" use:stickyHScroll>
 		<table class="tbl summary-table" use:stickyHead>
-			<caption class="sr-only">Model leaderboard</caption>
+			<caption class="sr-only"
+				>{groupOrganizations ? 'Compare organizations' : 'Model leaderboard'}</caption
+			>
 			<thead>
 				<tr>
 					<th
@@ -930,7 +933,7 @@
 							onfocusin={(e) => showModelTip(e, row)}
 							onfocusout={hideModelTip}
 						>
-							{#if entry.group}
+							{#if entry.group && entry.group.rows.length > 1}
 								<button
 									type="button"
 									class="organization-toggle"
@@ -944,6 +947,8 @@
 									{entry.group.label}
 									<span class="organization-count">({entry.group.rows.length})</span>
 								</button>
+							{:else if entry.group}
+								<span class="organization-label">{entry.group.label}</span>
 							{/if}
 							<ModelCellName
 								model={row.model}
@@ -1083,21 +1088,13 @@
 </div>
 
 <style>
-	.organization-controls {
-		margin-bottom: 12px;
-	}
-	.organization-controls label {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		cursor: pointer;
-	}
-	.organization-controls p {
-		margin: 6px 0 0;
+	.organization-description {
+		margin: 0 0 12px;
 		color: var(--text-muted);
 		font-size: 12px;
 	}
-	.organization-toggle {
+	.organization-toggle,
+	.organization-label {
 		display: flex;
 		align-items: center;
 		gap: 6px;
@@ -1107,6 +1104,8 @@
 		color: var(--text);
 		font: inherit;
 		font-weight: 600;
+	}
+	.organization-toggle {
 		cursor: pointer;
 	}
 	.organization-toggle:focus-visible {
