@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { BenchmarkSummary, ModelMeta, SummaryRow, TaskMeta } from '$lib/types';
 import {
 	FRONTIER_RING_COLOR,
+	eloPlot,
+	eloPlotHeight,
 	SIZE_FRONTIER_COLOR,
 	performanceOverTimePlot,
 	performanceSizePlot,
@@ -261,5 +263,54 @@ describe('radarPlot', () => {
 			expect(trace.r).toHaveLength(4);
 			expect(trace.r[0]).toBe(trace.r[trace.r.length - 1]);
 		}
+	});
+});
+
+describe('eloPlot', () => {
+	const withElo = (r: SummaryRow, elo: number | null, low?: number, high?: number): SummaryRow => ({
+		...r,
+		elo,
+		eloLow: low ?? null,
+		eloHigh: high ?? null
+	});
+
+	it('orders best-first, caps at topN, and skips unrated rows', () => {
+		const rows = [
+			withElo(row(3, model('c'), 0.5), 1000, 990, 1010),
+			withElo(row(1, model('a'), 0.5), 1200, 1180, 1225),
+			withElo(row(2, model('b'), 0.5), 1100, 1090, 1112),
+			withElo(row(4, model('d'), 0.5), null)
+		];
+		const spec = eloPlot(summary(rows), 2);
+		const ys = spec.data.flatMap((t) => ((t as { text?: string[] }).text ?? []).map((x) => x));
+		expect(ys.sort()).toEqual(['a', 'b']);
+		const tick = (spec.layout.yaxis as { ticktext: string[] }).ticktext;
+		expect(tick).toEqual(['a', 'b']);
+	});
+
+	it('draws asymmetric whiskers from the interval and one trace per model type', () => {
+		const rows = [
+			withElo(row(1, model('a', { modelType: 'dense' }), 0.5), 1200, 1180, 1225),
+			withElo(row(2, model('b', { modelType: 'cross-encoder' }), 0.5), 1100, 1090, 1112)
+		];
+		const spec = eloPlot(summary(rows));
+		expect(spec.data).toHaveLength(2);
+		const dense = spec.data.find((t) => t.name === 'dense') as unknown as {
+			error_x: { array: number[]; arrayminus: number[] };
+		};
+		expect(dense.error_x.array).toEqual([25]);
+		expect(dense.error_x.arrayminus).toEqual([20]);
+	});
+
+	it('omits whiskers when no interval is available (filtered view)', () => {
+		const spec = eloPlot(
+			summary([withElo(row(1, model('a'), 0.5), 1200), withElo(row(2, model('b'), 0.5), 1100)])
+		);
+		expect((spec.data[0] as { error_x?: unknown }).error_x).toBeUndefined();
+	});
+
+	it('returns an empty spec with no ratings, and grows height with rows', () => {
+		expect(eloPlot(summary([row(1, model('a'), 0.5)])).data).toEqual([]);
+		expect(eloPlotHeight(100)).toBeGreaterThan(eloPlotHeight(10));
 	});
 });

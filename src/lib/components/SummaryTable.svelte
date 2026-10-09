@@ -23,6 +23,10 @@
 			title: 'Mean (Task)',
 			text: "Naïve average of the model's scores across every task in the benchmark. Continuous, simple to read, but tasks with higher score variance pull the mean around."
 		},
+		elo: {
+			title: 'ELO',
+			text: "Bradley-Terry rating from head-to-head wins: on every task each model is compared with every other, the higher score wins. A task a model wasn't evaluated on counts as a loss. Scale-invariant, so mixed metrics don't skew it. ±: 95% bootstrap interval over tasks. See the Task information tab for details."
+		},
 		meanTaskType: {
 			title: 'Mean (TaskType)',
 			text: 'Weighted average computed by first averaging per task category (Classification, Retrieval, …) and then averaging across categories. Rewards models that perform well in every category.'
@@ -170,6 +174,7 @@
 		| 'openness'
 		| 'zeroShot'
 		| 'meanTask'
+		| 'elo'
 		| 'meanTaskType'
 		| 'meanPublic'
 		| 'meanPrivate'
@@ -205,6 +210,8 @@
 				return { v: row.zeroShotPct, missing: row.zeroShotPct === -1 };
 			case 'meanTask':
 				return { v: row.meanTask ?? 0, missing: row.meanTask == null };
+			case 'elo':
+				return { v: row.elo ?? 0, missing: row.elo == null };
 			case 'meanTaskType':
 				return { v: row.meanTaskType ?? 0, missing: row.meanTaskType == null };
 			case 'meanPublic': {
@@ -364,9 +371,17 @@
 			wTask = Infinity,
 			bType = -Infinity,
 			wType = Infinity;
+		let bElo = -Infinity,
+			wElo = Infinity;
 		let sawTask = false,
-			sawType = false;
+			sawType = false,
+			sawElo = false;
 		for (const r of summary.rows) {
+			if (typeof r.elo === 'number') {
+				if (r.elo > bElo) bElo = r.elo;
+				if (r.elo < wElo) wElo = r.elo;
+				sawElo = true;
+			}
 			if (typeof r.meanTask === 'number') {
 				if (r.meanTask > bTask) bTask = r.meanTask;
 				if (r.meanTask < wTask) wTask = r.meanTask;
@@ -382,13 +397,19 @@
 			bestMeanTask: sawTask ? bTask : 0,
 			worstMeanTask: sawTask ? wTask : 0,
 			bestMeanTaskType: sawType ? bType : 0,
-			worstMeanTaskType: sawType ? wType : 0
+			worstMeanTaskType: sawType ? wType : 0,
+			bestElo: sawElo ? bElo : 0,
+			worstElo: sawElo ? wElo : 0
 		};
 	});
 	let bestMeanTask = $derived(meanStats.bestMeanTask);
 	let worstMeanTask = $derived(meanStats.worstMeanTask);
 	let bestMeanTaskType = $derived(meanStats.bestMeanTaskType);
 	let worstMeanTaskType = $derived(meanStats.worstMeanTaskType);
+	let bestElo = $derived(meanStats.bestElo);
+	let worstElo = $derived(meanStats.worstElo);
+	// Only when rows carry a rating — hides the column against an older API.
+	let showElo = $derived(summary.rows.some((r) => typeof r.elo === 'number'));
 	// Column visibility is declarative — `summary.aggregations` lists exactly
 	// which mean columns belong on this benchmark's leaderboard. Avoids
 	// inferring from the score data (which led to ViDoRe showing an empty
@@ -703,6 +724,25 @@
 							</button>
 						</th>
 					{/if}
+					{#if showElo}
+						<th
+							class="tbl-num"
+							rowspan={cgRowspan}
+							data-tip-title={INFO.elo.title}
+							data-tip={INFO.elo.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('elo')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('elo')}>
+								<span>ELO</span>
+								<InfoDot ariaLabel="What is {INFO.elo.title}?" />
+								<span class="ind" class:on={sort.key === 'elo'}>{sort.icon('elo')}</span>
+							</button>
+						</th>
+					{/if}
 					{#if showMeanTaskType}
 						<th
 							class="tbl-num"
@@ -900,6 +940,17 @@
 								class:tbl-best={row.meanTask === bestMeanTask}
 							>
 								{fmtPct(row.meanTask)}
+							</td>
+						{/if}
+						{#if showElo}
+							<td
+								class="tbl-num {heat(row.elo, worstElo, bestElo)}"
+								class:tbl-best={row.elo === bestElo}
+							>
+								{row.elo == null ? '—' : Math.round(row.elo)}
+								{#if row.elo != null && row.eloLow != null && row.eloHigh != null}
+									<span class="elo-ci">±{Math.round((row.eloHigh - row.eloLow) / 2)}</span>
+								{/if}
 							</td>
 						{/if}
 						{#if showMeanTaskType}
@@ -1189,5 +1240,11 @@
 			min-width: 160px;
 			max-width: 200px;
 		}
+	}
+	.elo-ci {
+		color: var(--text-muted, var(--text));
+		font-size: 0.8em;
+		font-weight: 400;
+		margin-left: 0.25em;
 	}
 </style>

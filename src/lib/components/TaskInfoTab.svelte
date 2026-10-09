@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Benchmark, TaskMeta } from '$lib/types';
+	import EloExplainer from './EloExplainer.svelte';
 	import TaskCard from './TaskCard.svelte';
 
 	interface Props {
@@ -49,6 +50,7 @@
 </script>
 
 <div class="wrap">
+	<EloExplainer />
 	<p class="muted">{benchmark.tasks.length} tasks in this benchmark.</p>
 	<div class="filter">
 		<input type="search" placeholder="Filter tasks…" bind:value={query} />

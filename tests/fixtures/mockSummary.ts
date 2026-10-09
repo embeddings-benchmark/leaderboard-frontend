@@ -359,6 +359,11 @@ function buildRow(
 		maxTokens: model.maxTokens,
 		meanTask,
 		meanTaskType,
+		// Stand-in for the API's Bradley-Terry rating: monotone in meanTask so
+		// ordering assertions are predictable, with a fixed ±12 interval.
+		elo: 1000 + (meanTask - 0.5) * 800,
+		eloLow: 1000 + (meanTask - 0.5) * 800 - 12,
+		eloHigh: 1000 + (meanTask - 0.5) * 800 + 12,
 		scoresByTaskType,
 		scoresByTask,
 		scoresByCustomGroup
