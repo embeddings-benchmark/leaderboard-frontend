@@ -282,8 +282,8 @@
 			'Openness Score',
 			...OPENNESS_DIMENSIONS.map((d) => `Openness: ${d.label}`),
 			'Pareto Optimal',
-			...(showTask ? ['Mean (Task)'] : []),
 			...(showElo ? ['ELO', 'ELO Low', 'ELO High'] : []),
+			...(showTask ? ['Mean (Task)'] : []),
 			...(showType ? ['Mean (TaskType)'] : []),
 			...(showPP ? ['Mean (Public)', 'Mean (Private)'] : []),
 			...(showTT ? s.taskTypes : [])
@@ -314,8 +314,8 @@
 				oScore,
 				...OPENNESS_DIMENSIONS.map((_, i) => (oScore === null ? null : bool(oDims[i].open))),
 				bool(paretoStatus(row, s.paretoModels)),
-				...(showTask ? [pct(row.meanTask)] : []),
 				...(showElo ? [row.elo ?? null, row.eloLow ?? null, row.eloHigh ?? null] : []),
+				...(showTask ? [pct(row.meanTask)] : []),
 				...(showType ? [pct(row.meanTaskType)] : []),
 				...(showPP ? [pct(meanOver(row, publicNames)), pct(meanOver(row, privateNames))] : []),
 				...(showTT ? s.taskTypes.map((tt) => pct(row.scoresByTaskType[tt])) : [])

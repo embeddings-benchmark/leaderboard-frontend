@@ -705,25 +705,6 @@
 							</button>
 						</th>
 					{/if}
-					{#if showMeanTask}
-						<th
-							class="tbl-num"
-							rowspan={cgRowspan}
-							data-tip-title={INFO.meanTask.title}
-							data-tip={INFO.meanTask.text}
-							onpointerenter={showTip}
-							onpointerleave={hideTip}
-							onfocusin={showTip}
-							onfocusout={hideTip}
-							aria-sort={sort.aria('meanTask')}
-						>
-							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTask')}>
-								<span>Mean (Task)</span>
-								<InfoDot ariaLabel="What is {INFO.meanTask.title}?" />
-								<span class="ind" class:on={sort.key === 'meanTask'}>{sort.icon('meanTask')}</span>
-							</button>
-						</th>
-					{/if}
 					{#if showElo}
 						<th
 							class="tbl-num"
@@ -740,6 +721,25 @@
 								<span>ELO</span>
 								<InfoDot ariaLabel="What is {INFO.elo.title}?" />
 								<span class="ind" class:on={sort.key === 'elo'}>{sort.icon('elo')}</span>
+							</button>
+						</th>
+					{/if}
+					{#if showMeanTask}
+						<th
+							class="tbl-num"
+							rowspan={cgRowspan}
+							data-tip-title={INFO.meanTask.title}
+							data-tip={INFO.meanTask.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('meanTask')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('meanTask')}>
+								<span>Mean (Task)</span>
+								<InfoDot ariaLabel="What is {INFO.meanTask.title}?" />
+								<span class="ind" class:on={sort.key === 'meanTask'}>{sort.icon('meanTask')}</span>
 							</button>
 						</th>
 					{/if}
@@ -934,14 +934,6 @@
 								{fmtZeroShot(row.zeroShotPct)}
 							</td>
 						{/if}
-						{#if showMeanTask}
-							<td
-								class="tbl-num {heat(row.meanTask, worstMeanTask, bestMeanTask)}"
-								class:tbl-best={row.meanTask === bestMeanTask}
-							>
-								{fmtPct(row.meanTask)}
-							</td>
-						{/if}
 						{#if showElo}
 							<td
 								class="tbl-num {heat(row.elo, worstElo, bestElo)}"
@@ -951,6 +943,14 @@
 								{#if row.elo != null && row.eloLow != null && row.eloHigh != null}
 									<span class="elo-ci">±{Math.round((row.eloHigh - row.eloLow) / 2)}</span>
 								{/if}
+							</td>
+						{/if}
+						{#if showMeanTask}
+							<td
+								class="tbl-num {heat(row.meanTask, worstMeanTask, bestMeanTask)}"
+								class:tbl-best={row.meanTask === bestMeanTask}
+							>
+								{fmtPct(row.meanTask)}
 							</td>
 						{/if}
 						{#if showMeanTaskType}
