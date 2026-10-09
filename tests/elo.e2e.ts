@@ -26,6 +26,15 @@ test.describe('Summary ELO column', () => {
 	test('renders a rating with its interval, sortable by header', async ({ page }) => {
 		await gotoSummary(page);
 		await expect(header(page, /^ELO/)).toBeVisible();
+		// ELO leads the aggregation columns, ahead of Mean (Task).
+		const names = await page
+			.locator('main table.tbl thead')
+			.first()
+			.getByRole('columnheader')
+			.allInnerTexts();
+		const idx = (re: RegExp) => names.findIndex((n) => re.test(n.trim()));
+		expect(idx(/^ELO/)).toBeGreaterThan(-1);
+		expect(idx(/^ELO/)).toBeLessThan(idx(/^Mean \(Task\)/));
 
 		const first = rows(page).first();
 		await expect(first.locator('.elo-ci')).toHaveText(/^±12$/);
