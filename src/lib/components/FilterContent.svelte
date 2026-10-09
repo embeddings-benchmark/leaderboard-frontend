@@ -383,6 +383,7 @@
 			toggleAllLabel="Clear"
 			toggleAllDisabled={filters.opennessReqs.size === 0}
 			allSelected={filters.opennessReqs.size > 0}
+			pillClass="type-fill"
 			pillLabel={(id) => OPENNESS_LABEL.get(id) ?? id}
 		/>
 
