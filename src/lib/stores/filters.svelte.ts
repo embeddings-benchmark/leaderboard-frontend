@@ -9,7 +9,6 @@ import { readParams, updateUrl } from '$lib/url-state';
 import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
 
 export type ZeroShotMode = 'allow_all' | 'remove_unknown' | 'only_zero_shot';
-export type Availability = 'both' | 'open' | 'proprietary';
 export type InstructionMode = 'both' | 'only_instruction' | 'only_non_instruction';
 
 // Model-size slider works in log10 of millions of params: 0 → 1M, 6 → 1T.
@@ -41,7 +40,6 @@ interface FiltersState {
 	// Inactive until the user moves the slider; once on, also drops unsized models.
 	sizeActive: boolean;
 	zeroShot: ZeroShotMode;
-	availability: Availability;
 	instructions: InstructionMode;
 	sentenceTransformersOnly: boolean;
 	// Drops rows for experiment/ablation variants (`SummaryRow.experiments`
@@ -59,7 +57,6 @@ function defaultState(): FiltersState {
 		maxModelSizeM: SIZE_MAX_M,
 		sizeActive: false,
 		zeroShot: 'allow_all',
-		availability: 'both',
 		instructions: 'both',
 		sentenceTransformersOnly: false,
 		excludeExperiments: false,
@@ -248,8 +245,6 @@ function createFilters() {
 			if (Number.isFinite(maxN)) state.maxModelSizeM = maxN;
 			state.sizeActive = true;
 		}
-		const avail = p.get('avail');
-		if (avail === 'open' || avail === 'proprietary' || avail === 'both') state.availability = avail;
 		const inst = p.get('inst');
 		if (inst === 'only_instruction' || inst === 'only_non_instruction' || inst === 'both') {
 			state.instructions = inst;
@@ -287,7 +282,6 @@ function createFilters() {
 				q: state.nameQuery || null,
 				minSize: state.sizeActive ? String(state.minModelSizeM) : null,
 				maxSize: state.sizeActive ? String(state.maxModelSizeM) : null,
-				avail: state.availability !== 'both' ? state.availability : null,
 				inst: state.instructions !== 'both' ? state.instructions : null,
 				zs: state.zeroShot !== 'allow_all' ? state.zeroShot : null,
 				st: state.sentenceTransformersOnly ? '1' : null,
@@ -311,7 +305,6 @@ function createFilters() {
 		state.maxModelSizeM = state.availableMaxModelSizeM;
 		state.sizeActive = false;
 		state.zeroShot = 'allow_all';
-		state.availability = 'both';
 		state.instructions = 'both';
 		state.sentenceTransformersOnly = false;
 		state.excludeExperiments = false;
@@ -369,13 +362,6 @@ function createFilters() {
 		},
 		set zeroShot(v: ZeroShotMode) {
 			state.zeroShot = v;
-			sync();
-		},
-		get availability() {
-			return state.availability;
-		},
-		set availability(v: Availability) {
-			state.availability = v;
 			sync();
 		},
 		get instructions() {
@@ -691,7 +677,6 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// Re-rank 1..N when an explicit filter narrows rows; name search alone is a
 	// find-in-table gesture and keeps original ranks.
 	const rowFilterActive =
-		filters.availability !== 'both' ||
 		filters.instructions !== 'both' ||
 		filters.sentenceTransformersOnly ||
 		filters.excludeExperiments ||
@@ -704,9 +689,6 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// Every row filter except the name search — see `paretoModels` below.
 	const passesRowFilter = (row: SummaryRow): boolean => {
 		const m = row.model;
-		if (filters.availability === 'open' && !m.openWeights) return false;
-		if (filters.availability === 'proprietary' && m.openWeights) return false;
-
 		if (filters.instructions === 'only_instruction' && !m.instructionTuned) return false;
 		if (filters.instructions === 'only_non_instruction' && m.instructionTuned) return false;
 

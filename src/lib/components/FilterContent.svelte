@@ -7,7 +7,6 @@
 		SIZE_LOG_MIN,
 		SIZE_LOG_MAX,
 		type ZeroShotMode,
-		type Availability,
 		type InstructionMode
 	} from '$lib/stores/filters.svelte';
 	import ActiveFilterStrip from './ActiveFilterStrip.svelte';
@@ -154,11 +153,6 @@
 	let langQuery = $state('');
 	let taskQuery = $state('');
 
-	const AVAILABILITY_OPTS: { label: string; value: Availability }[] = [
-		{ label: 'Both', value: 'both' },
-		{ label: 'Open', value: 'open' },
-		{ label: 'Proprietary', value: 'proprietary' }
-	];
 	const ZERO_SHOT_OPTS: { label: string; value: ZeroShotMode }[] = [
 		{ label: 'Allow all', value: 'allow_all' },
 		{ label: 'Remove unknown', value: 'remove_unknown' },
@@ -190,13 +184,6 @@
 				key: 'name',
 				label: `Name: "${filters.nameQuery.trim()}"`,
 				clear: () => (filters.nameQuery = '')
-			});
-		}
-		if (filters.availability !== 'both') {
-			list.push({
-				key: 'avail',
-				label: filters.availability === 'open' ? 'Open only' : 'Proprietary only',
-				clear: () => (filters.availability = 'both')
 			});
 		}
 		if (filters.zeroShot !== 'allow_all') {
@@ -356,16 +343,6 @@
 	<ActiveFilterStrip {chips} onResetAll={resetAll} />
 
 	{#snippet modelGroups()}
-		<div class="group">
-			<div class="group-label">Availability</div>
-			<Segmented
-				ariaLabel="Availability"
-				options={AVAILABILITY_OPTS}
-				value={filters.availability}
-				onChange={(v) => (filters.availability = v)}
-			/>
-		</div>
-
 		<!-- AND semantics, unlike every other facet here: each check *adds* a
 		     requirement, so all-selected is the strictest filter rather than
 		     "off". The head button is therefore Clear-only (disabled when

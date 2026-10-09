@@ -153,7 +153,7 @@
 					<SortHeader {sort} field="released" label="Released" />
 				</th>
 				<th class="tbl-col-chips">Modalities</th>
-				<th class="tbl-col-avail">Availability</th>
+				<th class="tbl-col-avail">Open weights</th>
 			</tr>
 		</thead>
 		<tbody>

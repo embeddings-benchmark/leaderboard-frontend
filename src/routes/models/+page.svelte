@@ -166,7 +166,6 @@
 		// All cross-row inputs read once at the top so the per-row predicate
 		// doesn't re-read them 800x per keystroke.
 		const q = filters.nameQuery.trim().toLowerCase();
-		const availability = filters.availability;
 		const instructions = filters.instructions;
 		const stOnly = filters.sentenceTransformersOnly;
 		const opennessReqs = filters.opennessReqs;
@@ -184,8 +183,6 @@
 		const modalitiesActive = modalitiesPicked.size !== MODEL_MODALITIES.length;
 		return (m: ModelMeta) => {
 			if (q && !modelSearchKey(m).includes(q)) return false;
-			if (availability === 'open' && !m.openWeights) return false;
-			if (availability === 'proprietary' && m.openWeights) return false;
 			if (instructions === 'only_instruction' && !m.instructionTuned) return false;
 			if (instructions === 'only_non_instruction' && m.instructionTuned) return false;
 			if (stOnly && !m.sentenceTransformersCompatible) return false;

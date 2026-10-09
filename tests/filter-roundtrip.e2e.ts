@@ -268,29 +268,6 @@ test.describe('/models filter URL roundtrip', () => {
 		).toBeChecked();
 	});
 
-	test('availability toggle: chip + URL + deep-link restore + Reset all', async ({ page }) => {
-		await page.goto('/models');
-		await waitForModels(page);
-
-		const openRadio = page.getByRole('radio', { name: 'Open', exact: true }).first();
-		await expect(openRadio).toBeVisible();
-		await openRadio.click();
-
-		await expect(page).toHaveURL(/[?&]avail=open/);
-		await expect(activeChips(page)).toContainText('Open only');
-		await expect(resetAll(page)).toBeVisible();
-
-		const filteredUrl = page.url();
-		await page.goto(filteredUrl);
-		await expect(page).toHaveURL(/[?&]avail=open/);
-		await expect(activeChips(page)).toContainText('Open only');
-		await expect(page.getByRole('radio', { name: 'Open', exact: true }).first()).toBeChecked();
-
-		await resetAll(page).click();
-		await expect(page).not.toHaveURL(/[?&]avail=/);
-		await expect(page.getByRole('radio', { name: 'Both', exact: true }).first()).toBeChecked();
-	});
-
 	test('language toggle (page-local): chip + URL + deep-link restore + Reset all', async ({
 		page
 	}) => {
@@ -331,31 +308,6 @@ test.describe('/models filter URL roundtrip', () => {
 		await expect(page).toHaveURL(/\/models\/?$/);
 		await expect(activeStrip(page)).toHaveCount(0);
 		await expect(page.getByPlaceholder(/search/i).first()).toHaveValue('');
-	});
-});
-
-test.describe('/benchmark/[name] filter URL roundtrip (shared store path)', () => {
-	test('availability toggle: chip + URL + restore + Reset all', async ({ page }) => {
-		const url = '/benchmark/' + encodeURIComponent('MTEB(eng, v2)');
-		await page.goto(url);
-		const openRadio = page.getByRole('radio', { name: 'Open', exact: true }).first();
-		await expect(openRadio).toBeVisible({ timeout: 20_000 });
-		await installClipboardSpy(page);
-
-		await openRadio.click();
-		await expect(page).toHaveURL(/[?&]avail=open/);
-		await expect(activeChips(page)).toContainText('Open only');
-		await expect(resetAll(page)).toBeVisible();
-		await expectShareCopiesCurrentUrl(page);
-
-		const filteredUrl = page.url();
-		await page.goto(filteredUrl);
-		await expect(page).toHaveURL(/[?&]avail=open/);
-		await expect(activeChips(page)).toContainText('Open only');
-
-		await resetAll(page).click();
-		await expect(page).not.toHaveURL(/[?&]avail=/);
-		await expect(activeChips(page).filter({ hasText: 'Open only' })).toHaveCount(0);
 	});
 });
 
