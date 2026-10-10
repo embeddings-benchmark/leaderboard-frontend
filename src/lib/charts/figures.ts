@@ -1,6 +1,6 @@
 import type { Data, Layout } from 'plotly.js';
 import type { BenchmarkSummary } from '$lib/types';
-import { rowId } from '$lib/format';
+import { experimentLabel, rowId } from '$lib/format';
 import { datedRows } from '$lib/pareto';
 
 const RADAR_LINE_COLORS = ['#EE4266', '#00a6ed', '#ECA72C', '#B42318', '#3CBBB1'];
@@ -302,5 +302,104 @@ export function radarPlot(summary: BenchmarkSummary): PlotSpec {
 		margin: { l: 40, r: 40, t: 30, b: 30 }
 	};
 
+	return { data: traces, layout };
+}
+
+// Model-type → theme tint, matching the type chips elsewhere (CLAUDE.md:
+// dense=blue, cross-encoder=orange, late-interaction=teal, sparse=amber,
+// router=purple). `var(--token)` colours are resolved by PlotlyChart.
+const MODEL_TYPE_COLORS: Record<string, string> = {
+	dense: 'var(--tint-blue-fg)',
+	'cross-encoder': 'var(--tint-orange-fg)',
+	'late-interaction': 'var(--tint-teal-fg)',
+	sparse: 'var(--tint-amber-fg)',
+	router: 'var(--tint-purple-fg)'
+};
+const MODEL_TYPE_FALLBACK_COLOR = 'var(--tint-green-fg)';
+
+/** Pixel height that fits `n` rows of the BT score plot without squashing labels. */
+export function btScorePlotHeight(n: number): number {
+	return Math.max(220, 22 * n + 90);
+}
+
+/**
+ * Top `topN` rows by BT score as a horizontal dot plot: one dot per model at its
+ * rating, a whisker for the 95% bootstrap interval when the API supplied one
+ * (absent after sidebar filters narrow the set — see `$lib/bt-score`), best model
+ * at the top. One trace per model type so the legend doubles as a colour key.
+ */
+export function btScorePlot(summary: BenchmarkSummary, topN = 30): PlotSpec {
+	const rated = summary.rows
+		.filter((r): r is typeof r & { btScore: number } => typeof r.btScore === 'number')
+		.sort((a, b) => b.btScore - a.btScore)
+		.slice(0, topN);
+	if (rated.length === 0) return { data: [], layout: {} };
+
+	const labels = rated.map((r) => {
+		const variant = experimentLabel(r.experiments);
+		return `${r.model.displayName}${variant ? ` (${variant})` : ''}`;
+	});
+	const types = [...new Set(rated.map((r) => r.model.modelType))];
+	const traces: Data[] = types.map((type) => {
+		const idx = rated.map((r, i) => i).filter((i) => rated[i].model.modelType === type);
+		const hasInterval = idx.some(
+			(i) => rated[i].btScoreLow != null && rated[i].btScoreHigh != null
+		);
+		return {
+			type: 'scatter',
+			mode: 'markers',
+			name: type,
+			ids: idx.map((i) => rowId(rated[i])),
+			x: idx.map((i) => rated[i].btScore),
+			y: idx.map((i) => i),
+			text: idx.map((i) => labels[i]),
+			customdata: idx.map((i) => {
+				const r = rated[i];
+				return [
+					r.rank,
+					r.meanTask != null ? (r.meanTask * 100).toFixed(2) : '—',
+					r.btScoreLow != null && r.btScoreHigh != null
+						? `${Math.round(r.btScoreLow)} – ${Math.round(r.btScoreHigh)}`
+						: '—'
+				];
+			}),
+			hovertemplate:
+				'<b>%{text}</b><br>BT score: %{x:.0f}<br>95% interval: %{customdata[2]}<br>' +
+				'Rank: %{customdata[0]}<br>Mean (Task): %{customdata[1]}<extra></extra>',
+			marker: { size: 9, color: MODEL_TYPE_COLORS[type] ?? MODEL_TYPE_FALLBACK_COLOR },
+			...(hasInterval
+				? {
+						error_x: {
+							type: 'data',
+							symmetric: false,
+							array: idx.map((i) =>
+								Math.max((rated[i].btScoreHigh ?? rated[i].btScore) - rated[i].btScore, 0)
+							),
+							arrayminus: idx.map((i) =>
+								Math.max(rated[i].btScore - (rated[i].btScoreLow ?? rated[i].btScore), 0)
+							),
+							thickness: 1.5,
+							width: 3,
+							color: MODEL_TYPE_COLORS[type] ?? MODEL_TYPE_FALLBACK_COLOR
+						}
+					}
+				: {})
+		};
+	});
+
+	const layout: Partial<Layout> = {
+		xaxis: { title: { text: 'BT score (95% interval)' }, zeroline: false },
+		yaxis: {
+			autorange: 'reversed',
+			tickmode: 'array',
+			tickvals: rated.map((_, i) => i),
+			ticktext: labels,
+			automargin: true,
+			tickfont: { size: 11 }
+		},
+		showlegend: true,
+		legend: { orientation: 'h', y: 1.02, yanchor: 'bottom', x: 0, xanchor: 'left' },
+		margin: { t: 40, r: 24, b: 50, l: 60 }
+	};
 	return { data: traces, layout };
 }

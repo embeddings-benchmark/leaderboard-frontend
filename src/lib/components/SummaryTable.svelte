@@ -23,6 +23,10 @@
 			title: 'Mean (Task)',
 			text: "Naïve average of the model's scores across every task in the benchmark. Continuous, simple to read, but tasks with higher score variance pull the mean around."
 		},
+		btScore: {
+			title: 'BT Score',
+			text: "Bradley-Terry (BT) score, a rating on an Elo-like scale (centered on 1000) fitted from head-to-head wins: on every task each model is compared with every other, the higher score wins. A task a model wasn't evaluated on counts as a loss. Scale-invariant, so mixed metrics don't skew it. ±: 95% bootstrap interval over tasks. See the Task information tab for details."
+		},
 		meanTaskType: {
 			title: 'Mean (TaskType)',
 			text: 'Weighted average computed by first averaging per task category (Classification, Retrieval, …) and then averaging across categories. Rewards models that perform well in every category.'
@@ -170,6 +174,7 @@
 		| 'openness'
 		| 'zeroShot'
 		| 'meanTask'
+		| 'btScore'
 		| 'meanTaskType'
 		| 'meanPublic'
 		| 'meanPrivate'
@@ -205,6 +210,8 @@
 				return { v: row.zeroShotPct, missing: row.zeroShotPct === -1 };
 			case 'meanTask':
 				return { v: row.meanTask ?? 0, missing: row.meanTask == null };
+			case 'btScore':
+				return { v: row.btScore ?? 0, missing: row.btScore == null };
 			case 'meanTaskType':
 				return { v: row.meanTaskType ?? 0, missing: row.meanTaskType == null };
 			case 'meanPublic': {
@@ -364,9 +371,17 @@
 			wTask = Infinity,
 			bType = -Infinity,
 			wType = Infinity;
+		let bBt = -Infinity,
+			wBt = Infinity;
 		let sawTask = false,
-			sawType = false;
+			sawType = false,
+			sawBt = false;
 		for (const r of summary.rows) {
+			if (typeof r.btScore === 'number') {
+				if (r.btScore > bBt) bBt = r.btScore;
+				if (r.btScore < wBt) wBt = r.btScore;
+				sawBt = true;
+			}
 			if (typeof r.meanTask === 'number') {
 				if (r.meanTask > bTask) bTask = r.meanTask;
 				if (r.meanTask < wTask) wTask = r.meanTask;
@@ -382,13 +397,19 @@
 			bestMeanTask: sawTask ? bTask : 0,
 			worstMeanTask: sawTask ? wTask : 0,
 			bestMeanTaskType: sawType ? bType : 0,
-			worstMeanTaskType: sawType ? wType : 0
+			worstMeanTaskType: sawType ? wType : 0,
+			bestBtScore: sawBt ? bBt : 0,
+			worstBtScore: sawBt ? wBt : 0
 		};
 	});
 	let bestMeanTask = $derived(meanStats.bestMeanTask);
 	let worstMeanTask = $derived(meanStats.worstMeanTask);
 	let bestMeanTaskType = $derived(meanStats.bestMeanTaskType);
 	let worstMeanTaskType = $derived(meanStats.worstMeanTaskType);
+	let bestBtScore = $derived(meanStats.bestBtScore);
+	let worstBtScore = $derived(meanStats.worstBtScore);
+	// Only when rows carry a rating — hides the column against an older API.
+	let showBtScore = $derived(summary.rows.some((r) => typeof r.btScore === 'number'));
 	// Column visibility is declarative — `summary.aggregations` lists exactly
 	// which mean columns belong on this benchmark's leaderboard. Avoids
 	// inferring from the score data (which led to ViDoRe showing an empty
@@ -684,6 +705,25 @@
 							</button>
 						</th>
 					{/if}
+					{#if showBtScore}
+						<th
+							class="tbl-num"
+							rowspan={cgRowspan}
+							data-tip-title={INFO.btScore.title}
+							data-tip={INFO.btScore.text}
+							onpointerenter={showTip}
+							onpointerleave={hideTip}
+							onfocusin={showTip}
+							onfocusout={hideTip}
+							aria-sort={sort.aria('btScore')}
+						>
+							<button class="sort-btn tbl-num" onclick={() => sort.click('btScore')}>
+								<span>BT Score</span>
+								<InfoDot ariaLabel="What is {INFO.btScore.title}?" />
+								<span class="ind" class:on={sort.key === 'btScore'}>{sort.icon('btScore')}</span>
+							</button>
+						</th>
+					{/if}
 					{#if showMeanTask}
 						<th
 							class="tbl-num"
@@ -892,6 +932,19 @@
 						{#if showZeroShot}
 							<td class="tbl-num zs-cell" class:partial={row.zeroShotPct === -1}>
 								{fmtZeroShot(row.zeroShotPct)}
+							</td>
+						{/if}
+						{#if showBtScore}
+							<td
+								class="tbl-num {heat(row.btScore, worstBtScore, bestBtScore)}"
+								class:tbl-best={row.btScore === bestBtScore}
+							>
+								{row.btScore == null ? '—' : Math.round(row.btScore)}
+								{#if row.btScore != null && row.btScoreLow != null && row.btScoreHigh != null}
+									<span class="bt-score-ci"
+										>±{Math.round((row.btScoreHigh - row.btScoreLow) / 2)}</span
+									>
+								{/if}
 							</td>
 						{/if}
 						{#if showMeanTask}
@@ -1189,5 +1242,11 @@
 			min-width: 160px;
 			max-width: 200px;
 		}
+	}
+	.bt-score-ci {
+		color: var(--text-muted, var(--text));
+		font-size: 0.8em;
+		font-weight: 400;
+		margin-left: 0.25em;
 	}
 </style>
