@@ -174,7 +174,7 @@ describe('applyFilters: no narrowing', () => {
 	});
 
 	it('preserves the API order + rank when no task-set narrowing is active', () => {
-		// Row-only filters (search query, availability, …) shouldn't relabel
+		// Row-only filters (search query, instructions, …) shouldn't relabel
 		// peers' ranks just because some rows got hidden. Without any filter
 		// active, the unfiltered view must keep the fixture's API order.
 		const out = applyFilters(fixtureSummary());
@@ -335,16 +335,6 @@ describe('applyFilters: tasksComplete=false (scoped) groups are frozen, not reco
 });
 
 describe('applyFilters: model-row narrowing', () => {
-	it('proprietary-only / open-only flip rows in/out', () => {
-		filters.availability = 'open';
-		let out = applyFilters(fixtureSummary());
-		expect(out.rows.map((r) => r.model.name).sort()).toEqual(['org/A', 'org/B', 'org/D']);
-
-		filters.availability = 'proprietary';
-		out = applyFilters(fixtureSummary());
-		expect(out.rows.map((r) => r.model.name)).toEqual(['org/C']);
-	});
-
 	it('model-type chips intersect on .modelType', () => {
 		filters.setAll('modelTypes', ['sparse'], true);
 		const out = applyFilters(fixtureSummary());
