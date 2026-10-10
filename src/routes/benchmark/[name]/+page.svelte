@@ -36,7 +36,7 @@
 	import SummaryTable from '$lib/components/SummaryTable.svelte';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
-	import EloTab from '$lib/components/EloTab.svelte';
+	import BtScoreTab from '$lib/components/BtScoreTab.svelte';
 	import PerfSizeTab from '$lib/components/PerfSizeTab.svelte';
 	import PerfTimeTab from '$lib/components/PerfTimeTab.svelte';
 	import PerTaskTab from '$lib/components/PerTaskTab.svelte';
@@ -57,7 +57,7 @@
 
 	type TabId =
 		| 'summary'
-		| 'elo'
+		| 'bt_score'
 		| 'perf_size'
 		| 'perf_time'
 		| 'perf_task'
@@ -67,7 +67,7 @@
 	// `language_view` — its column list is undefined without one.
 	const ALL_TABS: { id: TabId; label: string }[] = [
 		{ id: 'summary', label: 'Summary' },
-		{ id: 'elo', label: 'ELO ratings' },
+		{ id: 'bt_score', label: 'BT scores' },
 		{ id: 'perf_size', label: 'Performance per Model Size' },
 		{ id: 'perf_time', label: 'Performance over Time' },
 		{ id: 'perf_task', label: 'Performance per task' },
@@ -80,13 +80,16 @@
 	);
 	let TABS = $derived(
 		ALL_TABS.filter(
-			(t) => (t.id !== 'perf_language' || hasLanguageView) && (t.id !== 'elo' || hasElo)
+			(t) => (t.id !== 'perf_language' || hasLanguageView) && (t.id !== 'bt_score' || hasBtScore)
 		)
 	);
 	// Fall back to Summary if the deep-linked tab is no longer available
 	// (e.g. ?tab=perf_language on a benchmark without language_view).
 	$effect(() => {
-		if ((activeTab === 'perf_language' && !hasLanguageView) || (activeTab === 'elo' && !hasElo)) {
+		if (
+			(activeTab === 'perf_language' && !hasLanguageView) ||
+			(activeTab === 'bt_score' && !hasBtScore)
+		) {
 			activeTab = 'summary';
 		}
 	});
@@ -222,12 +225,12 @@
 			: null
 	);
 	// Optimistic while the summary is loading or filtered to nothing so a
-	// `?tab=elo` deep link survives; hidden only against an older API that
+	// `?tab=bt_score` deep link survives; hidden only against an older API that
 	// sends no ratings.
-	let hasElo = $derived(
+	let hasBtScore = $derived(
 		!filteredSummary ||
 			filteredSummary.rows.length === 0 ||
-			filteredSummary.rows.some((r) => typeof r.elo === 'number')
+			filteredSummary.rows.some((r) => typeof r.btScore === 'number')
 	);
 	// Count of fully-evaluated models: `meanTask` is `null` whenever a row is
 	// missing any task cell, so non-null means every task in the benchmark
@@ -243,7 +246,7 @@
 		const aggs = new Set(s.aggregations ?? []);
 		const showTask = aggs.has('mean_task');
 		const showType = aggs.has('mean_task_type');
-		const showElo = s.rows.some((r) => typeof r.elo === 'number');
+		const showBtScore = s.rows.some((r) => typeof r.btScore === 'number');
 		const showPP = aggs.has('public_private');
 		const showTT = aggs.has('task_types');
 		const publicNames = new Set(s.tasksMeta.filter((t) => t.isPublic !== false).map((t) => t.name));
@@ -282,7 +285,7 @@
 			'Openness Score',
 			...OPENNESS_DIMENSIONS.map((d) => `Openness: ${d.label}`),
 			'Pareto Optimal',
-			...(showElo ? ['ELO', 'ELO Low', 'ELO High'] : []),
+			...(showBtScore ? ['BT Score', 'BT Score Low', 'BT Score High'] : []),
 			...(showTask ? ['Mean (Task)'] : []),
 			...(showType ? ['Mean (TaskType)'] : []),
 			...(showPP ? ['Mean (Public)', 'Mean (Private)'] : []),
@@ -314,7 +317,9 @@
 				oScore,
 				...OPENNESS_DIMENSIONS.map((_, i) => (oScore === null ? null : bool(oDims[i].open))),
 				bool(paretoStatus(row, s.paretoModels)),
-				...(showElo ? [row.elo ?? null, row.eloLow ?? null, row.eloHigh ?? null] : []),
+				...(showBtScore
+					? [row.btScore ?? null, row.btScoreLow ?? null, row.btScoreHigh ?? null]
+					: []),
 				...(showTask ? [pct(row.meanTask)] : []),
 				...(showType ? [pct(row.meanTaskType)] : []),
 				...(showPP ? [pct(meanOver(row, publicNames)), pct(meanOver(row, privateNames))] : []),
@@ -474,9 +479,9 @@
 							/>
 						</div>
 					{/if}
-					{#if visited.has('elo')}
-						<div class="tab-pane" class:active={activeTab === 'elo'}>
-							<EloTab summary={filteredSummary} onExplain={() => (activeTab = 'task_info')} />
+					{#if visited.has('bt_score')}
+						<div class="tab-pane" class:active={activeTab === 'bt_score'}>
+							<BtScoreTab summary={filteredSummary} onExplain={() => (activeTab = 'task_info')} />
 						</div>
 					{/if}
 					{#if visited.has('perf_size')}

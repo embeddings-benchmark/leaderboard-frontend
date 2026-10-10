@@ -361,9 +361,9 @@ function buildRow(
 		meanTaskType,
 		// Stand-in for the API's Bradley-Terry rating: monotone in meanTask so
 		// ordering assertions are predictable, with a fixed ±12 interval.
-		elo: 1000 + (meanTask - 0.5) * 800,
-		eloLow: 1000 + (meanTask - 0.5) * 800 - 12,
-		eloHigh: 1000 + (meanTask - 0.5) * 800 + 12,
+		btScore: 1000 + (meanTask - 0.5) * 800,
+		btScoreLow: 1000 + (meanTask - 0.5) * 800 - 12,
+		btScoreHigh: 1000 + (meanTask - 0.5) * 800 + 12,
 		scoresByTaskType,
 		scoresByTask,
 		scoresByCustomGroup

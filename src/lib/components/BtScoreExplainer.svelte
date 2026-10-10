@@ -1,14 +1,15 @@
 <script lang="ts">
-	// "How is ELO computed?" — plain-language walkthrough with a tiny worked
-	// example, so the Summary table's ELO column isn't a black box. The same
-	// algorithm lives in `$lib/elo` (client) and `mteb/api/bradley_terry.py`.
+	// "How is the BT score computed?" — plain-language walkthrough with a tiny worked
+	// example, so the Summary table's BT Score column isn't a black box. The same
+	// algorithm lives in `$lib/bt-score` (client) and `mteb/api/bradley_terry.py`.
 </script>
 
-<details class="elo-explainer" id="elo">
-	<summary>How is the ELO score computed?</summary>
+<details class="bt-score-explainer" id="bt-score">
+	<summary>How is the BT score computed?</summary>
 	<div class="body">
 		<p>
-			Instead of averaging raw scores (which mixes metrics with different scales), ELO only asks
+			Instead of averaging raw scores (which mixes metrics with different scales), the BT
+			(Bradley-Terry) score only asks
 			<em>who beats whom</em> on each task.
 		</p>
 		<ol>
@@ -51,14 +52,14 @@
 			ratings.
 		</p>
 		<p class="note">
-			ELO is relative to the models and tasks being compared: narrowing the filters re-fits it on
-			the visible set (without the ± interval).
+			The BT score is relative to the models and tasks being compared: narrowing the filters re-fits
+			it on the visible set (without the ± interval).
 		</p>
 	</div>
 </details>
 
 <style>
-	.elo-explainer {
+	.bt-score-explainer {
 		border: 1px solid var(--border);
 		border-radius: 10px;
 		background: var(--surface);

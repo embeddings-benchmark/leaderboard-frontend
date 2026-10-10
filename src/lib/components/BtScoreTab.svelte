@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { BenchmarkSummary } from '$lib/types';
-	import { eloPlot, eloPlotHeight } from '$lib/charts/figures';
+	import { btScorePlot, btScorePlotHeight } from '$lib/charts/figures';
 	import PlotlyChart from './PlotlyChart.svelte';
 	import Segmented from './Segmented.svelte';
 
@@ -15,22 +15,24 @@
 	type Size = (typeof SIZES)[number];
 	let size = $state<Size>('20');
 	let topN = $derived(Number(size));
-	let spec = $derived(eloPlot(summary, topN));
+	let spec = $derived(btScorePlot(summary, topN));
 	let shown = $derived(
 		spec.data.reduce((n, t) => n + ((t as { x?: unknown[] }).x?.length ?? 0), 0)
 	);
 	// Whiskers only exist for the API's full-view ratings — sidebar filters
-	// refit ELO client-side without the bootstrap (see `$lib/elo`).
-	let hasInterval = $derived(summary.rows.some((r) => r.eloLow != null && r.eloHigh != null));
+	// refit the BT score client-side without the bootstrap (see `$lib/bt-score`).
+	let hasInterval = $derived(
+		summary.rows.some((r) => r.btScoreLow != null && r.btScoreHigh != null)
+	);
 </script>
 
 <div class="wrap">
 	<div class="intro">
 		<p class="muted">
-			ELO rating of the top {shown} models (best first); each dot is a model's rating and the whisker
-			is its 95% bootstrap interval over tasks. Models whose intervals overlap aren't reliably ordered.
+			BT score of the top {shown} models (best first); each dot is a model's score and the whisker is
+			its 95% bootstrap interval over tasks. Models whose intervals overlap aren't reliably ordered.
 			{#if !hasInterval}
-				Intervals are hidden while task or model filters are active — the rating is refit on the
+				Intervals are hidden while task or model filters are active — the score is refit on the
 				visible set without the bootstrap.
 			{/if}
 			{#if onExplain}<button type="button" class="link" onclick={onExplain}
@@ -45,9 +47,9 @@
 		/>
 	</div>
 	{#if spec.data.length === 0}
-		<p class="muted">No ELO ratings are available for this benchmark.</p>
+		<p class="muted">No BT scores are available for this benchmark.</p>
 	{:else}
-		<PlotlyChart data={spec.data} layout={spec.layout} height={eloPlotHeight(shown)} />
+		<PlotlyChart data={spec.data} layout={spec.layout} height={btScorePlotHeight(shown)} />
 	{/if}
 </div>
 

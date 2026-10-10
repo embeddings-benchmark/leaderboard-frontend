@@ -35,14 +35,14 @@ Read via `$env/static/public` (build-time inlined):
 
 `/explorer` prefix is gone — every route is at the site root.
 
-| Route                           | Purpose                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------ |
-| `/`                             | Three featured `PrimaryLeaderTile`s + `MenuSection`s                                 |
-| `/benchmarks`                   | Catalog + sidebar filters (Modality / Task type / Domain)                            |
-| `/benchmark/[name]`             | Hero + tabs (Summary / ELO / Perf×Size / Perf×Time / Per task / Per language / Info) |
-| `/models` + `/models/[...name]` | Index + detail. Rest-param accepts `org/name` (validated by `params/modelName.ts`)   |
-| `/tasks` + `/tasks/[name]`      | Index + detail, sidebar mirrors `/benchmarks`                                        |
-| `/compare`                      | Up to 4 models side-by-side with radar                                               |
+| Route                           | Purpose                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `/`                             | Three featured `PrimaryLeaderTile`s + `MenuSection`s                                       |
+| `/benchmarks`                   | Catalog + sidebar filters (Modality / Task type / Domain)                                  |
+| `/benchmark/[name]`             | Hero + tabs (Summary / BT scores / Perf×Size / Perf×Time / Per task / Per language / Info) |
+| `/models` + `/models/[...name]` | Index + detail. Rest-param accepts `org/name` (validated by `params/modelName.ts`)         |
+| `/tasks` + `/tasks/[name]`      | Index + detail, sidebar mirrors `/benchmarks`                                              |
+| `/compare`                      | Up to 4 models side-by-side with radar                                                     |
 
 Components live under `src/lib/components/` — read them before adding new ones. Shared toolbar widgets (`SearchInput`, `SortDirIcon`, `DownloadButton`, `SortHeader`) and floating actions (`ShareUrlButton` bottom-right, `ScrollToTopButton` bottom-left) appear on every overview / detail page.
 
@@ -156,7 +156,7 @@ Types in `src/lib/types.ts` match FastAPI schemas one-to-one (pydantic camelCase
 - `ModelMeta`: `name`, `displayName`, `org`, `modelType`, params, embedding dim, max tokens, zero-shot %, `modalities`. Display is `org/displayName`; search matches all three.
 - Benchmark: `taskTypes`, `tasks`, `languages`, `domains`, `modalities`, `numModels`.
 - `TaskMeta`: `type`, `simplifiedType`, `languages`, `domains`, `modalities`, `description`, dataset metadata, `numModels`.
-- `SummaryRow.elo` / `eloLow` / `eloHigh`: Bradley-Terry rating (centered on 1000) with 95% bootstrap interval, computed by the API for the full task set (`mteb/api/bradley_terry.py`). `src/lib/elo.ts` is a TS port: `applyFilters` refits `elo` (no interval) on the visible rows/tasks whenever task or row filters narrow the set. Keep the two implementations in sync (golden values in `elo.test.ts`). Explainer lives in `EloExplainer.svelte` (Task information tab); the ELO tab (`EloTab.svelte`, `eloPlot` in `charts/figures.ts`) plots the top N models with their intervals, and is hidden when the API sends no ratings.
+- `SummaryRow.btScore` / `btScoreLow` / `btScoreHigh`: Bradley-Terry score ("BT Score", Elo-like scale centered on 1000) with 95% bootstrap interval, computed by the API for the full task set (`mteb/api/bradley_terry.py`). `src/lib/bt-score.ts` is a TS port: `applyFilters` refits `btScore` (no interval) on the visible rows/tasks whenever task or row filters narrow the set. Keep the two implementations in sync (golden values in `bt-score.test.ts`). Explainer lives in `BtScoreExplainer.svelte` (Task information tab); the BT scores tab (`BtScoreTab.svelte`, `btScorePlot` in `charts/figures.ts`) plots the top N models with their intervals, and is hidden when the API sends no scores.
 - Summary: adds `tasksMeta: TaskMeta[]` and per-row `trainedOnTasks: string[]` (drives ⚠️ warning in `PerTaskTab`).
 
 ## Accessibility

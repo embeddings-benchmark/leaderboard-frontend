@@ -4,7 +4,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import type { BenchmarkSummary, CustomGrouping, ModelType, SummaryRow, TaskMeta } from '$lib/types';
 import { modelSearchKey, rowId } from '$lib/format';
 import { opennessMeets, OPENNESS_FILTERABLE } from '$lib/openness';
-import { computeElo } from '$lib/elo';
+import { computeBtScore } from '$lib/bt-score';
 import { paretoFrontier, paretoRanges } from '$lib/pareto';
 import { readParams, updateUrl } from '$lib/url-state';
 import { createFacetFilter, type FacetFilter } from '$lib/stores/facet-filter.svelte';
@@ -859,14 +859,14 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// just because it hid the models that dominate them.
 	const paretoModels = paretoFrontier(candidates);
 	const paretoRangesById = paretoRanges(candidates, paretoModels);
-	// ELO is relative to the field being compared on, so any task or row
+	// BT score is relative to the field being compared on, so any task or row
 	// narrowing refits it on the visible candidates (name search excluded, like
 	// rank and Pareto). The API's value and interval stand for the full view.
 	if (!fullView || rowFilterActive) {
-		const elo = computeElo(candidates, taskNamesOut);
+		const btScores = computeBtScore(candidates, taskNamesOut);
 		candidates = candidates.map((r) => {
-			const e = elo.get(rowId(r));
-			return { ...r, elo: e?.elo ?? null, eloLow: null, eloHigh: null };
+			const e = btScores.get(rowId(r));
+			return { ...r, btScore: e?.score ?? null, btScoreLow: null, btScoreHigh: null };
 		});
 	}
 	const rows = q ? candidates.filter(matchesQuery) : candidates;

@@ -317,21 +317,21 @@ const MODEL_TYPE_COLORS: Record<string, string> = {
 };
 const MODEL_TYPE_FALLBACK_COLOR = 'var(--tint-green-fg)';
 
-/** Pixel height that fits `n` rows of the ELO plot without squashing labels. */
-export function eloPlotHeight(n: number): number {
+/** Pixel height that fits `n` rows of the BT score plot without squashing labels. */
+export function btScorePlotHeight(n: number): number {
 	return Math.max(220, 22 * n + 90);
 }
 
 /**
- * Top `topN` rows by ELO as a horizontal dot plot: one dot per model at its
+ * Top `topN` rows by BT score as a horizontal dot plot: one dot per model at its
  * rating, a whisker for the 95% bootstrap interval when the API supplied one
- * (absent after sidebar filters narrow the set — see `$lib/elo`), best model
+ * (absent after sidebar filters narrow the set — see `$lib/bt-score`), best model
  * at the top. One trace per model type so the legend doubles as a colour key.
  */
-export function eloPlot(summary: BenchmarkSummary, topN = 30): PlotSpec {
+export function btScorePlot(summary: BenchmarkSummary, topN = 30): PlotSpec {
 	const rated = summary.rows
-		.filter((r): r is typeof r & { elo: number } => typeof r.elo === 'number')
-		.sort((a, b) => b.elo - a.elo)
+		.filter((r): r is typeof r & { btScore: number } => typeof r.btScore === 'number')
+		.sort((a, b) => b.btScore - a.btScore)
 		.slice(0, topN);
 	if (rated.length === 0) return { data: [], layout: {} };
 
@@ -342,13 +342,15 @@ export function eloPlot(summary: BenchmarkSummary, topN = 30): PlotSpec {
 	const types = [...new Set(rated.map((r) => r.model.modelType))];
 	const traces: Data[] = types.map((type) => {
 		const idx = rated.map((r, i) => i).filter((i) => rated[i].model.modelType === type);
-		const hasInterval = idx.some((i) => rated[i].eloLow != null && rated[i].eloHigh != null);
+		const hasInterval = idx.some(
+			(i) => rated[i].btScoreLow != null && rated[i].btScoreHigh != null
+		);
 		return {
 			type: 'scatter',
 			mode: 'markers',
 			name: type,
 			ids: idx.map((i) => rowId(rated[i])),
-			x: idx.map((i) => rated[i].elo),
+			x: idx.map((i) => rated[i].btScore),
 			y: idx.map((i) => i),
 			text: idx.map((i) => labels[i]),
 			customdata: idx.map((i) => {
@@ -356,13 +358,13 @@ export function eloPlot(summary: BenchmarkSummary, topN = 30): PlotSpec {
 				return [
 					r.rank,
 					r.meanTask != null ? (r.meanTask * 100).toFixed(2) : '—',
-					r.eloLow != null && r.eloHigh != null
-						? `${Math.round(r.eloLow)} – ${Math.round(r.eloHigh)}`
+					r.btScoreLow != null && r.btScoreHigh != null
+						? `${Math.round(r.btScoreLow)} – ${Math.round(r.btScoreHigh)}`
 						: '—'
 				];
 			}),
 			hovertemplate:
-				'<b>%{text}</b><br>ELO: %{x:.0f}<br>95% interval: %{customdata[2]}<br>' +
+				'<b>%{text}</b><br>BT score: %{x:.0f}<br>95% interval: %{customdata[2]}<br>' +
 				'Rank: %{customdata[0]}<br>Mean (Task): %{customdata[1]}<extra></extra>',
 			marker: { size: 9, color: MODEL_TYPE_COLORS[type] ?? MODEL_TYPE_FALLBACK_COLOR },
 			...(hasInterval
@@ -370,9 +372,11 @@ export function eloPlot(summary: BenchmarkSummary, topN = 30): PlotSpec {
 						error_x: {
 							type: 'data',
 							symmetric: false,
-							array: idx.map((i) => Math.max((rated[i].eloHigh ?? rated[i].elo) - rated[i].elo, 0)),
+							array: idx.map((i) =>
+								Math.max((rated[i].btScoreHigh ?? rated[i].btScore) - rated[i].btScore, 0)
+							),
 							arrayminus: idx.map((i) =>
-								Math.max(rated[i].elo - (rated[i].eloLow ?? rated[i].elo), 0)
+								Math.max(rated[i].btScore - (rated[i].btScoreLow ?? rated[i].btScore), 0)
 							),
 							thickness: 1.5,
 							width: 3,
@@ -384,7 +388,7 @@ export function eloPlot(summary: BenchmarkSummary, topN = 30): PlotSpec {
 	});
 
 	const layout: Partial<Layout> = {
-		xaxis: { title: { text: 'ELO rating (95% interval)' }, zeroline: false },
+		xaxis: { title: { text: 'BT score (95% interval)' }, zeroline: false },
 		yaxis: {
 			autorange: 'reversed',
 			tickmode: 'array',

@@ -2,7 +2,7 @@ import type { SummaryRow } from '$lib/types';
 import { rowId } from '$lib/format';
 
 /**
- * Bradley-Terry ("ELO") rating of benchmark rows from per-task scores.
+ * Bradley-Terry ("BT score") rating of benchmark rows from per-task scores.
  *
  * Mirrors `mteb/api/bradley_terry.py` (the API computes it for the full task
  * set; this recomputes it when sidebar filters narrow the tasks or models).
@@ -19,14 +19,14 @@ import { rowId } from '$lib/format';
  * No bootstrap here — the interval (`low` / `high`) only comes from the API.
  */
 
-export const ELO_BASE = 1000;
-export const ELO_SCALE = 400 / Math.LN10;
+export const BT_SCORE_BASE = 1000;
+export const BT_SCORE_SCALE = 400 / Math.LN10;
 const PSEUDO_WINS = 0.5;
 const MAX_ITER = 200;
 const TOL = 1e-9;
 
-export interface EloResult {
-	elo: number;
+export interface BtScoreResult {
+	score: number;
 	low?: number | null;
 	high?: number | null;
 }
@@ -110,11 +110,11 @@ function fit(wins: Float64Array, n: number): Float64Array {
  * rated separately from the base model. Empty with fewer than two rows or no
  * tasks.
  */
-export function computeElo(
+export function computeBtScore(
 	rows: readonly SummaryRow[],
 	tasks: readonly string[]
-): Map<string, EloResult> {
-	const out = new Map<string, EloResult>();
+): Map<string, BtScoreResult> {
+	const out = new Map<string, BtScoreResult>();
 	const uniqueTasks = [...new Set(tasks)];
 	if (rows.length < 2 || uniqueTasks.length === 0) return out;
 	const n = rows.length;
@@ -125,6 +125,7 @@ export function computeElo(
 		),
 		n
 	);
-	for (let i = 0; i < n; i++) out.set(rowId(rows[i]), { elo: ELO_BASE + ELO_SCALE * logs[i] });
+	for (let i = 0; i < n; i++)
+		out.set(rowId(rows[i]), { score: BT_SCORE_BASE + BT_SCORE_SCALE * logs[i] });
 	return out;
 }
