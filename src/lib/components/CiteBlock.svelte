@@ -17,6 +17,7 @@
 		citation?: string | null;
 	}
 	let { kind, citation }: Props = $props();
+	const uid = $props.id();
 
 	// Every citation in mteb passes the "Cited works exist" CI check before
 	// it can merge (embeddings-benchmark/mteb#5471), so anything the API
@@ -79,28 +80,26 @@
 </script>
 
 {#if citation}
-	<div class="cite">
-		<button
-			type="button"
-			class="cite-btn"
-			aria-label="Cite this {kind}"
-			onclick={() => dialog?.showModal()}
-		>
-			<Quote size={12} aria-hidden="true" />
-			Cite
-		</button>
-	</div>
+	<button
+		type="button"
+		class="cite-btn"
+		aria-label="Cite this {kind}"
+		onclick={() => dialog?.showModal()}
+	>
+		<Quote size={12} aria-hidden="true" />
+		Cite
+	</button>
 
 	<dialog
 		bind:this={dialog}
 		class="cite-dialog"
-		aria-labelledby="cite-dialog-title"
+		aria-labelledby="{uid}-title"
 		onclick={onDialogClick}
 		onclose={() => (whyPinned = false)}
 	>
 		<div class="panel-body">
 			<header>
-				<h2 id="cite-dialog-title">Cite this {kind}</h2>
+				<h2 id="{uid}-title">Cite this {kind}</h2>
 				<div class="formats">
 					<Segmented
 						ariaLabel="Citation format"
@@ -131,7 +130,7 @@
 						type="button"
 						class="verified-btn"
 						aria-expanded={whyOpen}
-						aria-controls="cite-verified-why"
+						aria-controls="{uid}-why"
 						onclick={() => (whyPinned = !whyPinned)}
 						onpointerenter={() => (whyHovered = true)}
 						onpointerleave={() => (whyHovered = false)}
@@ -139,7 +138,7 @@
 						<BadgeCheck size={15} aria-hidden="true" />
 						Verified citation
 					</button>
-					<p id="cite-verified-why" class="verified-why" hidden={!whyOpen}>
+					<p id="{uid}-why" class="verified-why" hidden={!whyOpen}>
 						Looked up in Crossref, DataCite, arXiv, DBLP and OpenAlex: the work exists, and its
 						title, authors and year match the published record. Works no index covers are checked by
 						hand.
@@ -158,12 +157,6 @@
 {/if}
 
 <style>
-	.cite {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px;
-	}
 	.cite-btn,
 	.copy {
 		display: inline-flex;
