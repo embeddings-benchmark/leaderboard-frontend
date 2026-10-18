@@ -361,7 +361,10 @@
 						{/if}
 						<div class="title-text">
 							<h1>{benchmark.displayName}</h1>
-							<CopyableId value={benchmark.name} ariaLabel="Copy benchmark id" />
+							<div class="id-row">
+								<CopyableId value={benchmark.name} ariaLabel="Copy benchmark id" />
+								<CiteBlock kind="benchmark" citation={benchmark.citation} />
+							</div>
 						</div>
 					</div>
 					<p class="desc"><MarkdownText text={benchmark.description} /></p>
@@ -372,7 +375,6 @@
 							Reference paper →
 						</a>
 					{/if}
-					<CiteBlock kind="benchmark" citation={benchmark.citation} />
 				</div>
 				<div class="kpis">
 					<div class="kpi">
@@ -559,9 +561,12 @@
 		font-size: 13px;
 		font-weight: 600;
 	}
-	/* CiteBlock lives inside the hero card now; give it a little air above. */
-	.hero-left :global(.cite) {
-		margin-top: 14px;
+	/* Id pill + cite button share a row under the display name. */
+	.id-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
 	}
 	.kpis {
 		display: flex;
