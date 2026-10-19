@@ -222,6 +222,14 @@ export interface SummaryRow {
 	// subset (ViDoRe family). `null` for benchmarks without that split.
 	meanPublic?: number | null;
 	meanPrivate?: number | null;
+	// Bradley-Terry ("BT score") rating from per-task head-to-head wins, centered on
+	// 1000, with a 95% bootstrap interval — see `$lib/bt-score`. The API computes
+	// it for the full task set; `applyFilters` recomputes it (without the
+	// interval) when sidebar filters narrow the tasks or rows. Absent on an
+	// older API response.
+	btScore?: number | null;
+	btScoreLow?: number | null;
+	btScoreHigh?: number | null;
 	scoresByTaskType: Record<string, number>;
 	// Flat per-task mean (averaged across subsets / languages). Drives
 	// every existing per-task UI; the language filter overrides via
