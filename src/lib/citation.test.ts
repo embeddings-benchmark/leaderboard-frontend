@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apaAuthors, apaName, bibtexToApa, latexToText, parseBibtex, refText } from './citation';
 
-const apa = (src: string) => bibtexToApa(src).map(refText);
+const apa = (src: string) => bibtexToApa(src).map((r) => refText(r.parts));
 
 describe('parseBibtex', () => {
 	it('reads braced, quoted, bare and concatenated values', () => {
@@ -88,7 +88,7 @@ describe('bibtexToApa', () => {
 		const [ref] = bibtexToApa(
 			'@misc{x, author={A, B}, title={T}, eprint={2401.00001}, archiveprefix={arXiv}, year={2024}}'
 		);
-		expect(ref.find((p) => p.text === 'T')?.em).toBe(true);
+		expect(ref.parts.find((p) => p.text === 'T')?.em).toBe(true);
 	});
 
 	it('formats a journal article with volume, issue and pages', () => {
@@ -123,5 +123,37 @@ describe('bibtexToApa', () => {
 			'Doe, J. (2015). T.'
 		]);
 		expect(apa('@misc{x, author={Doe, J.}, title={T}}')).toEqual(['Doe, J. (n.d.). T.']);
+	});
+
+	// From the PR #46 review.
+	it('keeps URLs and DOIs literal: no `~` → space, no `--` → en dash', () => {
+		expect(
+			apa(
+				'@inproceedings{x, author={Doe, J.}, title={T}, booktitle={B}, year={2016}, url={http://host.de/~riezler/a--b\\_c.pdf}}'
+			)
+		).toEqual(['Doe, J. (2016). T. In B. http://host.de/~riezler/a--b_c.pdf']);
+		expect(apa('@misc{x, author={Doe, J.}, title={T}, year={2020}, doi={10.1/a--b}}')).toEqual([
+			'Doe, J. (2020). T. https://doi.org/10.1/a--b'
+		]);
+	});
+
+	it('formats a published article that also lists its arXiv eprint as the article', () => {
+		expect(
+			apa(
+				'@article{x, author={Doe, J.}, title={T}, journal={TACL}, volume={9}, pages={1--5}, eprint={2101.00001}, archiveprefix={arXiv}, year={2021}}'
+			)
+		).toEqual(['Doe, J. (2021). T. TACL, 9, 1–5.']);
+	});
+
+	it('does not add a period after a title ending in ? or !', () => {
+		expect(apa('@misc{x, author={Doe, J.}, title={Why Embed?}, year={2020}}')).toEqual([
+			'Doe, J. (2020). Why Embed?'
+		]);
+	});
+
+	it('keys each reference by its BibTeX key, once per key', () => {
+		const refs = bibtexToApa('@misc{a, title={A}}\n@misc{b, title={B}}\n@misc{a, title={A}}');
+		expect(refs.map((r) => r.key)).toEqual(['a', 'b']);
+		expect(bibtexToApa('not bibtex')).toEqual([]);
 	});
 });

@@ -264,16 +264,32 @@ function period(s: string): string {
 	return /[.?!]$/.test(s) ? s : `${s}.`;
 }
 
-function link(f: Record<string, string>): string | null {
-	if (f.doi) {
-		const doi = latexToText(f.doi).replace(/^(https?:\/\/)?(dx\.)?doi\.org\//i, '');
-		return `https://doi.org/${doi}`;
-	}
-	return f.url ? latexToText(f.url) : null;
+/**
+ * A URL or DOI as written: `~` and `--` are literal there, so it skips
+ * `latexToText` and only drops braces and unescapes `\_`, `\&`, `\%`, `\#`.
+ */
+function rawUrl(s: string): string {
+	return s
+		.replace(/\\url\s*/g, '')
+		.replace(/\\([_&%#])/g, '$1')
+		.replace(/[{}\s]/g, '');
 }
 
-/** arXiv id for preprints cited as `@misc{eprint=…}` or `journal={arXiv preprint arXiv:…}`. */
+function link(f: Record<string, string>): string | null {
+	if (f.doi) {
+		const doi = rawUrl(f.doi).replace(/^(https?:\/\/)?(dx\.)?doi\.org\//i, '');
+		return `https://doi.org/${doi}`;
+	}
+	return f.url ? rawUrl(f.url) : null;
+}
+
+/**
+ * arXiv id for preprints cited as `@misc{eprint=…}` or `journal={arXiv preprint
+ * arXiv:…}`. A journal article that also lists its arXiv `eprint` is published
+ * work, not a preprint, so a non-arXiv `journal` returns null.
+ */
 function arxivId(f: Record<string, string>): string | null {
+	if (f.journal && !/arxiv|corr/i.test(f.journal)) return null;
 	const prefix = (f.archiveprefix ?? f.eprinttype ?? '').toLowerCase();
 	if (f.eprint && (prefix === 'arxiv' || /^\d{4}\.\d{4,5}/.test(f.eprint))) return f.eprint.trim();
 	const m = /arxiv(?: preprint)?[\s:]*(?:arxiv:)?\s*(\d{4}\.\d{4,5}(?:v\d+)?)/i.exec(
@@ -354,21 +370,30 @@ export function toApa(entry: BibEntry): RefPart[] {
 		if (publisher) push(` ${period(publisher)}`);
 	} else {
 		push(title, true);
-		if (bracket) push(` [${bracket}]`);
-		push('.');
+		push(bracket ? ` [${bracket}].` : /[.?!]$/.test(title) ? '' : '.');
 		if (!authors) push(` (${year}).`);
+		// `howpublished = {\url{…}}` is a link, already covered by `url`.
+		const howpublished = /\\url|https?:/i.test(f.howpublished ?? '') ? '' : text('howpublished');
 		const publisher =
-			text('publisher') || text('institution') || text('organization') || text('howpublished');
-		if (publisher && !bracket.includes(publisher) && !/^\\?url/i.test(f.howpublished ?? ''))
-			push(` ${period(publisher)}`);
+			text('publisher') || text('institution') || text('organization') || howpublished;
+		if (publisher && !bracket.includes(publisher)) push(` ${period(publisher)}`);
 	}
 	if (url) push(` ${url}`);
 	return parts;
 }
 
-/** Every entry in a BibTeX string as APA references. */
-export function bibtexToApa(src: string): RefPart[][] {
-	return parseBibtex(src).map(toApa);
+/** One formatted reference, keyed by its BibTeX key. */
+export interface ApaRef {
+	key: string;
+	parts: RefPart[];
+}
+
+/** Every entry in a BibTeX string as APA references; a repeated key is kept once. */
+export function bibtexToApa(src: string): ApaRef[] {
+	const seen = new Set<string>();
+	return parseBibtex(src)
+		.filter((e) => !seen.has(e.key) && seen.add(e.key))
+		.map((e) => ({ key: e.key, parts: toApa(e) }));
 }
 
 /** Plain-text form of one reference (italics dropped). */

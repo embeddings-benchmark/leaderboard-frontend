@@ -52,14 +52,14 @@
 			if (format === 'bibtex') {
 				await navigator.clipboard.writeText(bibtex);
 			} else {
-				const text = apa.map(refText).join('\n\n');
+				const text = apa.map((r) => refText(r.parts)).join('\n\n');
 				// Rich copy keeps the italics when pasted into a word processor.
 				if (typeof ClipboardItem === 'undefined') await navigator.clipboard.writeText(text);
 				else
 					await navigator.clipboard.write([
 						new ClipboardItem({
 							'text/plain': new Blob([text], { type: 'text/plain' }),
-							'text/html': new Blob([apa.map((r) => `<p>${refHtml(r)}</p>`).join('')], {
+							'text/html': new Blob([apa.map((r) => `<p>${refHtml(r.parts)}</p>`).join('')], {
 								type: 'text/html'
 							})
 						})
@@ -116,11 +116,15 @@
 				<pre><code>{bibtex}</code></pre>
 			{:else}
 				<div class="apa">
-					{#each apa as ref, i (i)}
+					{#each apa as ref (ref.key)}
 						<p>
-							{#each ref as part, j (j)}{#if part.em}<i>{part.text}</i
+							<!-- Text runs have no identity of their own (", " repeats); the
+							     whole list is re-rendered per reference, so position is the key. -->
+							{#each ref.parts as part, j (j)}{#if part.em}<i>{part.text}</i
 									>{:else}{part.text}{/if}{/each}
 						</p>
+					{:else}
+						<p class="apa-empty">Couldn't format this citation as APA — use the BibTeX instead.</p>
 					{/each}
 				</div>
 			{/if}
@@ -144,7 +148,12 @@
 						hand.
 					</p>
 				</div>
-				<button type="button" class="copy" onclick={copy}>
+				<button
+					type="button"
+					class="copy"
+					disabled={format === 'apa' && apa.length === 0}
+					onclick={copy}
+				>
 					{#if copied}
 						<Check size={13} aria-hidden="true" /> Copied
 					{:else}
@@ -279,6 +288,15 @@
 		padding-left: 2em;
 		text-indent: -2em;
 		overflow-wrap: anywhere;
+	}
+	.apa .apa-empty {
+		padding-left: 0;
+		text-indent: 0;
+		color: var(--text-muted);
+	}
+	.copy:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 	.apa p + p {
 		margin-top: 10px;
