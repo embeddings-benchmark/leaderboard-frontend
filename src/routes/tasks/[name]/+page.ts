@@ -1,10 +1,10 @@
-// Eagerly awaits menu + task metadata (the hero card); `loadTaskScores` is
+// Eagerly awaits the benchmark catalog + task metadata (the hero card); `loadTaskScores` is
 // fetched client-side on hydration so the build doesn't pay one /scores
 // round-trip per task.
 import { error } from '@sveltejs/kit';
 import type { EntryGenerator, PageLoad } from './$types';
-import { HttpError, loadBenchmarkMenu, loadTask, loadTasks } from '$lib/data/service';
-import { flattenMenu, type Benchmark, type TaskMeta } from '$lib/types';
+import { HttpError, loadBenchmarks, loadTask, loadTasks } from '$lib/data/service';
+import type { Benchmark, TaskMeta } from '$lib/types';
 
 export const prerender = !process.env.BUILD_NO_PRERENDER;
 
@@ -21,8 +21,10 @@ export interface TaskPageData {
 
 export const load: PageLoad = async ({ params, fetch }): Promise<TaskPageData> => {
 	const taskName = decodeURIComponent(params.name);
-	const [menu, taskMeta] = await Promise.all([
-		loadBenchmarkMenu(fetch),
+	// Full catalog, not the menu: the menu omits the featured benchmarks
+	// (MTEB(Multilingual, v2), MTEB(eng, v2), …) shown as home-page tiles.
+	const [benchmarks, taskMeta] = await Promise.all([
+		loadBenchmarks(fetch),
 		loadTask(taskName, fetch).catch((e) => {
 			if (e instanceof HttpError && e.status === 404) {
 				error(404, `Task "${taskName}" not found`);
@@ -32,7 +34,15 @@ export const load: PageLoad = async ({ params, fetch }): Promise<TaskPageData> =
 	]);
 	return {
 		taskName,
-		allBenchmarks: flattenMenu(menu),
+		// Current benchmarks first, superseded ones (with a `newVersion`) last.
+		// `displayOnLeaderboard` is false for the featured ones, so can't sort on it.
+		allBenchmarks: benchmarks
+			.slice()
+			.sort(
+				(a, b) =>
+					Number(!!a.newVersion?.length) - Number(!!b.newVersion?.length) ||
+					a.displayName.localeCompare(b.displayName)
+			),
 		taskMeta
 	};
 };

@@ -1,8 +1,7 @@
 // Fetches the task registry + menu, runs facet derivation, ships as
 // `TasksData`.
 import type { PageLoad } from './$types';
-import { loadBenchmarkMenu, loadTasks } from '$lib/data/service';
-import { flattenMenu } from '$lib/types';
+import { loadBenchmarks, loadTasks } from '$lib/data/service';
 import { COLLATOR } from '$lib/format';
 
 export const prerender = true;
@@ -45,8 +44,8 @@ export const load: PageLoad = ({ fetch }) => {
 };
 
 async function deriveTasksData(fetchFn?: typeof fetch): Promise<TasksData> {
-	const [menu, tasks] = await Promise.all([loadBenchmarkMenu(fetchFn), loadTasks({}, fetchFn)]);
-	const allBenches = flattenMenu(menu);
+	// Full catalog, not the menu: the menu omits the featured benchmarks.
+	const [allBenches, tasks] = await Promise.all([loadBenchmarks(fetchFn), loadTasks({}, fetchFn)]);
 	const occurrences = new Map<string, string[]>();
 	for (const b of allBenches) {
 		for (const t of b.tasks) {
