@@ -54,11 +54,19 @@
 	// on /benchmarks so a card and its detail page read as the same surface.
 	let accentModality = $derived(sortModalities(benchmark?.modalities)[0] ?? 'text');
 
-	type TabId = 'summary' | 'perf_size' | 'perf_time' | 'perf_task' | 'perf_language' | 'task_info';
+	type TabId =
+		| 'summary'
+		| 'organizations'
+		| 'perf_size'
+		| 'perf_time'
+		| 'perf_task'
+		| 'perf_language'
+		| 'task_info';
 	// `perf_language` is filtered out below when the benchmark has no
 	// `language_view` — its column list is undefined without one.
 	const ALL_TABS: { id: TabId; label: string }[] = [
 		{ id: 'summary', label: 'Summary' },
+		{ id: 'organizations', label: 'Compare organizations' },
 		{ id: 'perf_size', label: 'Performance per Model Size' },
 		{ id: 'perf_time', label: 'Performance over Time' },
 		{ id: 'perf_task', label: 'Performance per task' },
@@ -403,7 +411,7 @@
 				label={leaderboard.refetching ? 'Recomputing scores' : 'Loading benchmark'}
 			/>
 
-			{#if activeTab === 'summary' || activeTab === 'perf_task' || activeTab === 'perf_language'}
+			{#if activeTab === 'summary' || activeTab === 'organizations' || activeTab === 'perf_task' || activeTab === 'perf_language'}
 				<div class="toolbar-row">
 					<ModelSearchBar
 						matchCount={filteredSummary?.rows.length}
@@ -447,6 +455,16 @@
 								summary={filteredSummary}
 								active={activeTab === 'summary'}
 								benchmarkModalities={benchmark.modalities}
+							/>
+						</div>
+					{/if}
+					{#if visited.has('organizations')}
+						<div class="tab-pane" class:active={activeTab === 'organizations'}>
+							<SummaryTable
+								summary={filteredSummary}
+								active={activeTab === 'organizations'}
+								benchmarkModalities={benchmark.modalities}
+								groupOrganizations
 							/>
 						</div>
 					{/if}
