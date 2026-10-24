@@ -319,7 +319,10 @@
 					</span>
 				{/each}
 			</div>
-			<h1>{taskName}</h1>
+			<div class="title-row">
+				<h1>{taskName}</h1>
+				<CiteBlock kind="task" citation={task.meta.citation} />
+			</div>
 			<p class="desc"><MarkdownText text={task.meta.description} /></p>
 			{#if task.meta.domains.length > 0}
 				<div class="domains">
@@ -448,7 +451,6 @@
 					</div>
 				{/if}
 			</dl>
-			<CiteBlock kind="task" citation={task.meta.citation} />
 		</div>
 		<div class="kpis">
 			<div class="kpi">
@@ -599,8 +601,12 @@
 		gap: 4px;
 		margin-bottom: 8px;
 	}
-	.hero-left :global(.cite) {
-		margin-top: 10px;
+	/* Cite button sits beside the task name, wrapping under it when narrow. */
+	.title-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		column-gap: 12px;
 	}
 	.bench-chip {
 		display: inline-block;

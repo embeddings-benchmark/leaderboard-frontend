@@ -1,109 +1,329 @@
 <script lang="ts">
+	import BadgeCheck from 'lucide-svelte/icons/badge-check';
+	import Check from 'lucide-svelte/icons/check';
+	import Copy from 'lucide-svelte/icons/copy';
+	import Quote from 'lucide-svelte/icons/quote';
+	import X from 'lucide-svelte/icons/x';
+	import Segmented from '$lib/components/Segmented.svelte';
+	import { bibtexToApa, refText, type RefPart } from '$lib/citation';
+
 	interface Props {
-		// What we're citing — used in the summary line ("Cite this {kind}")
-		// and the empty-state message ("No citation available for this {kind} yet.").
+		// What we're citing — used in the button's aria-label and the dialog
+		// title ("Cite this {kind}").
 		kind: 'benchmark' | 'task' | 'model';
-		// The BibTeX entry, when known. null/empty hides the entire block —
+		// The BibTeX entry, when known. null, empty or whitespace-only (mteb
+		// ships `''` and `' '` for uncited tasks) hides the entire block —
 		// the page URL itself is the shareable artifact, so we no longer need
 		// a separate "Shareable link" UI here.
 		citation?: string | null;
 	}
 	let { kind, citation }: Props = $props();
+	const uid = $props.id();
 
-	let open = $state(false);
+	// Every citation in mteb passes the "Cited works exist" CI check before
+	// it can merge (embeddings-benchmark/mteb#5471), so anything the API
+	// serves is verified — either resolved by refaudit or reviewed by hand
+	// and allowlisted. The dialog states that; hovering or clicking the badge
+	// explains how.
+
+	type Format = 'bibtex' | 'apa';
+	const FORMATS = [
+		{ label: 'BibTeX', value: 'bibtex' },
+		{ label: 'APA', value: 'apa' }
+	] as const;
+
+	let dialog = $state<HTMLDialogElement>();
+	let format = $state<Format>('bibtex');
 	let copied = $state(false);
+	let bibtex = $derived(citation?.trim() ?? '');
+	// Only parsed once the APA tab is picked.
+	let apa = $derived(format === 'apa' ? bibtexToApa(bibtex) : []);
+	// Hover previews the explanation; a click pins it open (for touch).
+	let whyHovered = $state(false);
+	let whyPinned = $state(false);
+	let whyOpen = $derived(whyHovered || whyPinned);
 
-	async function copy(text: string) {
+	const escapeHtml = (s: string) =>
+		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	const refHtml = (parts: readonly RefPart[]) =>
+		parts.map((p) => (p.em ? `<i>${escapeHtml(p.text)}</i>` : escapeHtml(p.text))).join('');
+
+	async function copy() {
 		try {
-			await navigator.clipboard.writeText(text);
+			if (format === 'bibtex') {
+				await navigator.clipboard.writeText(bibtex);
+			} else {
+				const text = apa.map((r) => refText(r.parts)).join('\n\n');
+				// Rich copy keeps the italics when pasted into a word processor.
+				if (typeof ClipboardItem === 'undefined') await navigator.clipboard.writeText(text);
+				else
+					await navigator.clipboard.write([
+						new ClipboardItem({
+							'text/plain': new Blob([text], { type: 'text/plain' }),
+							'text/html': new Blob([apa.map((r) => `<p>${refHtml(r.parts)}</p>`).join('')], {
+								type: 'text/html'
+							})
+						})
+					]);
+			}
 			copied = true;
 			setTimeout(() => (copied = false), 1500);
 		} catch {
 			/* clipboard unavailable */
 		}
 	}
+
+	// Clicks on the `::backdrop` land on the <dialog> itself; clicks on
+	// the panel land on its children.
+	function onDialogClick(e: MouseEvent) {
+		if (e.target === dialog) dialog?.close();
+	}
 </script>
 
-{#if citation}
-	<details class="cite details-flat" bind:open>
-		<summary>Cite this {kind}</summary>
-		<div class="body">
-			<div class="block">
-				<div class="block-head">
-					<span class="eyebrow">Citation (BibTeX)</span>
-					<button type="button" class="copy" onclick={() => copy(citation!)}>
-						{copied ? 'Copied' : 'Copy'}
-					</button>
+{#if bibtex}
+	<button
+		type="button"
+		class="cite-btn"
+		aria-label="Cite this {kind}"
+		onclick={() => dialog?.showModal()}
+	>
+		<Quote size={12} aria-hidden="true" />
+		Cite
+	</button>
+
+	<dialog
+		bind:this={dialog}
+		class="cite-dialog"
+		aria-labelledby="{uid}-title"
+		onclick={onDialogClick}
+		onclose={() => (whyPinned = false)}
+	>
+		<div class="panel-body">
+			<header>
+				<h2 id="{uid}-title">Cite this {kind}</h2>
+				<div class="formats">
+					<Segmented
+						ariaLabel="Citation format"
+						options={FORMATS}
+						value={format}
+						onChange={(v) => (format = v)}
+					/>
 				</div>
-				<pre><code>{citation}</code></pre>
-			</div>
+				<button type="button" class="icon-btn" aria-label="Close" onclick={() => dialog?.close()}>
+					<X size={16} aria-hidden="true" />
+				</button>
+			</header>
+			{#if format === 'bibtex'}
+				<pre><code>{bibtex}</code></pre>
+			{:else}
+				<div class="apa">
+					{#each apa as ref (ref.key)}
+						<p>
+							<!-- Text runs have no identity of their own (", " repeats); the
+							     whole list is re-rendered per reference, so position is the key. -->
+							{#each ref.parts as part, j (j)}{#if part.em}<i>{part.text}</i
+									>{:else}{part.text}{/if}{/each}
+						</p>
+					{:else}
+						<p class="apa-empty">Couldn't format this citation as APA — use the BibTeX instead.</p>
+					{/each}
+				</div>
+			{/if}
+			<footer>
+				<div class="verified">
+					<button
+						type="button"
+						class="verified-btn"
+						aria-expanded={whyOpen}
+						aria-controls="{uid}-why"
+						onclick={() => (whyPinned = !whyPinned)}
+						onpointerenter={() => (whyHovered = true)}
+						onpointerleave={() => (whyHovered = false)}
+					>
+						<BadgeCheck size={15} aria-hidden="true" />
+						Verified citation
+					</button>
+					<p id="{uid}-why" class="verified-why" hidden={!whyOpen}>
+						Looked up in Crossref, DataCite, arXiv, DBLP and OpenAlex: the work exists, and its
+						title, authors and year match the published record. Works no index covers are checked by
+						hand.
+					</p>
+				</div>
+				<button
+					type="button"
+					class="copy"
+					disabled={format === 'apa' && apa.length === 0}
+					onclick={copy}
+				>
+					{#if copied}
+						<Check size={13} aria-hidden="true" /> Copied
+					{:else}
+						<Copy size={13} aria-hidden="true" /> Copy {format === 'apa' ? 'APA' : 'BibTeX'}
+					{/if}
+				</button>
+			</footer>
 		</div>
-	</details>
+	</dialog>
 {/if}
 
 <style>
-	.cite {
+	.cite-btn,
+	.copy {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		font-size: 12px;
+		font-weight: 600;
+		font-family: inherit;
+		border: 1px solid var(--border);
 		background: var(--surface);
+		color: var(--text);
+		border-radius: 6px;
+		cursor: pointer;
+	}
+	/* Same 22px height as the CopyableId pill it sits beside. */
+	.cite-btn {
+		height: 22px;
+		padding: 0 8px;
+		gap: 4px;
+		font-weight: 500;
+		color: var(--text-muted);
+		border-radius: 4px;
+	}
+	.cite-btn:hover,
+	.copy:hover {
+		background: var(--surface-muted);
+		color: var(--text);
+	}
+	/* The explanation floats above the badge — below it would overflow the
+	   modal, which the UA styles with `overflow: auto`. */
+	.verified {
+		position: relative;
+	}
+	.verified-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 2px 4px;
+		margin-left: -4px;
+		font-family: inherit;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--primary);
+		background: none;
+		border: none;
+		border-radius: 4px;
+		cursor: help;
+	}
+	.verified-btn:hover,
+	.verified-btn:focus-visible,
+	.verified-btn[aria-expanded='true'] {
+		background: var(--primary-soft);
+	}
+	.verified-why {
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: -4px;
+		width: min(340px, calc(100dvw - 80px));
+		margin: 0;
+		padding: 10px 12px;
+		font-size: 12px;
+		line-height: 1.5;
+		background: var(--tip-bg);
+		color: var(--tip-fg);
 		border: 1px solid var(--border);
 		border-radius: 8px;
-		margin-bottom: 14px;
+		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
 	}
-	summary {
-		padding: 10px 14px;
-		cursor: pointer;
-		font-weight: 600;
-		font-size: 13px;
+
+	.cite-dialog {
+		width: min(640px, calc(100dvw - 32px));
+		padding: 0;
+		background: var(--surface);
 		color: var(--text);
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		box-shadow: 0 12px 28px rgb(var(--shadow-tint) / 0.22);
 	}
-	summary::after {
-		content: '+';
-		color: var(--text-subtle);
-		font-weight: 400;
-		font-size: 16px;
+	.cite-dialog::backdrop {
+		background: rgb(var(--shadow-tint) / 0.4);
 	}
-	details[open] summary::after {
-		content: '−';
-	}
-	.body {
-		padding: 0 14px 14px;
+	.panel-body {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+		padding: 16px;
 	}
-	.block {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-	.block-head {
+	header,
+	footer {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 12px;
 	}
-	.copy {
-		padding: 3px 10px;
-		font-size: 11px;
+	footer .copy {
+		flex-shrink: 0;
+	}
+	h2 {
+		margin: 0;
+		font-size: 15px;
+	}
+	.formats {
+		width: 150px;
+		margin-left: auto;
+	}
+	/* APA references use a hanging indent. */
+	.apa {
+		max-height: 50dvh;
+		overflow: auto;
+		padding: 10px 12px;
+		background: var(--surface-muted);
 		border: 1px solid var(--border);
-		background: var(--surface);
+		border-radius: 6px;
+		font-size: 13px;
+		line-height: 1.6;
+	}
+	.apa p {
+		margin: 0;
+		padding-left: 2em;
+		text-indent: -2em;
+		overflow-wrap: anywhere;
+	}
+	.apa .apa-empty {
+		padding-left: 0;
+		text-indent: 0;
 		color: var(--text-muted);
+	}
+	.copy:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.apa p + p {
+		margin-top: 10px;
+	}
+	.icon-btn {
+		display: inline-flex;
+		padding: 4px;
+		background: none;
+		border: none;
 		border-radius: 4px;
+		color: var(--text-muted);
 		cursor: pointer;
 	}
-	.copy:hover {
+	.icon-btn:hover {
 		background: var(--surface-muted);
 		color: var(--text);
 	}
 	pre {
 		margin: 0;
+		max-height: 50dvh;
 		padding: 10px 12px;
 		background: var(--surface-muted);
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		font-size: 12px;
-		overflow-x: auto;
+		overflow: auto;
 	}
 	code {
 		font-family: var(--font-mono);

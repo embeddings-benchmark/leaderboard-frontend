@@ -160,9 +160,12 @@
 					</span>
 				{/each}
 			</div>
-			<h1>
-				<span class="org">{model.org}</span><span class="sl">/</span>{model.displayName}
-			</h1>
+			<div class="title-row">
+				<h1>
+					<span class="org">{model.org}</span><span class="sl">/</span>{model.displayName}
+				</h1>
+				<CiteBlock kind="model" citation={model.citation} />
+			</div>
 			<div class="links">
 				<!-- href returned by compareHref(), which uses resolve('/compare') internally -->
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
@@ -350,7 +353,6 @@
 					</div>
 				{/if}
 			</dl>
-			<CiteBlock kind="model" citation={model.citation} />
 		</div>
 		<div class="hero-right">
 			<div class="kpis">
@@ -423,8 +425,12 @@
 <ShareUrlButton />
 
 <style>
-	.hero-left :global(.cite) {
-		margin-top: 10px;
+	/* Cite button sits beside the model name, wrapping under it when narrow. */
+	.title-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		column-gap: 12px;
 	}
 	.hero-right {
 		display: flex;
