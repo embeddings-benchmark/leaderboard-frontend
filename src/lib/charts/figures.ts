@@ -37,9 +37,14 @@ export function bestProprietaryRow(summary: BenchmarkSummary): ScoredRow | null 
 	return best;
 }
 
-function paramSizeForBubble(embeddingDim: number): number {
+// Rerankers, BM25 and other models without an embedding have no
+// `embeddingDim`. Plotly hides any point whose size is <= 0 (`sizemin` never
+// kicks in), so they get a fixed mid-sized diamond instead (mteb#5686).
+const NO_EMBEDDING_DIM = 256;
+
+function paramSizeForBubble(embeddingDim: number | null): number {
 	// sqrt(dim) clipped at sqrt(4096), then scaled into Plotly's diameter sizing.
-	const clipped = Math.min(embeddingDim || 0, 4096);
+	const clipped = Math.min(embeddingDim || NO_EMBEDDING_DIM, 4096);
 	return Math.sqrt(clipped);
 }
 
@@ -58,11 +63,11 @@ export function performanceSizePlot(
 	// clamp to 1 param — they still show up, pinned to the left edge.
 	const x = rows.map((r) => Math.max(r.activeParamsB * 1e9, 1));
 	const y = rows.map((r) => r.meanTask * 100);
-	// `embeddingDim` / `maxTokens` are declared `number` on the TS side but
-	// the backend returns `null` for models whose metadata doesn't pin them
-	// down (mostly proprietary). Coerce here so the bubble/color/hover paths
-	// don't blow up on `null.toLocaleString()` etc.
-	const sizes = rows.map((r) => paramSizeForBubble(r.embeddingDim ?? 0));
+	// `embeddingDim` / `maxTokens` are `null` for models whose metadata doesn't
+	// pin them down (proprietary models, rerankers, baselines). Coerce here so
+	// the bubble/color/hover paths don't blow up on `null.toLocaleString()` etc.
+	const sizes = rows.map((r) => paramSizeForBubble(r.embeddingDim));
+	const symbols = rows.map((r) => (r.embeddingDim ? 'circle' : 'diamond'));
 	const colors = rows.map((r) => Math.log10(Math.max(r.maxTokens ?? 1, 1)));
 	const text = rows.map((r) => r.model.displayName);
 	const isPinned = rows.map((r) => pinned.has(rowId(r)));
@@ -94,6 +99,7 @@ export function performanceSizePlot(
 		customdata,
 		marker: {
 			size: sizes,
+			symbol: symbols,
 			sizemode: 'diameter',
 			sizeref: maxSizeRef,
 			sizemin: 4,

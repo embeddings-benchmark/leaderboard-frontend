@@ -89,6 +89,22 @@ describe('performanceSizePlot', () => {
 		expect(trace.y).toEqual([60]);
 	});
 
+	it('draws models without an embedding dim as visible diamonds', () => {
+		// Plotly hides points with size <= 0, so rerankers (no embedding dim)
+		// silently vanished from the chart (mteb#5686).
+		const dense = row(1, model('dense', { embeddingDim: 1024 }), 0.7);
+		const reranker = row(2, model('reranker', { embeddingDim: null }), 0.6);
+		const spec = performanceSizePlot(summary([dense, reranker]));
+		const trace = spec.data[1] as {
+			marker: { size: number[]; symbol: string[] };
+			customdata: Array<Array<string | number>>;
+		};
+		expect(trace.marker.size[0]).toBe(32);
+		expect(trace.marker.size[1]).toBeGreaterThan(0);
+		expect(trace.marker.symbol).toEqual(['circle', 'diamond']);
+		expect(trace.customdata[1][1]).toBe('—');
+	});
+
 	it('includes known and unknown total parameters in hover data', () => {
 		const known = row(1, model('known', { totalParamsB: 1.5 }), 0.7);
 		const unknown = row(2, model('unknown', { totalParamsB: null }), 0.6);

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
-	import { loadBenchmarkMenu, loadModelScores, loadSummary } from '$lib/data/service';
+	import { loadBenchmarks, loadModelScores, loadSummary } from '$lib/data/service';
 	import PlotlyChart from '$lib/components/PlotlyChart.svelte';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
@@ -10,7 +10,6 @@
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { Data, Layout } from 'plotly.js';
 	import type { Benchmark, BenchmarkSummary, ModelMeta, SummaryRow } from '$lib/types';
-	import { flattenMenu } from '$lib/types';
 	import { humanizeType, modelPath, slug, fmtParamsValue, fmtParamsUnit } from '$lib/format';
 	import {
 		opennessScore,
@@ -75,8 +74,16 @@
 	let summaryCacheVersion = $state(0);
 
 	$effect(() => {
-		loadBenchmarkMenu().then((menu) => {
-			ALL_BENCHMARKS = flattenMenu(menu);
+		// Full catalog, not the menu: the menu omits the featured benchmarks.
+		// Current benchmarks first, superseded ones (with a `newVersion`) last.
+		loadBenchmarks().then((list) => {
+			ALL_BENCHMARKS = list
+				.slice()
+				.sort(
+					(a, b) =>
+						Number(!!a.newVersion?.length) - Number(!!b.newVersion?.length) ||
+						a.displayName.localeCompare(b.displayName)
+				);
 		});
 	});
 
