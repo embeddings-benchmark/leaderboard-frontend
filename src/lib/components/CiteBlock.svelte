@@ -11,7 +11,8 @@
 		// What we're citing — used in the button's aria-label and the dialog
 		// title ("Cite this {kind}").
 		kind: 'benchmark' | 'task' | 'model';
-		// The BibTeX entry, when known. null/empty hides the entire block —
+		// The BibTeX entry, when known. null, empty or whitespace-only (mteb
+		// ships `''` and `' '` for uncited tasks) hides the entire block —
 		// the page URL itself is the shareable artifact, so we no longer need
 		// a separate "Shareable link" UI here.
 		citation?: string | null;
@@ -79,7 +80,7 @@
 	}
 </script>
 
-{#if citation}
+{#if bibtex}
 	<button
 		type="button"
 		class="cite-btn"
