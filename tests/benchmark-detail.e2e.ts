@@ -42,6 +42,22 @@ test('the URL ?tab= param rehydrates the active tab on load', async ({ page }) =
 	);
 });
 
+test('benchmark links encode parens and still open the page', async ({ page }) => {
+	await page.goto('/benchmarks');
+	const link = page.locator(`a[href*="/benchmark/${encodeURIComponent('MTEB')}"]`).first();
+	await expect(link).toHaveAttribute('href', /%28.*%29$/);
+
+	await page.goto('/benchmark/MTEB%28eng%2C%20v2%29');
+	await expect(page.getByRole('heading', { name: BENCH }).first()).toBeVisible();
+});
+
+test('og:url does not end with ")" for an old link with raw parens', async ({ page }) => {
+	await page.goto('/benchmark/MTEB(eng%2C%20v2)');
+	await expect(page.getByRole('heading', { name: BENCH }).first()).toBeVisible();
+	const ogUrl = await page.locator('meta[property="og:url"]').getAttribute('content');
+	expect(ogUrl).toMatch(/\/benchmark\/MTEB%28eng(,|%2C)%20v2%29$/);
+});
+
 test('benchmark alias route fetches summary with the canonical benchmark name', async ({
 	page
 }) => {

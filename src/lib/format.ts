@@ -85,14 +85,40 @@ export function isIconUrl(icon: string | null | undefined): boolean {
 	return icon.startsWith('/') || /^(https?:|data:)/i.test(icon);
 }
 
+// Characters `encodeURIComponent` leaves as-is but that link detectors treat
+// as punctuation. LinkedIn (and others) drop a trailing `)`, so a shared
+// `/benchmark/MTEB(eng%2C%20v2)` link became `.../MTEB(eng%2C%20v2` and 404'd.
+const SHARE_UNSAFE = /[!'()*]/g;
+
+function percentEncodeChar(c: string): string {
+	return `%${c.charCodeAt(0).toString(16).toUpperCase()}`;
+}
+
+/**
+ * ``encodeURIComponent`` that also encodes ``! ' ( ) *`` (RFC 3986 strict).
+ * Use it for any name that ends up in a URL people copy and share.
+ */
+export function encodeUrlPart(value: string): string {
+	return encodeURIComponent(value).replace(SHARE_UNSAFE, percentEncodeChar);
+}
+
+/**
+ * Percent-encodes ``! ' ( ) *`` in an already-built URL so that it does not
+ * end in a character that link detectors strip. The app decodes ``%28`` and
+ * ``(`` the same way, so the result points to the same page.
+ */
+export function shareSafeUrl(href: string): string {
+	return href.replace(SHARE_UNSAFE, percentEncodeChar);
+}
+
 /**
  * URL-safe form of a benchmark / model / task name for use in route paths
  * (e.g. ``/models/{slug(name)}``). Benchmark names contain parens, commas,
- * and spaces — ``encodeURIComponent`` covers them all. Identical helper
- * was inlined in 7 components before this was extracted.
+ * and spaces, so parens are encoded too (see ``encodeUrlPart``). Identical
+ * helper was inlined in 7 components before this was extracted.
  */
 export function slug(name: string): string {
-	return encodeURIComponent(name);
+	return encodeUrlPart(name);
 }
 
 // Preserves `/` in HuggingFace-style `org/name`. Strips edge slashes — SvelteKit's
@@ -101,7 +127,7 @@ export function modelPath(name: string): string {
 	return name
 		.replace(/^\/+|\/+$/g, '')
 		.split('/')
-		.map((segment) => encodeURIComponent(segment))
+		.map((segment) => encodeUrlPart(segment))
 		.join('/');
 }
 

@@ -8,7 +8,7 @@
 	import { leaderboard } from '$lib/stores/leaderboard.svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { baseModelName } from '$lib/format';
+	import { baseModelName, encodeUrlPart } from '$lib/format';
 
 	// /compare has no notion of experiment variants, so pins collapse to
 	// their base model name here (a variant pin still contributes its base
@@ -31,10 +31,10 @@
 		// literal `,` separator.
 		const parts: string[] = [];
 		if (names.length > 0) {
-			parts.push(`model=${names.map((n) => encodeURIComponent(n)).join(',')}`);
+			parts.push(`model=${names.map((n) => encodeUrlPart(n)).join(',')}`);
 		}
 		if (leaderboard.selected) {
-			parts.push(`benchmark=${encodeURIComponent(leaderboard.selected)}`);
+			parts.push(`benchmark=${encodeUrlPart(leaderboard.selected)}`);
 		}
 		const qs = parts.length > 0 ? `?${parts.join('&')}` : '';
 		return `${resolve('/compare')}${qs}`;
