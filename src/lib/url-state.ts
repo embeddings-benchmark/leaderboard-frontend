@@ -2,6 +2,7 @@
 // writes go through `replaceState` so load functions don't re-fire.
 
 import { replaceState } from '$app/navigation';
+import { encodeUrlPart } from './format';
 
 export function readParams(): URLSearchParams {
 	if (typeof window === 'undefined') return new URLSearchParams();
@@ -69,7 +70,7 @@ export function encodeSet(values: Iterable<string>): string {
 	for (const v of values) {
 		if (!v) continue;
 		if (out) out += ',';
-		out += encodeURIComponent(v);
+		out += encodeUrlPart(v);
 	}
 	return out;
 }

@@ -7,13 +7,16 @@
 
 	import Check from 'lucide-svelte/icons/check';
 	import Link2 from 'lucide-svelte/icons/link-2';
+	import { shareSafeUrl } from '$lib/format';
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
 	async function copy() {
 		try {
-			await navigator.clipboard.writeText(window.location.href);
+			// The address bar can still hold raw parens (e.g. an old link), so
+			// encode them: a trailing `)` gets cut off when pasted into LinkedIn.
+			await navigator.clipboard.writeText(shareSafeUrl(window.location.href));
 			copied = true;
 			if (timer) clearTimeout(timer);
 			timer = setTimeout(() => {

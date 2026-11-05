@@ -18,6 +18,7 @@
 	// "Loading…" on every page. CI's typecheck reads PUBLIC_API_URL from
 	// the workflow env so `svelte-kit sync` emits the type.
 	import { PUBLIC_API_URL } from '$env/static/public';
+	import { shareSafeUrl } from '$lib/format';
 
 	interface Props {
 		// Card title. Will be suffixed with " · MTEB Leaderboard" so the brand
@@ -57,7 +58,9 @@
 	// client hydration; on the SSR pass with no host (vite dev), origin is
 	// `http://localhost:5173`, which is fine for local sharing tests.
 	let origin = $derived(page.url.origin);
-	let canonicalUrl = $derived(page.url.href);
+	// Prerendered paths keep raw parens (`/benchmark/MTEB(eng,%20v2)`), and
+	// LinkedIn cuts a trailing `)` from og:url, so encode them.
+	let canonicalUrl = $derived(shareSafeUrl(page.url.href));
 	// Per-entity hero takes precedence when the caller declares one. The
 	// PNG is served by the mteb FastAPI backend out of its persistent
 	// /data/og volume (see `mteb/api/og/generate.mjs`). When PUBLIC_API_URL

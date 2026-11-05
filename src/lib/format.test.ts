@@ -3,6 +3,7 @@ import {
 	ariaSort,
 	bestPerColumn,
 	defaultDirFor,
+	encodeUrlPart,
 	fmtInt,
 	fmtParamsUnit,
 	fmtParamsValue,
@@ -13,9 +14,11 @@ import {
 	isIconUrl,
 	maxOf,
 	minOf,
+	modelPath,
 	nextSort,
 	rowId,
 	serializeExperimentValue,
+	shareSafeUrl,
 	slug,
 	sortIcon,
 	summarizeModelLanguages,
@@ -81,13 +84,52 @@ describe('isIconUrl', () => {
 
 describe('slug', () => {
 	it('URL-encodes punctuation that breaks route segments', () => {
-		expect(slug('MTEB(eng, v2)')).toBe('MTEB(eng%2C%20v2)'); // commas/spaces encoded; parens preserved by encodeURIComponent
-		expect(slug('HUME(v1)')).toBe('HUME(v1)');
+		expect(slug('MTEB(eng, v2)')).toBe('MTEB%28eng%2C%20v2%29');
+		expect(slug('HUME(v1)')).toBe('HUME%28v1%29');
+	});
+
+	it('never ends a benchmark link with ")" (LinkedIn drops it)', () => {
+		expect(slug('MTEB(Multilingual, v2)').endsWith(')')).toBe(false);
 	});
 
 	it('round-trips with decodeURIComponent', () => {
 		const original = 'My Benchmark / with / slashes & stuff';
 		expect(decodeURIComponent(slug(original))).toBe(original);
+		expect(decodeURIComponent(slug("MTEB(eng, v2)!'*"))).toBe("MTEB(eng, v2)!'*");
+	});
+});
+
+describe('modelPath', () => {
+	it('keeps "/" between segments and encodes parens inside them', () => {
+		expect(modelPath('org/model (v2)')).toBe('org/model%20%28v2%29');
+		expect(modelPath('/org/name/')).toBe('org/name');
+	});
+});
+
+describe('encodeUrlPart', () => {
+	it('encodes the characters encodeURIComponent leaves alone', () => {
+		expect(encodeUrlPart("!'()*")).toBe('%21%27%28%29%2A');
+		expect(encodeUrlPart('a-b_c.d~e')).toBe('a-b_c.d~e');
+	});
+});
+
+describe('shareSafeUrl', () => {
+	it('encodes raw parens left in a page URL', () => {
+		expect(shareSafeUrl('https://leaderboard.mteb.org/benchmark/MTEB(eng,%20v2)')).toBe(
+			'https://leaderboard.mteb.org/benchmark/MTEB%28eng,%20v2%29'
+		);
+	});
+
+	it('leaves already-encoded URLs and query strings unchanged', () => {
+		const url = 'https://leaderboard.mteb.org/benchmark/MTEB%28eng%2C%20v2%29?tab=perf_task#x';
+		expect(shareSafeUrl(url)).toBe(url);
+	});
+
+	it('points to the same page after decoding', () => {
+		const raw = 'https://leaderboard.mteb.org/benchmark/MTEB(eng,%20v2)';
+		expect(decodeURIComponent(new URL(shareSafeUrl(raw)).pathname)).toBe(
+			decodeURIComponent(new URL(raw).pathname)
+		);
 	});
 });
 
