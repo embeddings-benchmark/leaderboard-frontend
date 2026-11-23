@@ -54,13 +54,14 @@ format: ## Auto-format with prettier
 test: ## Build and run the Playwright e2e suite headless
 	npm run test
 
-# Screenshot tests run in the official Playwright Linux image so baselines match
-# CI. Keep the tag in sync with @playwright/test in package-lock.json (and in
-# .github/workflows/test.yml). node_modules lives in a named volume so the
-# Linux install never touches the host's. Runs natively (arm64 on Apple
-# silicon): Chromium crashes under amd64 emulation. `--engine-strict=false`: the image's
-# Node may be older than engines.node; it doesn't affect rendering.
-PW_IMAGE := mcr.microsoft.com/playwright:v1.60.0-noble
+# Screenshot tests run in the official Playwright Linux image, the same one CI
+# uses, so baselines match. The tag follows @playwright/test in
+# package-lock.json. node_modules lives in a named volume so the Linux install
+# never touches the host's. Runs natively (arm64 on Apple silicon): Chromium
+# crashes under amd64 emulation. `--engine-strict=false`: the image's Node may
+# be older than engines.node; it doesn't affect rendering.
+PW_VERSION := $(shell node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
+PW_IMAGE := mcr.microsoft.com/playwright:v$(PW_VERSION)-noble
 DOCKER_ARCH := $(shell uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/)
 PW_DOCKER := docker run --rm --platform linux/$(DOCKER_ARCH) --ipc=host -v "$(CURDIR)":/work \
 	-v leaderboard-linux-node-modules:/work/node_modules -w /work $(PW_IMAGE)

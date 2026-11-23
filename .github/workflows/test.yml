@@ -12,14 +12,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
+  # Both test jobs run inside the official Playwright image matching the
+  # @playwright/test version in package-lock.json. The image ships the browsers
+  # and their system deps, so the runner's OS doesn't matter (ubuntu-latest
+  # moving to 26.04 broke `playwright install --with-deps`), and bumping
+  # Playwright automatically picks the matching image. The screenshot
+  # baselines are made in the same image (`make update-visual`).
+  playwright-version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: package-lock.json
+          sparse-checkout-cone-mode: false
+      - id: v
+        run: echo "version=$(jq -r '.packages["node_modules/@playwright/test"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
+
+  e2e:
+    needs: playwright-version
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.playwright-version.outputs.version }}-noble
+      options: --ipc=host
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/common
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
 
       - name: Run Playwright tests
         run: npx playwright test --project=e2e
@@ -32,13 +51,12 @@ jobs:
           path: playwright-report
           retention-days: 14
 
-  # Screenshot tests (`tests/*.visual.ts`). Runs inside the same Playwright
-  # image as `make update-visual`, so fonts match the committed baselines.
-  # Keep the tag in sync with @playwright/test in package-lock.json + Makefile.
+  # Screenshot tests (`tests/*.visual.ts`).
   visual:
+    needs: playwright-version
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.60.0-noble
+      image: mcr.microsoft.com/playwright:v${{ needs.playwright-version.outputs.version }}-noble
       options: --ipc=host
     steps:
       - uses: actions/checkout@v6
