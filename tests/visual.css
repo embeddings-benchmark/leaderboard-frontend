@@ -1,0 +1,5 @@
+/* Applied only while taking `toHaveScreenshot` images (see playwright.config.ts):
+   hide floating overlays that would otherwise paint over the element. */
+.floating-pill {
+	visibility: hidden !important;
+}

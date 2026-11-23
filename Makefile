@@ -1,4 +1,4 @@
-.PHONY: help install setup dev dev-mock mock-api build deploy-build preview check check-watch lint format test test-ui clean kill-ports
+.PHONY: help install setup dev dev-mock mock-api build deploy-build preview check check-watch lint format test test-visual update-visual test-ui clean kill-ports
 
 .DEFAULT_GOAL := help
 
@@ -53,6 +53,23 @@ format: ## Auto-format with prettier
 
 test: ## Build and run the Playwright e2e suite headless
 	npm run test
+
+# Screenshot tests run in the official Playwright Linux image so baselines match
+# CI. Keep the tag in sync with @playwright/test in package-lock.json (and in
+# .github/workflows/test.yml). node_modules lives in a named volume so the
+# Linux install never touches the host's. Runs natively (arm64 on Apple
+# silicon): Chromium crashes under amd64 emulation. `--engine-strict=false`: the image's
+# Node may be older than engines.node; it doesn't affect rendering.
+PW_IMAGE := mcr.microsoft.com/playwright:v1.60.0-noble
+DOCKER_ARCH := $(shell uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/)
+PW_DOCKER := docker run --rm --platform linux/$(DOCKER_ARCH) --ipc=host -v "$(CURDIR)":/work \
+	-v leaderboard-linux-node-modules:/work/node_modules -w /work $(PW_IMAGE)
+
+test-visual: ## Run the screenshot tests in the Playwright Linux image (needs Docker)
+	$(PW_DOCKER) sh -c 'npm ci --engine-strict=false --no-audit --no-fund && npx playwright test --project=visual'
+
+update-visual: ## Regenerate screenshot baselines in the Playwright Linux image (needs Docker)
+	$(PW_DOCKER) sh -c 'npm ci --engine-strict=false --no-audit --no-fund && npx playwright test --project=visual --update-snapshots'
 
 test-ui: ## Open the Playwright UI runner
 	npx playwright test --ui
