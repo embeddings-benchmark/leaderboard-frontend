@@ -9,7 +9,8 @@
 	// /compare, etc. still get *some* preview when shared.
 
 	import { page } from '$app/state';
-	import { base } from '$app/paths';
+	import { building } from '$app/environment';
+	import { base, resolve } from '$app/paths';
 	// MUST be `$env/static/public` — `$env/dynamic/public` reads from
 	// `globalThis.__sveltekit_<id>.env`, which SvelteKit only populates
 	// when its server runtime is in the request path. adapter-static
@@ -18,6 +19,7 @@
 	// "Loading…" on every page. CI's typecheck reads PUBLIC_API_URL from
 	// the workflow env so `svelte-kit sync` emits the type.
 	import { PUBLIC_API_URL } from '$env/static/public';
+	import { modelPath, shareSafeUrl, slug } from '$lib/format';
 
 	interface Props {
 		// Card title. Will be suffixed with " · MTEB Leaderboard" so the brand
@@ -57,7 +59,26 @@
 	// client hydration; on the SSR pass with no host (vite dev), origin is
 	// `http://localhost:5173`, which is fine for local sharing tests.
 	let origin = $derived(page.url.origin);
-	let canonicalUrl = $derived(page.url.href);
+	// Entity pages point at their slug URL, so old raw-name copies
+	// (`/benchmark/MTEB(eng, v2)`) and API aliases share one canonical URL.
+	let entityPath = $derived.by(() => {
+		if (!entity) return null;
+		switch (entity.kind) {
+			case 'benchmark':
+				return resolve('/benchmark/[name]', { name: slug(entity.name) });
+			case 'task':
+				return resolve('/tasks/[name]', { name: slug(entity.name) });
+			case 'model':
+				return resolve('/models/[...name=modelName]', { name: modelPath(entity.name) });
+		}
+	});
+	// `url.search` throws while prerendering (it's always empty then anyway).
+	// Elsewhere, encode leftover raw parens: LinkedIn cuts a trailing `)`.
+	let canonicalUrl = $derived(
+		entityPath
+			? `${origin}${entityPath}${building ? '' : shareSafeUrl(page.url.search)}`
+			: shareSafeUrl(page.url.href)
+	);
 	// Per-entity hero takes precedence when the caller declares one. The
 	// PNG is served by the mteb FastAPI backend out of its persistent
 	// /data/og volume (see `mteb/api/og/generate.mjs`). When PUBLIC_API_URL

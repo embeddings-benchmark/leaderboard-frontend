@@ -12,8 +12,18 @@ describe('encodeSet / decodeSet', () => {
 	it('encodes characters that would conflict with the comma separator', () => {
 		const encoded = encodeSet(['MTEB(eng, v2)', 'BEIR']);
 		// Commas inside values must be URL-encoded so they don't split on decode.
-		expect(encoded).toContain('MTEB(eng%2C%20v2)');
+		expect(encoded).toContain('MTEB%28eng%2C%20v2%29');
 		expect(decodeSet(encoded)).toEqual(['MTEB(eng, v2)', 'BEIR']);
+	});
+
+	it('does not end with ")" when the last name has parens', () => {
+		const encoded = encodeSet(['BEIR', 'MTEB(eng, v2)']);
+		expect(encoded.endsWith(')')).toBe(false);
+		expect(decodeSet(encoded)).toEqual(['BEIR', 'MTEB(eng, v2)']);
+	});
+
+	it('still decodes old links that kept raw parens', () => {
+		expect(decodeSet('MTEB(eng%2C%20v2),BEIR')).toEqual(['MTEB(eng, v2)', 'BEIR']);
 	});
 
 	it('empty / falsy values produce an empty string, not null', () => {

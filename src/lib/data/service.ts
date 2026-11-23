@@ -1,4 +1,6 @@
 import { building } from '$app/environment';
+import { resolve } from '$app/paths';
+import { buildSlugIndex, modelPath, slug, type SlugIndex } from '$lib/format';
 import { PUBLIC_API_URL } from '$env/static/public';
 import type {
 	Benchmark,
@@ -307,4 +309,57 @@ export async function loadModelScores(name: string, fetchFn?: FetchFn): Promise<
 	return enrichModelScores(
 		await cachedHttp<ModelScores>(`/models/${encodeURIComponent(name)}/scores`, fetchFn)
 	);
+}
+
+// ── URL slugs ────────────────────────────────────────────────────────────
+// Detail routes use readable slugs (`/benchmark/MTEB-eng-v2`), which can't be
+// decoded back to a name. The slug → name index is prerendered per kind at
+// `/slugs/{kind}.json` (only names whose slug differs, so it stays tiny) and
+// read by the detail loaders.
+
+export type SlugKind = 'benchmarks' | 'models' | 'tasks';
+
+/** Builds the index from the full catalog. Throws on a slug collision. */
+export async function buildEntitySlugIndex(kind: SlugKind, fetchFn?: FetchFn): Promise<SlugIndex> {
+	switch (kind) {
+		case 'benchmarks':
+			return buildSlugIndex(
+				(await loadBenchmarks(fetchFn)).map((b) => b.name),
+				slug
+			);
+		case 'models':
+			return buildSlugIndex(
+				(await loadModels({}, fetchFn)).map((m) => m.name),
+				modelPath
+			);
+		case 'tasks':
+			return buildSlugIndex(
+				(await loadTasks({}, fetchFn)).map((t) => t.name),
+				slug
+			);
+	}
+}
+
+const slugIndexes = new Map<SlugKind, Promise<SlugIndex>>();
+
+/**
+ * Reads the prerendered slug index. Falls back to building it from the
+ * catalog when the file is missing (`BUILD_NO_PRERENDER` builds). Not
+ * memoized during the build, so every prerendered page inlines it via
+ * `event.fetch` and hydration needs no extra request.
+ */
+export function loadSlugIndex(
+	kind: SlugKind,
+	fetchFn: FetchFn = globalThis.fetch
+): Promise<SlugIndex> {
+	const cached = building ? undefined : slugIndexes.get(kind);
+	if (cached) return cached;
+	const p = fetchFn(resolve('/slugs/[kind].json', { kind }))
+		.then((res) => (res.ok ? (res.json() as Promise<SlugIndex>) : Promise.reject(res.status)))
+		.catch(() => buildEntitySlugIndex(kind, fetchFn));
+	if (!building) {
+		slugIndexes.set(kind, p);
+		p.catch(() => slugIndexes.delete(kind));
+	}
+	return p;
 }

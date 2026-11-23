@@ -5,12 +5,12 @@ import { test, expect } from '@playwright/test';
 // live backend.
 
 const BENCH = 'MTEB(eng, v2)';
-const SLUG = encodeURIComponent(BENCH);
+const SLUG = 'MTEB-eng-v2';
 const ALIAS = 'MTEB(eng)';
 const ALIAS_SLUG = encodeURIComponent(ALIAS);
 // MTEB(eng, v2) has no language_view, so its perf_language tab is
 // hidden — use the multilingual mock for that deep-link test.
-const MULTI_SLUG = encodeURIComponent('MTEB(Multilingual, v2)');
+const MULTI_SLUG = 'MTEB-Multilingual-v2';
 
 test('benchmark detail page loads the hero and the summary tab by default', async ({ page }) => {
 	await page.goto(`/benchmark/${SLUG}/`);
@@ -42,6 +42,27 @@ test('the URL ?tab= param rehydrates the active tab on load', async ({ page }) =
 	);
 });
 
+test('benchmark links use readable slugs without parens', async ({ page }) => {
+	await page.goto('/benchmarks');
+	await expect(page.locator(`a[href$="/benchmark/${SLUG}"]`).first()).toBeVisible();
+	await expect(page.locator('a[href*="/benchmark/"][href*="("]')).toHaveCount(0);
+	await expect(page.locator('a[href*="/benchmark/"][href*="%28"]')).toHaveCount(0);
+});
+
+for (const oldPath of ['/benchmark/MTEB(eng%2C%20v2)', '/benchmark/MTEB%28eng%2C%20v2%29']) {
+	test(`old link ${oldPath} redirects to the slug and keeps the query`, async ({ page }) => {
+		await page.goto(`${oldPath}?tab=perf_task`);
+		await expect(page).toHaveURL(new RegExp(`/benchmark/${SLUG}/?\\?tab=perf_task$`));
+		await expect(page.getByRole('heading', { name: BENCH }).first()).toBeVisible();
+		await expect(page.getByRole('tab', { name: 'Performance per task' })).toHaveAttribute(
+			'aria-selected',
+			'true'
+		);
+		const ogUrl = await page.locator('meta[property="og:url"]').getAttribute('content');
+		expect(ogUrl).toMatch(new RegExp(`/benchmark/${SLUG}\\?tab=perf_task$`));
+	});
+}
+
 test('benchmark alias route fetches summary with the canonical benchmark name', async ({
 	page
 }) => {
@@ -57,4 +78,9 @@ test('benchmark alias route fetches summary with the canonical benchmark name', 
 	await expect(page.locator('table thead').first()).toBeVisible();
 	expect(scorePaths).toContain(`/v1/benchmarks/${BENCH}/scores`);
 	expect(scorePaths).not.toContain(`/v1/benchmarks/${ALIAS}/scores`);
+	// The alias page advertises the canonical slug URL to crawlers.
+	await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+		'content',
+		new RegExp(`/benchmark/${SLUG}$`)
+	);
 });

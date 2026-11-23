@@ -9,7 +9,7 @@ import type { Locator, Page } from '@playwright/test';
 //   mock-cross-encoder     paper + model card   → 2/6
 //   mock-unknown-openness  no openness data     → empty cell, fails every filter
 
-const BENCH_SLUG = encodeURIComponent('MTEB(eng, v2)');
+const BENCH_SLUG = 'MTEB-eng-v2';
 
 function rows(page: Page): Locator {
 	return page.locator('main table.tbl tbody tr');
