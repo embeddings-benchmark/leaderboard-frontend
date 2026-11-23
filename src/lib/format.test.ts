@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	ariaSort,
 	bestPerColumn,
+	buildSlugIndex,
 	defaultDirFor,
 	encodeUrlPart,
 	fmtInt,
@@ -16,6 +17,7 @@ import {
 	minOf,
 	modelPath,
 	nextSort,
+	resolveSlugParam,
 	rowId,
 	serializeExperimentValue,
 	shareSafeUrl,
@@ -83,26 +85,66 @@ describe('isIconUrl', () => {
 });
 
 describe('slug', () => {
-	it('URL-encodes punctuation that breaks route segments', () => {
-		expect(slug('MTEB(eng, v2)')).toBe('MTEB%28eng%2C%20v2%29');
-		expect(slug('HUME(v1)')).toBe('HUME%28v1%29');
+	it('turns punctuation into readable dashes', () => {
+		expect(slug('MTEB(eng, v2)')).toBe('MTEB-eng-v2');
+		expect(slug('HUME(v1)')).toBe('HUME-v1');
+		expect(slug('MAEB(v1, audio-only)')).toBe('MAEB-v1-audio-only');
+	});
+
+	it('leaves URL-safe names unchanged', () => {
+		expect(slug('ArguAna')).toBe('ArguAna');
+		expect(slug('STS22.v2')).toBe('STS22.v2');
 	});
 
 	it('never ends a benchmark link with ")" (LinkedIn drops it)', () => {
 		expect(slug('MTEB(Multilingual, v2)').endsWith(')')).toBe(false);
 	});
 
-	it('round-trips with decodeURIComponent', () => {
-		const original = 'My Benchmark / with / slashes & stuff';
-		expect(decodeURIComponent(slug(original))).toBe(original);
-		expect(decodeURIComponent(slug("MTEB(eng, v2)!'*"))).toBe("MTEB(eng, v2)!'*");
+	it('falls back to percent-encoding when nothing readable is left', () => {
+		expect(slug('()')).toBe('%28%29');
 	});
 });
 
 describe('modelPath', () => {
-	it('keeps "/" between segments and encodes parens inside them', () => {
-		expect(modelPath('org/model (v2)')).toBe('org/model%20%28v2%29');
+	it('keeps "/" between segments and slugs each segment', () => {
+		expect(modelPath('openai/text-embedding-3-large (embed_dim=512)')).toBe(
+			'openai/text-embedding-3-large-embed_dim-512'
+		);
 		expect(modelPath('/org/name/')).toBe('org/name');
+		expect(modelPath('intfloat/e5-large-v2')).toBe('intfloat/e5-large-v2');
+	});
+});
+
+describe('buildSlugIndex', () => {
+	it('only lists names whose slug differs', () => {
+		expect(buildSlugIndex(['MTEB(eng, v2)', 'BEIR'], slug)).toEqual({
+			'MTEB-eng-v2': 'MTEB(eng, v2)'
+		});
+	});
+
+	it('throws when two names share a slug', () => {
+		expect(() => buildSlugIndex(['MTEB(eng, v2)', 'MTEB-eng-v2'], slug)).toThrow(/collision/);
+		expect(() => buildSlugIndex(['A (x)', 'A(x)'], slug)).toThrow(/collision/);
+	});
+});
+
+describe('resolveSlugParam', () => {
+	const index = buildSlugIndex(['MTEB(eng, v2)', 'BEIR'], slug);
+
+	it('maps a slug back to the real name', () => {
+		expect(resolveSlugParam('MTEB-eng-v2', index, slug)).toEqual({ name: 'MTEB(eng, v2)' });
+	});
+
+	it('redirects an old raw-name link to its slug', () => {
+		expect(resolveSlugParam('MTEB(eng, v2)', index, slug)).toEqual({
+			name: 'MTEB(eng, v2)',
+			redirect: 'MTEB-eng-v2'
+		});
+	});
+
+	it('passes safe names and unknown aliases through', () => {
+		expect(resolveSlugParam('BEIR', index, slug)).toEqual({ name: 'BEIR' });
+		expect(resolveSlugParam('MTEB(eng)', index, slug)).toEqual({ name: 'MTEB(eng)' });
 	});
 });
 

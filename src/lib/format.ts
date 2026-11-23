@@ -86,8 +86,8 @@ export function isIconUrl(icon: string | null | undefined): boolean {
 }
 
 // Characters `encodeURIComponent` leaves as-is but that link detectors treat
-// as punctuation. LinkedIn (and others) drop a trailing `)`, so a shared
-// `/benchmark/MTEB(eng%2C%20v2)` link became `.../MTEB(eng%2C%20v2` and 404'd.
+// as punctuation. LinkedIn (and others) drop a trailing `)`, so a URL ending
+// in one gets truncated. Route paths use slugs (below); this covers query values.
 const SHARE_UNSAFE = /[!'()*]/g;
 
 function percentEncodeChar(c: string): string {
@@ -111,24 +111,75 @@ export function shareSafeUrl(href: string): string {
 	return href.replace(SHARE_UNSAFE, percentEncodeChar);
 }
 
-/**
- * URL-safe form of a benchmark / model / task name for use in route paths
- * (e.g. ``/models/{slug(name)}``). Benchmark names contain parens, commas,
- * and spaces, so parens are encoded too (see ``encodeUrlPart``). Identical
- * helper was inlined in 7 components before this was extracted.
- */
-export function slug(name: string): string {
-	return encodeUrlPart(name);
+// Anything outside RFC 3986 "unreserved" collapses to a single `-`.
+const SLUG_UNSAFE = /[^A-Za-z0-9._~-]+/g;
+
+function slugSegment(segment: string): string {
+	const s = segment.replace(SLUG_UNSAFE, '-').replace(/^-+|-+$/g, '');
+	// A name made only of punctuation would slug to '' — keep it addressable.
+	return s || encodeUrlPart(segment);
 }
 
-// Preserves `/` in HuggingFace-style `org/name`. Strips edge slashes — SvelteKit's
-// `resolve()` rejects rest-param values with leading/trailing slashes.
+/**
+ * Readable route segment for a benchmark / task name:
+ * ``MTEB(eng, v2)`` → ``MTEB-eng-v2``. Names that are already URL-safe map to
+ * themselves. Lossy, so detail loaders map it back to the real name via the
+ * prerendered slug index (see ``loadSlugIndex`` / ``resolveSlugParam``).
+ */
+export function slug(name: string): string {
+	return slugSegment(name);
+}
+
+// Preserves `/` in HuggingFace-style `org/name`, slugging each segment
+// (`openai/text-embedding-3-large (embed_dim=512)` →
+// `openai/text-embedding-3-large-embed_dim-512`). Strips edge slashes —
+// SvelteKit's `resolve()` rejects rest-param values with leading/trailing slashes.
 export function modelPath(name: string): string {
 	return name
 		.replace(/^\/+|\/+$/g, '')
 		.split('/')
-		.map((segment) => encodeUrlPart(segment))
+		.map(slugSegment)
 		.join('/');
+}
+
+/** slug → real name, for every name whose slug differs from it. */
+export type SlugIndex = Record<string, string>;
+
+/**
+ * Builds the slug index for a catalog. Throws when two names share a slug,
+ * so a new benchmark / model can never silently take over another's URL.
+ */
+export function buildSlugIndex(names: Iterable<string>, toSlug: (n: string) => string): SlugIndex {
+	const owner = new Map<string, string>();
+	const index: SlugIndex = {};
+	for (const name of names) {
+		const s = toSlug(name);
+		const prev = owner.get(s);
+		if (prev !== undefined && prev !== name) {
+			throw new Error(`URL slug collision: "${prev}" and "${name}" both map to "${s}"`);
+		}
+		owner.set(s, name);
+		if (s !== name) index[s] = name;
+	}
+	return index;
+}
+
+/**
+ * Maps a detail route param back to the entity name.
+ * - a slug in the index → its real name
+ * - an old-style raw name (``MTEB(eng, v2)``) → ``redirect`` to its slug
+ * - anything else (already-safe names, API aliases) → passed through as-is
+ */
+export function resolveSlugParam(
+	param: string,
+	index: SlugIndex,
+	toSlug: (n: string) => string
+): { name: string; redirect?: string } {
+	const hit = index[param];
+	if (hit !== undefined) return { name: hit };
+	const s = toSlug(param);
+	if (s !== param && index[s] === param) return { name: param, redirect: s };
+	return { name: param };
 }
 
 /**

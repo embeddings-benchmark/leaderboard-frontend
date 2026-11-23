@@ -14,8 +14,8 @@
 
 	async function copy() {
 		try {
-			// The address bar can still hold raw parens (e.g. an old link), so
-			// encode them: a trailing `)` gets cut off when pasted into LinkedIn.
+			// Paths are paren-free slugs, but a query string carried over from an
+			// old link can still hold raw parens; LinkedIn cuts a trailing `)`.
 			await navigator.clipboard.writeText(shareSafeUrl(window.location.href));
 			copied = true;
 			if (timer) clearTimeout(timer);
