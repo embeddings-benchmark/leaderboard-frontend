@@ -5,8 +5,8 @@ import type { Locator, Page } from '@playwright/test';
 // ModelsTable (/models?view=table) and SummaryTable (/benchmark/[name]).
 //
 // Fixture contract (tests/mock-api.ts) — the assertions below depend on it:
-//   mock-model             all six dimensions   → 6/6
-//   mock-cross-encoder     paper + model card   → 2/6
+//   mock-model             all six dimensions
+//   mock-cross-encoder     paper + model card
 //   mock-unknown-openness  no openness data     → empty cell, fails every filter
 
 const BENCH_SLUG = encodeURIComponent('MTEB(eng, v2)');
@@ -48,14 +48,16 @@ test.describe('/models Openness column', () => {
 		const full = rows(page).filter({ hasText: 'mock-model' }).first();
 		await expect(opennessMeter(full)).toHaveAttribute(
 			'aria-label',
-			'Openness score: 6 of 6 dimensions'
+			'Open: Open weights, Open license, Training code, Training data, Paper, Model card'
 		);
 
 		const partial = rows(page).filter({ hasText: 'mock-cross-encoder' }).first();
 		await expect(opennessMeter(partial)).toHaveAttribute(
 			'aria-label',
-			'Openness score: 2 of 6 dimensions'
+			'Open: Paper, Model card. Not open: Open weights, Open license, Training code, Training data'
 		);
+		// No "n/6" count: equal counts can hide different kinds of openness.
+		await expect(page.locator('.openness')).not.toContainText([/\d\/6/]);
 
 		// No openness data → the cell renders, but with no meter inside it.
 		const unknown = rows(page).filter({ hasText: 'mock-unknown-openness' }).first();
@@ -80,8 +82,8 @@ test.describe('/models Openness column', () => {
 				)
 			)
 			.toEqual([
-				'Openness score: 6 of 6 dimensions',
-				'Openness score: 2 of 6 dimensions',
+				'Open: Open weights, Open license, Training code, Training data, Paper, Model card',
+				'Open: Paper, Model card. Not open: Open weights, Open license, Training code, Training data',
 				undefined // mock-unknown-openness — no meter in the cell
 			]);
 	});
@@ -98,13 +100,13 @@ test.describe('/models Openness column', () => {
 		await expect(portal).toBeVisible();
 		await expect(portal).toContainText('Open weights');
 		await expect(portal).toContainText('Training data');
-		await expect(portal).toContainText('6/6');
+		await expect(portal).not.toContainText('6/6');
 	});
 });
 
 test.describe('/models cards view', () => {
 	// The cards are the default view, so the openness filter needs visible
-	// feedback here too — the score sits in the 2×2 stat grid, in the slot the
+	// feedback here too — the pip meter sits in the 2×2 stat grid, in the slot the
 	// release date vacated when it moved up to a byline under the title.
 	test('each card carries an Openness stat and a release-date byline', async ({ page }) => {
 		await page.goto('/models');
@@ -117,7 +119,9 @@ test.describe('/models cards view', () => {
 			.evaluateAll((ds) => ds.map((d) => d.textContent?.trim()));
 		expect(labels).toEqual(['Parameters', 'Embed dim', 'Max tokens', 'Openness']);
 
-		await expect(card('mock-model').locator('.openness-stat')).toContainText('6/6');
+		const stat = card('mock-model').locator('.openness-stat');
+		await expect(stat.locator('[role="img"]')).toHaveAttribute('aria-label', /^Open: Open weights/);
+		await expect(stat).not.toContainText('6/6');
 		await expect(card('mock-model').locator('.title-date')).toContainText('Released');
 
 		// No openness data → an em dash, so the grid stays aligned.
@@ -172,7 +176,7 @@ test.describe('Openness on the benchmark summary table', () => {
 		await expect(header(page, /Openness/)).toBeVisible();
 		await expect(
 			page.locator('.tab-pane.active .openness-cell [role="img"]').first()
-		).toHaveAttribute('aria-label', /Openness score: \d of 6 dimensions/);
+		).toHaveAttribute('aria-label', /^Open: /);
 	});
 });
 
