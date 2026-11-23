@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 // columns, and sorting; also checks an unrelated benchmark is unaffected.
 
 const LMEB_SLUG = encodeURIComponent('LMEB');
-const OTHER_SLUG = encodeURIComponent('MTEB(eng, v2)');
+const OTHER_SLUG = 'MTEB-eng-v2';
 
 test('LMEB summary table renders the Memory Type super-header and group columns', async ({
 	page

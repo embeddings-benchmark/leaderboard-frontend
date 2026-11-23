@@ -7,13 +7,16 @@
 
 	import Check from 'lucide-svelte/icons/check';
 	import Link2 from 'lucide-svelte/icons/link-2';
+	import { shareSafeUrl } from '$lib/format';
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
 	async function copy() {
 		try {
-			await navigator.clipboard.writeText(window.location.href);
+			// Paths are paren-free slugs, but a query string carried over from an
+			// old link can still hold raw parens; LinkedIn cuts a trailing `)`.
+			await navigator.clipboard.writeText(shareSafeUrl(window.location.href));
 			copied = true;
 			if (timer) clearTimeout(timer);
 			timer = setTimeout(() => {

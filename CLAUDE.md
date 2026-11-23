@@ -42,6 +42,8 @@ Read via `$env/static/public` (build-time inlined):
 | `/tasks` + `/tasks/[name]`      | Index + detail, sidebar mirrors `/benchmarks`                                      |
 | `/compare`                      | Up to 4 models side-by-side with radar                                             |
 
+**URL slugs:** detail routes use readable slugs (`MTEB(eng, v2)` → `/benchmark/MTEB-eng-v2`) from `slug()` / `modelPath()` in `format.ts`; always build entity links through them. Slugs are lossy, so loaders map them back via the prerendered `/slugs/{kind}.json` index (`loadSlugIndex` + `resolveSlugParam`); the build fails on a slug collision. Old raw-name URLs still prerender (for link previews) and redirect to the slug in the browser, keeping the query string.
+
 Components live under `src/lib/components/` — read them before adding new ones. Shared toolbar widgets (`SearchInput`, `SortDirIcon`, `DownloadButton`, `SortHeader`) and floating actions (`ShareUrlButton` bottom-right, `ScrollToTopButton` bottom-left) appear on every overview / detail page.
 
 ## Data flow
