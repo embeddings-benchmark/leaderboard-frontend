@@ -1,5 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
+// Screenshot tests (`*.visual.ts`) compare against PNG baselines committed
+// under `tests/__screenshots__/`, so reviewers see how an element looks in the
+// PR diff. Text rendering differs per OS, so the baselines are made in the
+// official Playwright Linux image (`make update-visual`) and CI runs them in
+// that same image. The project only exists on Linux: on macOS `make test`
+// skips it, and `make test-visual` runs it in Docker.
+const visual = process.platform === 'linux';
+
 export default defineConfig({
 	// Two-stage webServer: the mock API boots first, then the build (which
 	// hits the mock during prerender `entries()`) and preview run pointed
@@ -23,8 +31,32 @@ export default defineConfig({
 			timeout: 180_000
 		}
 	],
+	testDir: 'tests',
 	use: { baseURL: 'http://localhost:4173' },
-	testMatch: '**/*.e2e.{ts,js}',
+	projects: [
+		{ name: 'e2e', testMatch: '**/*.e2e.{ts,js}' },
+		...(visual
+			? [
+					{
+						name: 'visual',
+						testMatch: '**/*.visual.ts',
+						use: { viewport: { width: 1280, height: 900 } }
+					}
+				]
+			: [])
+	],
+	// No platform suffix: there is only one (Linux) set of baselines.
+	snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{arg}{ext}',
+	// Small tolerance: baselines made on arm64 (Apple silicon Docker) can differ
+	// from CI's amd64 by a few anti-aliased pixels.
+	expect: {
+		toHaveScreenshot: {
+			animations: 'disabled',
+			caret: 'hide',
+			maxDiffPixelRatio: 0.01,
+			stylePath: './tests/visual.css'
+		}
+	},
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0
 });

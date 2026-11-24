@@ -15,7 +15,7 @@ export const COLUMN_INFO = {
 	},
 	openness: {
 		title: 'Openness',
-		text: 'How open the model is, scored 0–6 across open weights, open license, open training code, open training data, a paper, and a model card. Hover a cell for the full per-dimension breakdown.'
+		text: 'Which openness criteria the model meets: open weights, open license, open training code, open training data, a paper, and a model card. Hover a cell for the per-dimension breakdown.'
 	},
 	embedding: {
 		title: 'Embedding dimension',

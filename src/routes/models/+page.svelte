@@ -393,7 +393,7 @@
 								<dt>Openness</dt>
 								<dd class="openness-stat">
 									{#if opennessScore(m) !== null}
-										<OpennessMeter model={m} compact showScore />
+										<OpennessMeter model={m} compact />
 									{:else}
 										—
 									{/if}

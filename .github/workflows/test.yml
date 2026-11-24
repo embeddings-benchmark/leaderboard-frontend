@@ -12,11 +12,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Runs inside the official Playwright image matching the @playwright/test
-  # version in package-lock.json. The image ships the browsers and their
-  # system deps, so the runner's OS doesn't matter (ubuntu-latest moving to
-  # 26.04 broke `playwright install --with-deps`), and bumping Playwright
-  # automatically picks the matching image.
+  # Both test jobs run inside the official Playwright image matching the
+  # @playwright/test version in package-lock.json. The image ships the browsers
+  # and their system deps, so the runner's OS doesn't matter (ubuntu-latest
+  # moving to 26.04 broke `playwright install --with-deps`), and bumping
+  # Playwright automatically picks the matching image. The screenshot
+  # baselines are made in the same image (`make update-visual`).
   playwright-version:
     runs-on: ubuntu-latest
     outputs:
@@ -40,12 +41,34 @@ jobs:
       - uses: ./.github/actions/common
 
       - name: Run Playwright tests
-        run: npx playwright test
+        run: npx playwright test --project=e2e --reporter=dot,html
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
+          path: playwright-report
+          retention-days: 14
+
+  # Screenshot tests (`tests/*.visual.ts`).
+  visual:
+    needs: playwright-version
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.playwright-version.outputs.version }}-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/common
+
+      - name: Run screenshot tests
+        run: npx playwright test --project=visual --reporter=dot,html
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-visual-report
           path: playwright-report
           retention-days: 14

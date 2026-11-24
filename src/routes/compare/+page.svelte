@@ -11,12 +11,7 @@
 	import type { Data, Layout } from 'plotly.js';
 	import type { Benchmark, BenchmarkSummary, ModelMeta, SummaryRow } from '$lib/types';
 	import { humanizeType, modelPath, slug, fmtParamsValue, fmtParamsUnit } from '$lib/format';
-	import {
-		opennessScore,
-		opennessDimensions,
-		OPENNESS_DIMENSIONS,
-		OPENNESS_MAX
-	} from '$lib/openness';
+	import { opennessScore, opennessDimensions, OPENNESS_DIMENSIONS } from '$lib/openness';
 	import Check from 'lucide-svelte/icons/check';
 	import X from 'lucide-svelte/icons/x';
 	import { updateUrl } from '$lib/url-state';
@@ -1022,11 +1017,6 @@
 						<h2>Openness</h2>
 						<div class="cmp-compare center openness-matrix" style:grid-template-columns={cmpCols}>
 							{@render compareHead('')}
-							<div class="rl">Score</div>
-							{#each pickedRows as r (r.model.name)}
-								{@const s = opennessScore(r.model)}
-								<div class="rv score-cell">{s === null ? '—' : `${s}/${OPENNESS_MAX}`}</div>
-							{/each}
 							{#each OPENNESS_DIMENSIONS as dim, di (dim.id)}
 								<div class="rl">
 									<span class="rl-name">{dim.label}</span><span class="rl-sub">{dim.desc}</span>
@@ -1724,9 +1714,6 @@
 		letter-spacing: 0.02em;
 	}
 	.rv.winner {
-		font-weight: 800;
-	}
-	.score-cell {
 		font-weight: 800;
 	}
 	.muted {
