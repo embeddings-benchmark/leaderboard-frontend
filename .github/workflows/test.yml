@@ -41,7 +41,7 @@ jobs:
       - uses: ./.github/actions/common
 
       - name: Run Playwright tests
-        run: npx playwright test --project=e2e
+        run: npx playwright test --project=e2e --reporter=dot,html
 
       - name: Upload Playwright report
         if: always()
@@ -63,10 +63,10 @@ jobs:
       - uses: ./.github/actions/common
 
       - name: Run screenshot tests
-        run: npx playwright test --project=visual
+        run: npx playwright test --project=visual --reporter=dot,html
 
       - name: Upload Playwright report
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-visual-report
