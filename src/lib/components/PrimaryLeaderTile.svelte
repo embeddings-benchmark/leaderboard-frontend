@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import type { Benchmark, BenchmarkLeaders } from '$lib/types';
-	import { apiUrl, isIconUrl, slug, splitModelName } from '$lib/format';
+	import { apiUrl, experimentLabel, isIconUrl, slug, splitModelName } from '$lib/format';
 
 	type TintKey = 'multilingual' | 'retrieval' | 'english';
 
@@ -93,7 +93,10 @@
 				{@const r = bk.leader}
 				{#if r}
 					<div class="prim-row">
-						<span class="prim-model">{splitModelName(r.model.name).displayName}</span>
+						<span class="prim-model"
+							>{splitModelName(r.model.name).displayName}{#if r.model.experiments}
+								({experimentLabel(r.model.experiments)}){/if}</span
+						>
 						<span class="prim-size">{bucketLabel(bk.min, bk.max)}</span>
 					</div>
 				{/if}

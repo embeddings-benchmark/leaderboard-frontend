@@ -9,7 +9,7 @@
 	import OpennessMeter from '$lib/components/OpennessMeter.svelte';
 	import { opennessScore } from '$lib/openness';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { sortModalities } from '$lib/format';
+	import { experimentLabel, rowId, sortModalities } from '$lib/format';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import SkeletonTable from '$lib/components/SkeletonTable.svelte';
@@ -55,6 +55,8 @@
 		if (!payload) return [];
 		return payload.rows.map((r) => ({
 			benchmarkName: r.benchmarkName,
+			runId: rowId({ model, experiments: r.experiments }),
+			experiments: r.experiments,
 			benchmarkDisplay: r.benchmarkDisplayName,
 			rank: r.rank,
 			meanTask: r.meanTask,
@@ -95,7 +97,7 @@
 	function compareHref(modelName: string, seed: BenchScore | null): string {
 		// Local URL builder, not held by $state — plain URLSearchParams is correct.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const params = new URLSearchParams({ model: modelName });
+		const params = new URLSearchParams({ model: seed?.runId ?? modelName });
 		if (seed) params.set('benchmark', seed.benchmarkName);
 		return `${resolve('/compare')}?${params.toString()}`;
 	}
@@ -104,6 +106,7 @@
 		// Zero-shot, Rank, Total Models, Mean (Task), Mean (TaskType).
 		const headers = [
 			'Benchmark',
+			'Experiment',
 			'Zero-shot',
 			'Rank',
 			'Total Models',
@@ -113,6 +116,7 @@
 		const pct = (v: number | null | undefined) => (v == null ? null : (v * 100).toFixed(2));
 		const rows: CsvCell[][] = rawRows.map((s) => [
 			s.benchmarkName,
+			experimentLabel(s.experiments),
 			s.zeroShotPct === -1 ? 'NA' : s.zeroShotPct,
 			s.rank,
 			s.totalModels,

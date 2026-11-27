@@ -26,7 +26,7 @@
 	import CopyableId from '$lib/components/CopyableId.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import MarkdownText from '$lib/components/MarkdownText.svelte';
-	import { apiUrl, isIconUrl, sortModalities } from '$lib/format';
+	import { experimentLabel, apiUrl, isIconUrl, sortModalities } from '$lib/format';
 	import { opennessScore, opennessDimensions, OPENNESS_DIMENSIONS } from '$lib/openness';
 	import { paretoStatus } from '$lib/pareto';
 	import { sanitizeFilename, type CsvCell } from '$lib/csv';
@@ -244,6 +244,7 @@
 		const headers = [
 			'Rank',
 			'Model',
+			'Experiment',
 			'Model Type',
 			'Open Weights',
 			'Instruction Tuned',
@@ -275,6 +276,7 @@
 			return [
 				row.rank,
 				m.name,
+				experimentLabel(row.experiments),
 				m.modelType,
 				bool(m.openWeights),
 				bool(m.instructionTuned),
@@ -302,11 +304,12 @@
 
 	function buildPerTaskCsv() {
 		const s = filteredSummary!;
-		const headers = ['Rank', 'Model', ...s.tasks];
+		const headers = ['Rank', 'Model', 'Experiment', ...s.tasks];
 		const pct = (v: number | null | undefined) => (v == null ? null : (v * 100).toFixed(2));
 		const rows: CsvCell[][] = s.rows.map((row) => [
 			row.rank,
 			row.model.name,
+			experimentLabel(row.experiments),
 			...s.tasks.map((t) => pct(row.scoresByTask[t]))
 		]);
 		return { headers, rows };

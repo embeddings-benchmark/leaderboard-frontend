@@ -7,6 +7,7 @@
 	 * per-subset scores. Sort + heat-shading are local to this component.
 	 */
 	export interface ModelScore {
+		experiments?: Record<string, unknown> | null;
 		model: ModelMeta;
 		score: number | null;
 		rank: number;
@@ -27,7 +28,7 @@
 	import InfoDot from './InfoDot.svelte';
 	import ModelCellName from './ModelCellName.svelte';
 	import SortHeader from './SortHeader.svelte';
-	import { fmtPct, heat, maxOf, minOf } from '$lib/format';
+	import { rowId, fmtPct, heat, maxOf, minOf } from '$lib/format';
 
 	// Lightweight column-header tooltip — same shape as FilterContent's.
 	// One trigger today (Zero-shot), but the data-tip / showTip wiring
@@ -164,13 +165,13 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each sortedRows as s (s.model.name + s.benchmarkName)}
+			{#each sortedRows as s (rowId(s))}
 				<tr>
 					<td class="tbl-num sticky-rank">
 						<span class="rank-pill">#{s.rank}</span>
 					</td>
 					<th scope="row" class="sticky" data-model-type={s.model.modelType}>
-						<ModelCellName model={s.model} />
+						<ModelCellName model={s.model} experiments={s.experiments} />
 					</th>
 					<td class="tbl-num zs-cell">
 						{#if s.trainedOn === null}
