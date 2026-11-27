@@ -184,6 +184,19 @@ describe('applyFilters: no narrowing', () => {
 });
 
 describe('applyFilters: task-set narrowing', () => {
+	it('shares Borda ranks across tied runs and keeps ranks stable under name search', () => {
+		const summary = fixtureSummary();
+		const base = makeRow(1, makeModel('org/A'), { T1: 1 }, {});
+		const variant = { ...base, experiments: { vector_type: 'multi_vector' } };
+		const other = makeRow(3, makeModel('org/B'), { T1: 0 }, {});
+		const missing = makeRow(4, makeModel('org/C'), { T3: 1 }, {});
+		summary.rows = [base, variant, other, missing];
+		filters.setAll('tasks', ['T1'], true);
+		expect(applyFilters(summary).rows.map((r) => r.rank)).toEqual([1, 1, 3]);
+		filters.nameQuery = 'org/b';
+		expect(applyFilters(summary).rows.map((r) => r.rank)).toEqual([3]);
+	});
+
 	it('hides tasks dropped by the type filter and recomputes the mean', () => {
 		filters.setAll('taskTypes', ['Retrieval'], true); // only Retrieval
 		const out = applyFilters(fixtureSummary());

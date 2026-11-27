@@ -5,7 +5,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { type CsvCell } from '$lib/csv';
-	import { floatPinnedToTop, heat, rowId } from '$lib/format';
+	import { experimentLabel, floatPinnedToTop, heat, rowId } from '$lib/format';
 	import { createSortState } from '$lib/stores/sort.svelte';
 	import { loadPerLanguage } from '$lib/data/service';
 	import ModelCellName from './ModelCellName.svelte';
@@ -178,11 +178,12 @@
 	// instead of letting this component show its own download button
 	// on a second row.
 	export function buildCsv() {
-		const headers = ['Rank', 'Model', 'Mean', ...LANGUAGES];
+		const headers = ['Rank', 'Model', 'Experiment', 'Mean', ...LANGUAGES];
 		const round = (n: number | null) => (n == null ? null : Number(n.toFixed(2)));
 		const rows: CsvCell[][] = summary.rows.map((row) => [
 			row.rank,
 			row.model.name,
+			experimentLabel(row.experiments),
 			round(rowMean(row)),
 			...LANGUAGES.map((lang) => round(langScore(row, lang)))
 		]);

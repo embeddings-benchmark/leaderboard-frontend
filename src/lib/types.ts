@@ -295,6 +295,7 @@ export interface BenchmarkPerLanguage {
 // payload (several MB on multilingual benchmarks) just to render
 // 4 mini-leaderboard rows.
 export interface LeaderModel {
+	experiments?: Record<string, unknown> | null;
 	// Canonical `org/name` HuggingFace identifier. Consumers split on
 	// `/` (via `splitModelName` in `$lib/format`) when they need
 	// display-only segments.
@@ -319,6 +320,7 @@ export interface BenchmarkLeaders {
 }
 
 export interface TaskScoreRow {
+	experiments?: Record<string, unknown> | null;
 	rank: number;
 	model: ModelMeta;
 	// `null` when the model wasn't evaluated on every subset of this task —
@@ -352,6 +354,7 @@ export interface TaskScores {
 }
 
 export interface ModelScoreRow {
+	experiments?: Record<string, unknown> | null;
 	benchmarkName: string;
 	benchmarkDisplayName: string;
 	rank: number;

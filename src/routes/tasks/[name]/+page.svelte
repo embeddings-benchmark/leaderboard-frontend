@@ -12,7 +12,7 @@
 	import ModalityIcon from '$lib/components/ModalityIcon.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
 	import ShareMeta from '$lib/components/ShareMeta.svelte';
-	import { slug, sortModalities } from '$lib/format';
+	import { experimentLabel, slug, sortModalities } from '$lib/format';
 	import { clampTooltipX } from '$lib/cell-hover';
 	import ScrollToTopButton from '$lib/components/ScrollToTopButton.svelte';
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
@@ -179,6 +179,7 @@
 			if (complete && n > 0) score = sum / n;
 			return {
 				model: r.model,
+				experiments: r.experiments,
 				score,
 				benchmarkName: r.benchmarks[0] ?? '',
 				subsetScores: flat,
@@ -273,11 +274,12 @@
 	}
 
 	function buildCsv() {
-		const headers = ['Rank', 'Model', 'Mean scores', ...subsets];
+		const headers = ['Rank', 'Model', 'Experiment', 'Mean scores', ...subsets];
 		const pct = (v: number | null | undefined) => (v == null ? null : (v * 100).toFixed(2));
 		const rows: CsvCell[][] = scores.map((s) => [
 			s.rank,
 			s.model.name,
+			experimentLabel(s.experiments),
 			pct(s.score),
 			...subsets.map((sub) => pct(s.subsetScores[sub]))
 		]);

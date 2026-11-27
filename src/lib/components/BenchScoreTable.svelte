@@ -6,6 +6,8 @@
 	 * benchmark. Sort + heat-shading are local to this component.
 	 */
 	export interface BenchScore {
+		runId: string;
+		experiments?: Record<string, unknown> | null;
 		benchmarkName: string;
 		benchmarkDisplay: string;
 		rank: number;
@@ -21,7 +23,7 @@
 	import { stickyHead } from '$lib/actions/sticky-head';
 	import { stickyHScroll } from '$lib/actions/sticky-hscroll';
 	import { createSortState } from '$lib/stores/sort.svelte';
-	import { fmtPct, fmtZeroShot, heat, maxOf, minOf, slug } from '$lib/format';
+	import { experimentLabel, fmtPct, fmtZeroShot, heat, maxOf, minOf, slug } from '$lib/format';
 	import SortHeader from './SortHeader.svelte';
 
 	interface Props {
@@ -88,7 +90,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each sortedRows as s (s.benchmarkName)}
+			{#each sortedRows as s (JSON.stringify([s.benchmarkName, s.runId]))}
 				<tr>
 					<th scope="row" class="sticky">
 						<a
@@ -96,6 +98,8 @@
 							href={resolve('/benchmark/[name]', { name: slug(s.benchmarkName) })}
 						>
 							{s.benchmarkDisplay}
+							{#if s.experiments}
+								({experimentLabel(s.experiments)}){/if}
 						</a>
 					</th>
 					<td class="tbl-num">{fmtZeroShot(s.zeroShotPct)}</td>
