@@ -819,7 +819,11 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 
 		candidates = [];
 		for (const row of summary.rows) {
-			if (!passesRowFilter(row)) continue;
+			if (
+				!passesRowFilter(row) ||
+				!taskNamesOut.some((task) => Number.isFinite(row.scoresByTask[task]))
+			)
+				continue;
 			let agg = perRowAgg.get(row);
 			if (!agg) {
 				agg = computeAgg(row);
@@ -840,14 +844,18 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 	// just because it hid the models that dominate them.
 	const paretoModels = paretoFrontier(candidates);
 	const paretoRangesById = paretoRanges(candidates, paretoModels);
-	const rows = q ? candidates.filter(matchesQuery) : candidates;
+	const rows = candidates;
 
 	// Re-rank: fresh Borda when tasks narrowed; renumber 1..N when only rows
 	// narrowed; keep API ranks for name-search-only (find-in-table gesture).
 	let rankedRows: typeof rows;
 	if (fullView) {
 		if (rowFilterActive) {
-			rankedRows = rows.map((row, i) => ({ ...row, rank: i + 1 }));
+			let rank = 0;
+			rankedRows = rows.map((row, i) => {
+				if (i === 0 || rows[i - 1].rank !== row.rank) rank = i + 1;
+				return { ...row, rank };
+			});
 		} else {
 			rankedRows = rows;
 		}
@@ -858,10 +866,9 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				const ranked: { name: string; v: number }[] = [];
 				for (const r of summary.rows) {
 					const v = r.scoresByTask[taskName];
-					if (v !== undefined) ranked.push({ name: rowId(r), v });
+					if (Number.isFinite(v)) ranked.push({ name: rowId(r), v });
 				}
-				// Stable tie-break by name for deterministic Borda points.
-				ranked.sort((a, b) => b.v - a.v || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+				ranked.sort((a, b) => b.v - a.v);
 				sortedByTask.set(taskName, ranked);
 			}
 		}
@@ -873,15 +880,20 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		for (const taskName of taskNamesOut) {
 			const ranked = sortedByTask.get(taskName);
 			if (!ranked) continue;
-			let visibleCount = 0;
-			for (const r of ranked) if (visibleNames.has(r.name)) visibleCount++;
-			let i = 0;
-			for (const r of ranked) {
-				if (!visibleNames.has(r.name)) continue;
-				bordaPoints.set(r.name, (bordaPoints.get(r.name) ?? 0) + (visibleCount - i));
-				i++;
+			const scored = ranked.filter((r) => visibleNames.has(r.name));
+			for (let start = 0; start < scored.length; ) {
+				let end = start + 1;
+				while (end < scored.length && scored[end].v === scored[start].v) end++;
+				// Tied runs share the average of their one-based task ranks.
+				const points = visibleNames.size - (start + 1 + end) / 2;
+				for (let i = start; i < end; i++) {
+					const id = scored[i].name;
+					bordaPoints.set(id, (bordaPoints.get(id) ?? 0) + points);
+				}
+				start = end;
 			}
 		}
+		let rank = 0;
 		rankedRows = rows
 			.map((row) => ({ row, borda: bordaPoints.get(rowId(row)) ?? 0 }))
 			.sort((a, b) => {
@@ -890,7 +902,10 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 				const bm = b.row.meanTask ?? -Infinity;
 				return bm - am;
 			})
-			.map(({ row }, i) => ({ ...row, rank: i + 1 }));
+			.map(({ row, borda }, i, sorted) => {
+				if (i === 0 || sorted[i - 1].borda !== borda) rank = i + 1;
+				return { ...row, rank };
+			});
 	}
 
 	return {
@@ -899,7 +914,7 @@ export function applyFilters(summary: BenchmarkSummary): BenchmarkSummary {
 		tasks: taskNamesOut,
 		tasksMeta: visibleTasks,
 		customGroupings: customGroupingsOut,
-		rows: rankedRows,
+		rows: q ? rankedRows.filter(matchesQuery) : rankedRows,
 		paretoModels,
 		paretoRanges: paretoRangesById
 	};

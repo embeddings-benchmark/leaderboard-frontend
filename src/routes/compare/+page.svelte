@@ -10,7 +10,16 @@
 	import ShareUrlButton from '$lib/components/ShareUrlButton.svelte';
 	import type { Data, Layout } from 'plotly.js';
 	import type { Benchmark, BenchmarkSummary, ModelMeta, SummaryRow } from '$lib/types';
-	import { humanizeType, modelPath, slug, fmtParamsValue, fmtParamsUnit } from '$lib/format';
+	import {
+		experimentLabel,
+		baseModelName,
+		rowId,
+		humanizeType,
+		modelPath,
+		slug,
+		fmtParamsValue,
+		fmtParamsUnit
+	} from '$lib/format';
 	import { opennessScore, opennessDimensions, OPENNESS_DIMENSIONS } from '$lib/openness';
 	import Check from 'lucide-svelte/icons/check';
 	import X from 'lucide-svelte/icons/x';
@@ -50,6 +59,11 @@
 				.filter(Boolean);
 		}
 		return [];
+	}
+
+	function runLabel(row: SummaryRow): string {
+		const variant = experimentLabel(row.experiments);
+		return variant ? `${row.model.displayName} (${variant})` : row.model.displayName;
 	}
 
 	const MAX_PICKED = 4;
@@ -113,9 +127,11 @@
 		const seed = requested[0];
 		if (!seed) return;
 		untrack(() => {
-			loadModelScores(seed)
+			loadModelScores(baseModelName(seed))
 				.then((p) => {
-					const benches = p.rows.map((r) => r.benchmarkName);
+					const benches = p.rows
+						.filter((r) => rowId({ model: p.model, experiments: r.experiments }) === seed)
+						.map((r) => r.benchmarkName);
 					if (benches.length === 0) return;
 					if (benches.includes(pickedBenchmarks[0] ?? '')) return;
 					pickedBenchmarks = [benches[0], ...pickedBenchmarks.slice(1)];
@@ -164,12 +180,12 @@
 				// Drop any URL-hydrated model that isn't in this benchmark — keeps
 				// the comparison sane when the user shares a link with a model that
 				// the chosen benchmark doesn't include.
-				const valid = new Set(s.rows.map((r) => r.model.name));
+				const valid = new Set(s.rows.map(rowId));
 				const kept = picked.filter((n) => valid.has(n));
 				if (kept.length !== picked.length) picked = kept;
 				if (kept.length > 0) return;
 			}
-			picked = s.rows.slice(0, 2).map((r) => r.model.name);
+			picked = s.rows.slice(0, 2).map(rowId);
 		});
 	});
 
@@ -182,7 +198,7 @@
 	function byModelFor(s: BenchmarkSummary): Map<string, SummaryRow> {
 		let m = _byModelCache.get(s);
 		if (!m) {
-			m = new Map(s.rows.map((r) => [r.model.name, r]));
+			m = new Map(s.rows.map((r) => [rowId(r), r]));
 			_byModelCache.set(s, m);
 		}
 		return m;
@@ -409,7 +425,7 @@
 				if (!indexes[i].tasksSet.has(t.name)) continue;
 				const bv = benchViews[i];
 				const meta = indexes[i].metaByName.get(t.name);
-				const rows = pickedRows.map((p) => bv.byModel.get(p.model.name));
+				const rows = pickedRows.map((p) => bv.byModel.get(rowId(p)));
 				const scores = rows.map((r) => r?.scoresByTask[t.name]);
 				const known = scores.filter((v): v is number => v !== undefined);
 				out.push({
@@ -527,7 +543,7 @@
 		if (!primarySummary) return [];
 		const q = pickerQuery.trim().toLowerCase();
 		return primarySummary.rows.filter((r) => {
-			if (q && !r.model.name.toLowerCase().includes(q)) return false;
+			if (q && !rowId(r).toLowerCase().includes(q)) return false;
 			return true;
 		});
 	});
@@ -677,7 +693,7 @@
 			return {
 				type: 'scatterpolar',
 				mode: 'lines',
-				name: row.model.displayName,
+				name: runLabel(row),
 				r: [...r, r[0]],
 				theta,
 				line: { color: modelColor(mi), width: 2 },
@@ -693,7 +709,7 @@
 		const x = typeScores.map((ts) => typeAxisLabel(ts));
 		const data: Data[] = pickedRows.map((row, mi) => ({
 			type: 'bar',
-			name: row.model.displayName,
+			name: runLabel(row),
 			x,
 			y: typeScores.map((ts) => {
 				const v = ts.scores[mi];
@@ -715,7 +731,7 @@
 	let hasZsMismatch = $derived.by<boolean>(() => {
 		const key = (t: string[]) => [...t].sort().join('|');
 		for (const bv of benchViews) {
-			const keys = pickedRows.map((p) => key(bv.byModel.get(p.model.name)?.trainedOnTasks ?? []));
+			const keys = pickedRows.map((p) => key(bv.byModel.get(rowId(p))?.trainedOnTasks ?? []));
 			if (keys.some((k) => k !== '') && keys.some((k) => k !== keys[0])) return true;
 		}
 		return false;
@@ -744,13 +760,13 @@
 <div class="app">
 	{#snippet compareHead(label: string)}
 		<div class="ch corner">{label}</div>
-		{#each pickedRows as r, i (r.model.name)}
+		{#each pickedRows as r, i (rowId(r))}
 			<div class="ch" style:--c={modelColor(i)}>
 				<span class="ch-dot"></span>
 				<a
 					class="ch-name"
 					href={resolve('/models/[...name=modelName]', { name: modelPath(r.model.name) })}
-					title={r.model.name}>{r.model.displayName}</a
+					title={r.model.name}>{runLabel(r)}</a
 				>
 				<span class="ch-type" data-type={r.model.modelType}>{r.model.modelType}</span>
 			</div>
@@ -884,14 +900,14 @@
 		{:else}
 			<section class="picker-bar">
 				<div class="picks">
-					{#each pickedRows as r, i (r.model.name)}
+					{#each pickedRows as r, i (rowId(r))}
 						<span class="pick-chip" style:--c={modelColor(i)}>
 							<span class="pick-dot"></span>
-							<span class="pick-name" title={r.model.name}>{r.model.displayName}</span>
+							<span class="pick-name" title={r.model.name}>{runLabel(r)}</span>
 							<button
 								type="button"
 								class="pick-x"
-								onclick={() => togglePick(r.model.name)}
+								onclick={() => togglePick(rowId(r))}
 								aria-label="Remove from comparison"
 							>
 								×
@@ -918,17 +934,17 @@
 										bind:value={pickerQuery}
 									/>
 									<div class="picker-list">
-										{#each pickerCandidates as r (r.model.name)}
-											{@const isOn = picked.includes(r.model.name)}
+										{#each pickerCandidates as r (rowId(r))}
+											{@const isOn = picked.includes(rowId(r))}
 											<button
 												type="button"
 												class="picker-row"
 												class:on={isOn}
 												disabled={!isOn && picked.length >= MAX_PICKED}
-												onclick={() => togglePick(r.model.name)}
+												onclick={() => togglePick(rowId(r))}
 											>
 												<span class="picker-rank">#{r.rank}</span>
-												<span class="picker-name">{r.model.displayName}</span>
+												<span class="picker-name">{runLabel(r)}</span>
 												<span class="picker-score"
 													>{r.meanTask != null ? (r.meanTask * 100).toFixed(2) : '—'}</span
 												>
@@ -966,7 +982,7 @@
 						{@render compareHead('')}
 						{#each metrics as m (m.key)}
 							<div class="rl">{m.label}</div>
-							{#each pickedRows as r (r.model.name)}
+							{#each pickedRows as r (rowId(r))}
 								<div class="rv">
 									{#if m.key === 'params'}
 										{fmtParamsValue(r.totalParamsB)}{#if fmtParamsUnit(r.totalParamsB)}<span
@@ -979,7 +995,7 @@
 							{/each}
 						{/each}
 						<div class="rl">Modalities</div>
-						{#each pickedRows as r (r.model.name)}
+						{#each pickedRows as r (rowId(r))}
 							<div class="rv modalities-cell">
 								{#each ALL_MODALITIES as mod (mod)}
 									{@const on = supportsModality(r.model, mod)}
@@ -994,7 +1010,7 @@
 							</div>
 						{/each}
 						<div class="rl">Languages</div>
-						{#each pickedRows as r (r.model.name)}
+						{#each pickedRows as r (rowId(r))}
 							{@const langs = r.model.languages ?? []}
 							<div class="rv lang-cell">
 								{#if langs.length > 1}
@@ -1021,7 +1037,7 @@
 								<div class="rl">
 									<span class="rl-name">{dim.label}</span><span class="rl-sub">{dim.desc}</span>
 								</div>
-								{#each pickedRows as r (r.model.name)}
+								{#each pickedRows as r (rowId(r))}
 									{@const dims = opennessDimensions(r.model)}
 									{@const known = opennessScore(r.model) !== null}
 									<div class="rv mark" class:on={known && dims[di].open}>
@@ -1052,7 +1068,7 @@
 					<div class="cmp-compare" style:grid-template-columns={cmpCols}>
 						{@render compareHead('Benchmark')}
 						{#each benchViews as bv (bv.name)}
-							{@const rows = pickedRows.map((p) => bv.byModel.get(p.model.name))}
+							{@const rows = pickedRows.map((p) => bv.byModel.get(rowId(p)))}
 							{@const meanValues = rows.map((r) => (r ? r.meanTask : null))}
 							{@const meanWinners = winnersForRow(meanValues, 'max')}
 							{@const rankWinners = winnersForRow(
@@ -1060,7 +1076,7 @@
 								'min'
 							)}
 							<div class="rl">{benchIndex.get(bv.name)?.displayName ?? bv.name}</div>
-							{#each pickedRows as p, i (p.model.name)}
+							{#each pickedRows as p, i (rowId(p))}
 								{@const r = rows[i]}
 								<div class="rv bench-rv" class:winner={meanWinners[i]}>
 									{#if r}
@@ -1172,7 +1188,7 @@
 										aria-label="Remove {ts.name} from the comparison">×</button
 									>
 								</div>
-								{#each ts.scores as v, i (pickedRows[i].model.name)}
+								{#each ts.scores as v, i (rowId(pickedRows[i]))}
 									<div class="rv" class:winner={winners[i] && pickedRows.length > 1}>
 										{v !== undefined ? (v * 100).toFixed(2) : '—'}
 										{#if ts.trainedOn[i]}
@@ -1237,7 +1253,7 @@
 										'max'
 									)}
 									<div class="rl">{typeAxisLabel(ts)}</div>
-									{#each ts.scores as v, i (pickedRows[i].model.name)}
+									{#each ts.scores as v, i (rowId(pickedRows[i]))}
 										<div class="rv" class:winner={winners[i] && pickedRows.length > 1}>
 											{v !== undefined ? (v * 100).toFixed(2) : 'NA'}
 										</div>
